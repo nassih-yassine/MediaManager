@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { AddItemsDialog } from "@/components/AddItemsDialog";
 import { useToast } from "@/components/ui/Toast";
 import {
   CloseIcon,
@@ -13,6 +14,7 @@ import {
   ImageIcon,
   PauseIcon,
   PlayIcon,
+  PlusIcon,
   ShuffleIcon,
   TrashIcon,
 } from "@/components/icons";
@@ -73,6 +75,7 @@ export function PlaylistView() {
   const [nameDraft, setNameDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -260,13 +263,14 @@ export function PlaylistView() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {gallery ? (
-              <Link
-                href="/"
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
                 className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90"
               >
                 <ImageIcon className="h-3.5 w-3.5" />
                 Add pictures
-              </Link>
+              </button>
             ) : (
               <>
                 <button
@@ -286,6 +290,14 @@ export function PlaylistView() {
                 >
                   <ShuffleIcon className="h-3.5 w-3.5" />
                   Shuffle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="flex items-center gap-2 rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add items
                 </button>
               </>
             )}
@@ -485,6 +497,15 @@ export function PlaylistView() {
             : "Drag rows to reorder. Removing here never deletes the file."}
         </p>
       ) : null}
+
+      <AddItemsDialog
+        open={addOpen}
+        collectionId={playlist.id}
+        kind={gallery ? "gallery" : "playlist"}
+        existingIds={playlist.items.map((item) => item.id)}
+        onClose={() => setAddOpen(false)}
+        onAdded={() => void load()}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

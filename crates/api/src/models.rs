@@ -96,6 +96,7 @@ pub struct Job {
     pub progress: f64,
     pub error: Option<String>,
     pub item_id: Option<String>,
+    pub collection_id: Option<String>,
     pub priority: i64,
     pub attempts: i64,
     pub max_attempts: i64,

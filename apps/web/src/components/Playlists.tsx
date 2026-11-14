@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import type { CollectionKind, PlaylistSummary } from "@/lib/types";
 
-function Mosaic({ playlist }: { playlist: PlaylistSummary }) {
+export function CollectionMosaic({ playlist }: { playlist: PlaylistSummary }) {
   const thumbs = playlist.thumbUrls.slice(0, 4);
   if (thumbs.length === 0) {
     return (
@@ -170,7 +170,7 @@ export function Collections({ kind }: { kind: CollectionKind }) {
               className="group animate-fade-up"
             >
               <div className="aspect-square overflow-hidden rounded-xl border border-line bg-panel-2 transition-colors group-hover:border-line-strong">
-                <Mosaic playlist={playlist} />
+                <CollectionMosaic playlist={playlist} />
               </div>
               <h2 className="mt-2.5 truncate text-sm font-medium">{playlist.name}</h2>
               <p className="mt-0.5 font-mono text-[11px] text-muted">

@@ -320,6 +320,40 @@ pub async fn backfill_book_covers(pool: &sqlx::SqlitePool, cfg: &Config) -> Resu
     Ok(done)
 }
 
+/// Attach an item to a playlist or gallery at the end. Idempotent.
+pub async fn attach_to_collection(
+    pool: &sqlx::SqlitePool,
+    collection_id: &str,
+    item_id: &str,
+) -> Result<()> {
+    let now = db::now_ms();
+    let mut tx = pool.begin().await?;
+    let start: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(position), -1) FROM playlist_items WHERE playlist_id = ?",
+    )
+    .bind(collection_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO playlist_items
+           (playlist_id, item_id, position, added_at)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(collection_id)
+    .bind(item_id)
+    .bind(start + 1)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(collection_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Remove an item's files (best effort) and its row. FTS triggers handle search.
 pub async fn remove_item(
     pool: &sqlx::SqlitePool,
@@ -463,6 +497,51 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(job_item, None, "the job should survive with no item link");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Attaching a finished download to a collection is idempotent.
+    #[tokio::test]
+    async fn attaches_an_item_to_a_collection_once() {
+        let dir = std::env::temp_dir().join(format!("mm-attach-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = test_db(&dir).await;
+        let now = db::now_ms();
+
+        sqlx::query(
+            "INSERT INTO items (id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('item-a', 'music', 'Track', 'music/aa/x.mp3', 'audio/mpeg', 1, ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO playlists (id, name, kind, created_at, updated_at)
+             VALUES ('col-1', 'Mix', 'playlist', ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        attach_to_collection(&pool, "col-1", "item-a").await.unwrap();
+        attach_to_collection(&pool, "col-1", "item-a").await.unwrap();
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let position: i64 =
+            sqlx::query_scalar("SELECT position FROM playlist_items LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(position, 0);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

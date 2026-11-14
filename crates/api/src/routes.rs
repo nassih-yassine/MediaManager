@@ -161,6 +161,7 @@ struct ListParams {
     limit: Option<i64>,
     cursor: Option<String>,
     sort: Option<String>,
+    ungrouped: Option<u8>,
 }
 
 fn fts_terms(q: &str) -> Vec<String> {
@@ -218,6 +219,13 @@ async fn list_items(
     } else if let Some(like) = &like {
         count.push(" AND i.title LIKE ").push_bind(like.clone());
     }
+    if params.ungrouped.unwrap_or(0) == 1 {
+        count.push(
+            " AND NOT EXISTS (SELECT 1 FROM playlist_items pi
+                JOIN playlists p ON p.id = pi.playlist_id
+                WHERE pi.item_id = i.id AND p.kind = 'gallery')",
+        );
+    }
     let total: i64 = count.build_query_scalar().fetch_one(&state.pool).await?;
 
     let mut rows: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT i.* FROM items i");
@@ -233,6 +241,13 @@ async fn list_items(
             .push_bind(terms.join(" AND "));
     } else if let Some(like) = &like {
         rows.push(" AND i.title LIKE ").push_bind(like.clone());
+    }
+    if params.ungrouped.unwrap_or(0) == 1 {
+        rows.push(
+            " AND NOT EXISTS (SELECT 1 FROM playlist_items pi
+                JOIN playlists p ON p.id = pi.playlist_id
+                WHERE pi.item_id = i.id AND p.kind = 'gallery')",
+        );
     }
 
     let sort = params.sort.as_deref().unwrap_or("newest");
@@ -453,10 +468,12 @@ async fn open_item(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NewJob {
     url: String,
     kind: String,
     mode: Option<String>,
+    collection_id: Option<String>,
 }
 
 fn dedupe_key(url: &str, kind: &str, mode: &str) -> String {
@@ -505,6 +522,24 @@ async fn create_job(
     let mode = resolve_job_mode(&body.kind, body.mode.as_deref())
         .map_err(|(code, message)| ApiError::bad_request(code, message))?;
 
+    if let Some(collection_id) = &body.collection_id {
+        let target = sqlx::query_scalar::<_, String>(
+            "SELECT kind FROM playlists WHERE id = ?",
+        )
+        .bind(collection_id)
+        .fetch_optional(&state.pool)
+        .await?;
+        let Some(target_kind) = target else {
+            return Err(ApiError::not_found("playlist not found"));
+        };
+        if target_kind == "gallery" && body.kind != "picture" {
+            return Err(ApiError::bad_request(
+                "gallery_pictures_only",
+                "galleries can only contain pictures",
+            ));
+        }
+    }
+
     let key = dedupe_key(url, &body.kind, &mode);
     if let Some(existing) = sqlx::query_as::<_, Job>(
         "SELECT * FROM jobs WHERE dedupe_key = ? AND status IN ('queued','running') LIMIT 1",
@@ -532,8 +567,8 @@ async fn create_job(
     let id = uuid::Uuid::now_v7().to_string();
     let now = db::now_ms();
     sqlx::query(
-        "INSERT INTO jobs (id, dedupe_key, url, kind, mode, status, scheduled_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
+        "INSERT INTO jobs (id, dedupe_key, url, kind, mode, status, scheduled_at, created_at, updated_at, collection_id)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&key)
@@ -543,6 +578,7 @@ async fn create_job(
     .bind(now)
     .bind(now)
     .bind(now)
+    .bind(&body.collection_id)
     .execute(&state.pool)
     .await?;
 

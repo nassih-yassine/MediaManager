@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PlaylistMenu } from "@/components/PlaylistMenu";
+import { CollectionMosaic } from "@/components/Playlists";
 import { useToast } from "@/components/ui/Toast";
 import {
   BookIcon,
@@ -29,6 +30,7 @@ import {
   type ItemsPage,
   type Kind,
   KINDS,
+  type PlaylistSummary,
 } from "@/lib/types";
 
 const KIND_ICON: Record<Kind, typeof BookIcon> = {
@@ -236,6 +238,9 @@ export function Library() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [galleries, setGalleries] = useState<PlaylistSummary[]>([]);
+  const [galleryName, setGalleryName] = useState("");
+  const [creatingGallery, setCreatingGallery] = useState(false);
   const requestId = useRef(0);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -243,6 +248,24 @@ export function Library() {
     const timer = setTimeout(() => setDebounced(query.trim()), 220);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // Deep links like /?kind=picture (the old /galleries route redirects here).
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("kind");
+    if (requested && KINDS.some((entry) => entry.value === requested)) {
+      setKind(requested as Kind | "all");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (kind !== "picture") {
+      setGalleries([]);
+      return;
+    }
+    api<{ playlists: PlaylistSummary[] }>("/api/playlists?kind=gallery")
+      .then((data) => setGalleries(data.playlists))
+      .catch(() => {});
+  }, [kind, reload]);
 
   // "/" focuses search, Escape clears selection. Ignore while typing.
   useEffect(() => {
@@ -274,6 +297,7 @@ export function Library() {
 
     const params = new URLSearchParams({ limit: "48", sort });
     if (kind !== "all") params.set("kind", kind);
+    if (kind === "picture") params.set("ungrouped", "1");
     if (debounced) params.set("q", debounced);
 
     api<ItemsPage>(`/api/items?${params}`)
@@ -297,6 +321,7 @@ export function Library() {
     setLoadingMore(true);
     const params = new URLSearchParams({ limit: "48", cursor, sort });
     if (kind !== "all") params.set("kind", kind);
+    if (kind === "picture") params.set("ungrouped", "1");
     if (debounced) params.set("q", debounced);
     try {
       const page = await api<ItemsPage>(`/api/items?${params}`);
@@ -340,6 +365,27 @@ export function Library() {
   function queueItem(item: Item) {
     player.addToQueue([item]);
     toast(`Queued “${item.title}”`, "success");
+  }
+
+  async function createGallery(event: React.FormEvent) {
+    event.preventDefault();
+    const name = galleryName.trim();
+    if (!name) return;
+    setCreatingGallery(true);
+    try {
+      await api("/api/playlists", {
+        method: "POST",
+        body: JSON.stringify({ name, kind: "gallery" }),
+      });
+      setGalleryName("");
+      toast(`Gallery “${name}” created`, "success");
+      setReload((value) => value + 1);
+      window.dispatchEvent(new Event("mm:playlists-changed"));
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setCreatingGallery(false);
+    }
   }
 
   async function deleteItems() {
@@ -499,13 +545,75 @@ export function Library() {
         </div>
       ) : null}
 
+      {kind === "picture" ? (
+        <section className="mt-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Galleries</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                Group pictures into albums. Loose pictures stay below.
+              </p>
+            </div>
+            <form onSubmit={createGallery} className="flex gap-1.5">
+              <input
+                value={galleryName}
+                onChange={(event) => setGalleryName(event.target.value)}
+                placeholder="New gallery"
+                maxLength={80}
+                aria-label="New gallery name"
+                className="h-9 w-40 rounded-full border border-line bg-panel px-3.5 text-sm placeholder:text-muted/70 focus:border-line-strong focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={creatingGallery || !galleryName.trim()}
+                className="h-9 rounded-full bg-accent px-3.5 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                Create
+              </button>
+            </form>
+          </div>
+
+          {galleries.length > 0 ? (
+            <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+              {galleries.map((gallery) => (
+                <Link
+                  key={gallery.id}
+                  href={`/galleries/${gallery.id}`}
+                  className="group animate-fade-up"
+                >
+                  <div className="aspect-square overflow-hidden rounded-xl border border-line bg-panel-2 transition-colors group-hover:border-line-strong">
+                    <CollectionMosaic playlist={gallery} />
+                  </div>
+                  <h3 className="mt-2 truncate text-sm font-medium">{gallery.name}</h3>
+                  <p className="mt-0.5 font-mono text-[11px] text-muted">
+                    {gallery.itemCount}{" "}
+                    {gallery.itemCount === 1 ? "picture" : "pictures"}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-xl border border-dashed border-line px-4 py-3 text-xs text-muted">
+              No galleries yet. Name one above, then add pictures from their cards.
+            </p>
+          )}
+
+          {items.length > 0 ? (
+            <h2 className="mt-8 text-[11px] font-semibold tracking-[0.14em] text-muted uppercase">
+              Loose pictures
+            </h2>
+          ) : null}
+        </section>
+      ) : null}
+
       {loading ? (
         <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
           {Array.from({ length: 8 }).map((_, index) => (
             <Skeleton key={index} />
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 &&
+        !(kind === "picture" && galleries.length > 0) ? (
         <div className="mt-10 flex flex-col items-center justify-center rounded-2xl border border-dashed border-line px-6 py-24 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-panel-2 text-muted">
             <LibraryGlyph />
@@ -527,6 +635,10 @@ export function Library() {
             </Link>
           ) : null}
         </div>
+      ) : items.length === 0 ? (
+        <p className="mt-6 rounded-xl border border-dashed border-line px-4 py-4 text-sm text-muted">
+          No loose pictures — everything is inside a gallery.
+        </p>
       ) : (
         <>
           <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">

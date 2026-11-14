@@ -269,12 +269,12 @@ as a separate best-effort pass so a missing mutagen/ffmpeg never fails the job.
 ## 12. API
 
 ```
-POST   /api/jobs              {url, kind, mode} -> {id}         409 dup, 429 full
+POST   /api/jobs              {url, kind, mode, collectionId?} -> {id}  409 dup, 429 full
 GET    /api/jobs              ?active=1|status=&limit=
 GET    /api/jobs/:id
 DELETE /api/jobs/:id          cancel queued/running
 POST   /api/uploads           multipart, {kind}                  size-capped
-GET    /api/items             ?kind=&q=&limit=&cursor=&sort=       keyset pagination
+GET    /api/items             ?kind=&q=&limit=&cursor=&sort=&ungrouped=  keyset pagination
 GET    /api/items/:id
 PATCH  /api/items/:id         {title}
 DELETE /api/items/:id?delete_file=true
@@ -333,10 +333,14 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
 - **Playlists** (`/playlists`, `/playlists/:id`): create, rename, delete, play all,
   drag to reorder, remove entries. Adding is done from the library's multi-select bar
   or an item page. Deleting an item cascades out of playlists.
-- **Galleries** (`/galleries`, `/galleries/:id`): the same ordered-collection machinery
-  with `kind='gallery'`, limited to pictures. The detail page renders a photo grid
-  instead of a track list; opening a picture uses the normal reader page. The library's
-  per-card picker targets galleries automatically for pictures.
+- **Galleries** live inside the Library's **Pictures** tab: gallery cards on top,
+  loose (ungrouped) pictures below. `/galleries/:id` is the detail grid; `/galleries`
+  redirects to `/?kind=picture`. Galleries reuse the playlist tables with
+  `kind='gallery'`, accept only pictures, and are added from picture cards.
+- **Adding from a collection:** a playlist or gallery page has an "Add items" /
+  "Add pictures" dialog that searches the library and appends a selection. The Add
+  media form can also target a playlist/gallery up front; downloads attach on
+  completion (`jobs.collection_id`), uploads attach immediately.
 - **Themes**: every component uses semantic tokens (`--canvas`, `--panel`, `--line`,
   `--ink`, `--muted`, `--accent`, `--accent-ink`, `--danger`) defined in
   `apps/web/src/app/globals.css`. Four families (Slate, Paper, Ocean, Moss) × dark

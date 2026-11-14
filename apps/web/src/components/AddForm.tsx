@@ -13,7 +13,13 @@ import {
 } from "@/components/icons";
 import { useToast } from "@/components/ui/Toast";
 import { api, formatBytes } from "@/lib/api";
-import { type Job, type Kind } from "@/lib/types";
+import {
+  type CollectionKind,
+  type Item,
+  type Job,
+  type Kind,
+  type PlaylistSummary,
+} from "@/lib/types";
 
 const KIND_OPTIONS: {
   value: Kind;
@@ -135,12 +141,21 @@ export function AddForm() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [collections, setCollections] = useState<PlaylistSummary[]>([]);
+  const [collectionId, setCollectionId] = useState("");
   const fileInput = useRef<HTMLInputElement | null>(null);
   const knownStatus = useRef(new Map<string, string>());
   const firstPoll = useRef(true);
 
   const isYoutubeKind = kind === "music" || kind === "video";
   const acceptsFile = kind === "book" || kind === "picture";
+  const collectionKind: CollectionKind = kind === "picture" ? "gallery" : "playlist";
+  const availableCollections = collections.filter(
+    (collection) => collection.kind === collectionKind,
+  );
+  const targetCollection = availableCollections.find(
+    (collection) => collection.id === collectionId,
+  );
 
   const refreshJobs = useCallback(async () => {
     try {
@@ -168,6 +183,16 @@ export function AddForm() {
     const timer = setInterval(refreshJobs, 2000);
     return () => clearInterval(timer);
   }, [refreshJobs]);
+
+  useEffect(() => {
+    api<{ playlists: PlaylistSummary[] }>("/api/playlists")
+      .then((data) => setCollections(data.playlists))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setCollectionId("");
+  }, [kind]);
 
   function pickKind(next: Kind) {
     setKind(next);
@@ -198,7 +223,20 @@ export function AddForm() {
           } | null;
           throw new Error(data?.error ?? "Upload failed");
         }
-        toast(`“${file.name}” added to the library`, "success");
+        const created = (await res.json()) as Item;
+        if (collectionId) {
+          await api(`/api/playlists/${collectionId}/items`, {
+            method: "POST",
+            body: JSON.stringify({ itemIds: [created.id] }),
+          });
+          window.dispatchEvent(new Event("mm:playlists-changed"));
+        }
+        toast(
+          targetCollection
+            ? `“${file.name}” added to “${targetCollection.name}”`
+            : `“${file.name}” added to the library`,
+          "success",
+        );
         takeFile(null);
         if (fileInput.current) fileInput.current.value = "";
       } catch (err) {
@@ -222,9 +260,15 @@ export function AddForm() {
           url: url.trim(),
           kind,
           mode: kind === "music" ? "audio+thumb" : "full",
+          collectionId: collectionId || undefined,
         }),
       });
-      toast("Queued. It will appear in the library when it finishes.", "success");
+      toast(
+        targetCollection
+          ? `Queued. It will be added to “${targetCollection.name}” when it finishes.`
+          : "Queued. It will appear in the library when it finishes.",
+        "success",
+      );
       setUrl("");
       await refreshJobs();
     } catch (err) {
@@ -323,6 +367,35 @@ export function AddForm() {
               choose <span className="text-ink">Video</span> above.
             </p>
           ) : null}
+
+          <div className="mt-5">
+            <label
+              htmlFor="collection"
+              className="text-[11px] font-semibold tracking-[0.12em] text-muted uppercase"
+            >
+              Add to {kind === "picture" ? "gallery" : "playlist"}{" "}
+              <span className="font-normal tracking-normal normal-case">(optional)</span>
+            </label>
+            <select
+              id="collection"
+              value={collectionId}
+              onChange={(event) => setCollectionId(event.target.value)}
+              className="mt-2 h-10 w-full rounded-lg border border-line bg-canvas px-3 text-sm text-muted focus:outline-none"
+            >
+              <option value="">Don&apos;t add</option>
+              {availableCollections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}
+                </option>
+              ))}
+            </select>
+            {availableCollections.length === 0 ? (
+              <p className="mt-1.5 text-xs text-muted">
+                No {kind === "picture" ? "galleries" : "playlists"} yet. Create
+                one from the library or the Playlists page.
+              </p>
+            ) : null}
+          </div>
 
           {acceptsFile ? (
             <div className="mt-6">

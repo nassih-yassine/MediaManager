@@ -5,14 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ThemePicker } from "@/components/ThemePicker";
-import { AddMediaIcon, DiscIcon, ImageIcon, LibraryIcon, PlusIcon } from "@/components/icons";
+import { AddMediaIcon, DiscIcon, LibraryIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { PlaylistSummary } from "@/lib/types";
 
 const NAV = [
   { href: "/", label: "Library", icon: LibraryIcon, mobileOnly: false },
   { href: "/add", label: "Add media", icon: AddMediaIcon, mobileOnly: false },
-  { href: "/galleries", label: "Galleries", icon: ImageIcon, mobileOnly: false },
   { href: "/playlists", label: "Playlists", icon: DiscIcon, mobileOnly: true },
 ];
 

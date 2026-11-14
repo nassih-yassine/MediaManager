@@ -133,6 +133,13 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
                 let _ = media::remove_item(&state.pool, &state.cfg, &item, true).await;
                 return Ok(());
             }
+            if let Some(collection_id) = &job.collection_id {
+                if let Err(err) =
+                    media::attach_to_collection(&state.pool, collection_id, &item.id).await
+                {
+                    tracing::warn!(%err, %collection_id, "could not attach finished item");
+                }
+            }
             sqlx::query(
                 "UPDATE jobs
                     SET status = 'done', progress = 1, stage = 'done', item_id = ?, updated_at = ?

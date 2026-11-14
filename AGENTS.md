@@ -12,7 +12,7 @@ make dev        # API :8787 + web :3000
 make api        # API only
 make worker     # worker only (MM_ROLE=worker)
 make web        # Next dev server only
-make test       # cargo test (12) + vitest (54)
+make test       # cargo test (13) + vitest (56)
 make test-web   # vitest only
 make e2e        # real Chromium smoke test; needs `make dev` running
 make check      # cargo check + tsc --noEmit
@@ -86,9 +86,14 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   Deleting an item cascades it out of playlists (FK), and the client also calls
   `player.removeItem(id)` so the queue does not keep a dead entry.
 - **Galleries are playlists with `kind='gallery'`**, not a second table. The API
-  rejects non-picture items in galleries; the UI uses the same `PlaylistMenu` with
-  `kind="gallery"` on picture cards. Routes live at `/galleries` but reuse
-  `PlaylistView` and the `/api/playlists` endpoints.
+  rejects non-picture items; the UI uses the same `PlaylistMenu` with
+  `kind="gallery"` on picture cards. Pictures and galleries share the Library's
+  **Pictures tab** (galleries on top, `ungrouped=1` pictures below); `/galleries`
+  redirects to `/?kind=picture`, while `/galleries/:id` is the grid detail page.
+- **Adding from inside a collection:** `AddItemsDialog` searches the library and
+  appends via `POST /api/playlists/:id/items`. The Add media form can target a
+  collection up front: uploads attach client-side, downloads carry
+  `jobs.collection_id` and the worker attaches after finalize.
 - `GET /api/items/:id/playlists?kind=` powers membership checkmarks. Keep the picker
   in sync with mutations via the `mm:playlists-changed` window event.
 - **Themes are tokens, not per-component colors.** `src/app/globals.css` defines
