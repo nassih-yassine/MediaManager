@@ -59,6 +59,7 @@ export function Sidebar() {
     <aside className="w-full min-w-0 border-b border-line bg-panel/50 md:sticky md:top-0 md:h-dvh md:w-[252px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
       <div className="flex min-w-0 items-center gap-2 px-3 py-2.5 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-7 md:px-5 md:pt-6 md:pb-28">
         <Link href="/" className="group flex shrink-0 items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.svg"
             alt=""

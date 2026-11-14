@@ -2401,7 +2401,6 @@ async fn update_profile(
     AuthUser(user): AuthUser,
     Json(body): Json<ProfileBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut name = user.name.clone();
     if let Some(raw) = body.name.as_deref() {
         let trimmed = raw.trim();
         if trimmed.is_empty() || trimmed.chars().count() > 80 {
@@ -2410,7 +2409,6 @@ async fn update_profile(
                 "name must be 1 to 80 characters",
             ));
         }
-        name = trimmed.to_string();
     }
     let theme = body.theme.clone().unwrap_or_else(|| user.theme.clone());
     if !THEMES.contains(&theme.as_str()) {

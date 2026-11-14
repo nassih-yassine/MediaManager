@@ -98,6 +98,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [mediaVersion, setMediaVersion] = useState(0);
   const restoringRef = useRef(false);
+  const restoreAttempted = useRef<Set<string>>(new Set());
   const toast = useToast();
 
   const current = queue[index] ?? null;
@@ -299,11 +300,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           status: string;
           job?: { id: string };
         }>(`/api/items/${item.id}/restore`, { method: "POST" });
-        if (started.status === "ready") {
-          setMediaVersion((value) => value + 1);
-          wantPlayRef.current = true;
-          return;
-        }
+        if (started.status === "ready") return;
         const jobId = started.job?.id;
         if (!jobId) throw new Error("Could not start the restore");
         toast("Restoring media…", "info");
@@ -332,7 +329,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const handleMediaError = useCallback(() => {
     setPlaying(false);
-    if (current?.evictedAt) void restoreCurrent(current);
+    // The queue may predate an eviction, so ask the server even when the
+    // cached item has no evictedAt. One attempt per item per session.
+    if (!current?.sourceUrl || restoreAttempted.current.has(current.id)) return;
+    restoreAttempted.current.add(current.id);
+    void restoreCurrent(current);
   }, [current, restoreCurrent]);
 
   const playNow = useCallback(
