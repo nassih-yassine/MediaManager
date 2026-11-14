@@ -478,6 +478,8 @@ mod tests {
                 id TEXT PRIMARY KEY, email TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 name TEXT NOT NULL, password_hash TEXT NOT NULL,
                 role TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0,
+                theme TEXT NOT NULL DEFAULT 'slate',
+                theme_mode TEXT NOT NULL DEFAULT 'dark',
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
         )
         .execute(&pool)

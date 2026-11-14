@@ -173,6 +173,21 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
             .bind(&job.id)
             .execute(&state.pool)
             .await?;
+            if let Some(owner) = job.owner_id.as_deref() {
+                match crate::notifications::create(
+                    &state.pool,
+                    owner,
+                    "job_done",
+                    &format!("Downloaded: {}", item.title),
+                    Some(&job.url),
+                    Some(&format!("/watch/{}", item.id)),
+                )
+                .await
+                {
+                    Ok(id) => state.emit("notification.created", &id, None, Some(owner)),
+                    Err(err) => tracing::warn!(%err, "could not notify finished download"),
+                }
+            }
             cleanup_incoming(state, &job.id).await;
             tracing::info!(job = %job.id, item = %item.id, "job done");
         }
@@ -193,6 +208,23 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
             .bind(&job.id)
             .execute(&state.pool)
             .await?;
+            if !retry {
+                if let Some(owner) = job.owner_id.as_deref() {
+                    match crate::notifications::create(
+                        &state.pool,
+                        owner,
+                        "job_failed",
+                        "Download failed",
+                        Some(&message),
+                        Some("/add"),
+                    )
+                    .await
+                    {
+                        Ok(id) => state.emit("notification.created", &id, None, Some(owner)),
+                        Err(err) => tracing::warn!(%err, "could not notify failed download"),
+                    }
+                }
+            }
             tracing::warn!(job = %job.id, retry, %message, "job failed");
         }
     }

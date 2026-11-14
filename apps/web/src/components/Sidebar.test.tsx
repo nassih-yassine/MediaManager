@@ -17,9 +17,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({ api: mocks.api }));
+vi.mock("@/components/NotificationBell", () => ({ NotificationBell: () => null }));
 vi.mock("@/lib/realtime", () => ({ useRealtime: () => {} }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ user: mocks.user, logout: mocks.logout }),
+  useOptionalAuth: () => null,
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",

@@ -29,6 +29,22 @@ export default function AdminPage() {
   const [form, setForm] = useState<CreateForm>(EMPTY);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<"users" | "reports" | "announce">("users");
+  const [reports, setReports] = useState<
+    Array<{
+      id: string;
+      kind: string;
+      title: string;
+      body: string;
+      status: string;
+      createdAt: number;
+      userName?: string;
+      userEmail?: string;
+    }>
+  >([]);
+  const [announceTitle, setAnnounceTitle] = useState("");
+  const [announceBody, setAnnounceBody] = useState("");
+  const [sending, setSending] = useState(false);
   const [resetFor, setResetFor] = useState<AdminUserRow | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [deleteFor, setDeleteFor] = useState<AdminUserRow | null>(null);
@@ -51,6 +67,51 @@ export default function AdminPage() {
   useEffect(() => {
     if (user?.role === "admin") void load();
   }, [user, load]);
+
+  const loadReports = useCallback(async () => {
+    try {
+      const data = await api<{ reports: typeof reports }>("/api/admin/reports");
+      setReports(data.reports);
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (user?.role === "admin" && tab === "reports") void loadReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, tab]);
+
+  async function resolveReport(id: string) {
+    try {
+      await api(`/api/admin/reports/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "resolved" }),
+      });
+      await loadReports();
+      toast("Report resolved", "success");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  async function sendAnnouncement(event: React.FormEvent) {
+    event.preventDefault();
+    setSending(true);
+    try {
+      const data = await api<{ created: number }>("/api/admin/announcements", {
+        method: "POST",
+        body: JSON.stringify({ title: announceTitle, body: announceBody }),
+      });
+      toast(`Sent to ${data.created} users`, "success");
+      setAnnounceTitle("");
+      setAnnounceBody("");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setSending(false);
+    }
+  }
 
   async function createUser(event: React.FormEvent) {
     event.preventDefault();
@@ -149,6 +210,31 @@ export default function AdminPage() {
         </button>
       </div>
 
+      <div className="mt-5 flex gap-1 rounded-full border border-line bg-panel p-1 text-sm w-fit">
+        {(
+          [
+            ["users", "Users"],
+            ["reports", "Reports"],
+            ["announce", "Announce"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTab(value)}
+            className={`rounded-full px-3 py-1.5 transition-colors ${
+              tab === value
+                ? "bg-panel-2 text-ink"
+                : "text-muted hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "users" ? (
+        <>
       {creating ? (
         <form
           onSubmit={createUser}
@@ -296,6 +382,93 @@ export default function AdminPage() {
           </tbody>
         </table>
       </div>
+        </>
+      ) : tab === "reports" ? (
+        <div className="mt-6 space-y-2">
+          {reports.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
+              No reports yet.
+            </p>
+          ) : (
+            reports.map((report) => (
+              <div
+                key={report.id}
+                className="rounded-2xl border border-line bg-panel px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{report.title}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted">
+                      {report.kind}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] ${
+                        report.status === "resolved"
+                          ? "bg-accent/15 text-accent"
+                          : "bg-panel-2 text-muted"
+                      }`}
+                    >
+                      {report.status}
+                    </span>
+                  </span>
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-muted">
+                  {report.body}
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted">
+                    {report.userName} · {report.userEmail}
+                  </span>
+                  {report.status === "open" ? (
+                    <button
+                      type="button"
+                      onClick={() => void resolveReport(report.id)}
+                      className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:text-ink"
+                    >
+                      Resolve
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        <form
+          onSubmit={sendAnnouncement}
+          className="mt-6 space-y-3 rounded-2xl border border-line bg-panel p-4"
+        >
+          <p className="text-sm text-muted">
+            Every enabled user gets this in their notification bell.
+          </p>
+          <input
+            placeholder="Title"
+            required
+            minLength={3}
+            maxLength={120}
+            value={announceTitle}
+            onChange={(event) => setAnnounceTitle(event.target.value)}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm"
+          />
+          <textarea
+            placeholder="What's new?"
+            required
+            minLength={3}
+            maxLength={2000}
+            rows={4}
+            value={announceBody}
+            onChange={(event) => setAnnounceBody(event.target.value)}
+            className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={sending}
+            className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink disabled:opacity-50"
+          >
+            {sending ? "Sending…" : "Send announcement"}
+          </button>
+        </form>
+      )}
 
       {resetFor ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">

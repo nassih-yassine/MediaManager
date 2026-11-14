@@ -6,6 +6,10 @@ lands in a plain folder tree on disk.
 
 - Local accounts: email + password, private libraries per user, and an admin panel
   for creating users and resetting passwords.
+- Profile page: display name, password, account-level theme, and bug/feature reports
+  that land in an admin inbox.
+- Notification bell: report updates, admin announcements, and finished or failed
+  downloads; unread badge plus a full `/notifications` list.
 - Persistent player bar: play/pause, next/prev, seek, volume, shuffle, repeat,
   and a drag-to-reorder queue that survives navigation.
 - Resume where you stopped: positions are saved per item (even across reloads).

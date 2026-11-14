@@ -12,7 +12,7 @@ make dev        # API :8787 + web :3000
 make api        # API only
 make worker     # worker only (MM_ROLE=worker)
 make web        # Next dev server only
-make test       # cargo test (29) + vitest (82)
+make test       # cargo test (36) + vitest (92)
 make test-web   # vitest only
 make e2e        # real Chromium smoke test; needs `make dev` running
 make check      # cargo check + tsc --noEmit
@@ -236,6 +236,31 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   outside the shell. A `401` from `api()` emits `mm:unauthorized`, and logout clears
   `mm.player.v1` so the next account does not inherit the queue.
 - E2E needs an existing account: `MM_E2E_EMAIL=... MM_E2E_PASSWORD=... make e2e`.
+
+## Profile, reports, notifications
+
+- **Themes live on the account** (`users.theme`, `users.theme_mode`). `/api/profile`
+  reads/writes them; `AuthProvider` applies them and keeps `mm.appearance` as the
+  first-paint cache. `ThemePicker` PATCHes when signed in and never blocks on failure.
+- **`/profile`** owns display name, password, appearance, and the user's reports.
+  Reports have `kind=bug|feature`, `status=open|resolved`, 3–120 char titles and
+  10–4000 char bodies (`invalid_report` otherwise).
+- **Reports notify every enabled admin** (`report_new`); resolving notifies the
+  reporter exactly once (`report_resolved`). The update uses
+  `WHERE id=? AND status='open'` so a second resolve is a no-op.
+- **Announcements** (`POST /api/admin/announcements`) fan out one `announcement`
+  notification per enabled user in a transaction. There is no banner; the bell is
+  the delivery surface by request.
+- **Download outcomes** write `job_done`/`job_failed` for the job owner. Only the
+  final failure notifies; retries stay silent.
+- Notification kinds are free text in SQLite; keep the four known names above.
+  `notifications.rs` owns create/fan-out/unread; routes/worker emit
+  `notification.created` with the recipient's owner id so the SSE filter works.
+- All notification/report endpoints are owner-scoped; another user's id is `404`.
+  `read-all` only touches the caller. Admin report lists join the reporter's
+  name/email and are `AdminUser`-only.
+- Frontend: `NotificationProvider` feeds the sidebar `NotificationBell` (portaled)
+  and `/notifications`; `notification.created` refreshes the list and badge.
 
 ## Smoke test after changes
 
