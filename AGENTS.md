@@ -299,7 +299,8 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   `MM_WEB_ORIGIN` and `MM_COOKIE_SECURE=1`; TLS is the optional Caddy profile.
 - E2E requires a seeded playable item in CI; a fresh DB alone fails the resume
   test. Do not remove the seed step without replacing it.
-- Docker is not installed on this development machine; validate workflows with
+- Docker is not installed on this development machine; Podman is (`make images`,
+  `podman compose -f compose.yaml -f compose.podman.yaml`). Validate workflows with
   `python3 -c "import yaml; yaml.safe_load(open(...))"` and keep the Dockerfiles
   in sync with real build paths.
 

@@ -6,8 +6,9 @@ SHELL := /bin/bash
 API_DIR := crates/api
 WEB_DIR := apps/web
 CARGO_RUN := cargo run --manifest-path $(API_DIR)/Cargo.toml
+ENGINE ?= podman
 
-.PHONY: help install dev api worker web build test check lint fmt clean
+.PHONY: help install dev api worker web build test check lint fmt clean images
 
 help:
 	@echo "make install   install web deps + fetch rust deps"
@@ -20,6 +21,7 @@ help:
 	@echo "make e2e       browser smoke test (needs make dev running)"
 	@echo "make check     cargo check + tsc --noEmit"
 	@echo "make lint      eslint"
+	@echo "make images    build api + web images with $(ENGINE)"
 
 install:
 	cd $(WEB_DIR) && npm install
@@ -67,3 +69,9 @@ fmt:
 clean:
 	cargo clean --manifest-path $(API_DIR)/Cargo.toml
 	rm -rf $(WEB_DIR)/.next
+
+images:
+	$(ENGINE) build -f $(API_DIR)/Dockerfile -t localhost/mm-api:local .
+	$(ENGINE) build -f $(WEB_DIR)/Dockerfile \
+		--build-arg MM_API_URL=http://api:8787 \
+		-t localhost/mm-web:local $(WEB_DIR)

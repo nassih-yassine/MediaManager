@@ -105,7 +105,19 @@ Optional TLS: point a hostname at the server, set `PUBLIC_HOST` and
 `docker compose --profile tls up -d`.
 
 Repository secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
-`DEPLOY_PATH` (optional, default `/opt/mediamanager`).
+`DEPLOY_PATH` (optional, default `/opt/mediamanager`). The deploy script uses
+`docker compose` when Docker is present, otherwise `podman compose`.
+
+Run the container stack locally with Podman:
+
+```sh
+make images
+cp deploy/.env.example .env    # set IMAGE_PREFIX=localhost, MM_WEB_ORIGIN=http://localhost:3001, MM_COOKIE_SECURE=0
+podman compose -f compose.yaml -f compose.podman.yaml up -d
+```
+
+Then open <http://localhost:3001>. The Podman override maps the library volume
+with `userns_mode: keep-id`, so files stay owned by your user.
 
 ## Configuration
 

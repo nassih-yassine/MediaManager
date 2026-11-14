@@ -43,7 +43,14 @@ jobs:
             cd "${DEPLOY_PATH:-/opt/mediamanager}"
             git fetch --tags --force
             git checkout "$TAG"
-            IMAGE_TAG="$TAG" docker compose -f compose.yaml pull
-            IMAGE_TAG="$TAG" docker compose -f compose.yaml up -d --remove-orphans
-            docker image prune -f
+            if command -v docker >/dev/null 2>&1; then
+              compose() { docker compose "$@"; }
+              prune() { docker image prune -f; }
+            else
+              compose() { podman compose "$@"; }
+              prune() { podman image prune -f; }
+            fi
+            IMAGE_TAG="$TAG" compose -f compose.yaml pull
+            IMAGE_TAG="$TAG" compose -f compose.yaml up -d --remove-orphans
+            prune
             curl -fsS http://127.0.0.1:3001/login >/dev/null
