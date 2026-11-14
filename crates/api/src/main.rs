@@ -1,3 +1,4 @@
+mod auth;
 mod config;
 mod db;
 mod media;
@@ -42,7 +43,22 @@ async fn main() -> anyhow::Result<()> {
     };
     db::recover(&pool, &cfg).await?;
 
-    let default_gallery = media::ensure_default_gallery(&pool).await?;
+    auth::bootstrap_admin(&pool, &cfg).await?;
+    match auth::adopt_legacy(&pool).await {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(count, "adopted pre-auth rows into the admin account"),
+        Err(err) => tracing::warn!(%err, "legacy adoption failed"),
+    }
+    if auth::setup_needed(&pool).await? {
+        tracing::warn!("no users yet: complete first-run setup in the web UI");
+    }
+
+    let owner_ids: Vec<String> = sqlx::query_scalar("SELECT id FROM users")
+        .fetch_all(&pool)
+        .await?;
+    for owner_id in &owner_ids {
+        media::ensure_default_gallery(&pool, owner_id).await?;
+    }
 
     match media::backfill_book_covers(&pool, &cfg).await {
         Ok(0) => {}
@@ -62,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
             let (events, _) = tokio::sync::broadcast::channel(256);
             events
         },
-        default_gallery,
+        login_limiter: std::sync::Arc::new(auth::LoginLimiter::default()),
     };
 
     let mut handles = Vec::new();

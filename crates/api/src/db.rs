@@ -148,6 +148,10 @@ mod tests {
             ytdlp: "yt-dlp".into(),
             ffmpeg: "ffmpeg".into(),
             opener: "xdg-open".into(),
+            admin_email: None,
+            admin_password: None,
+            session_days: 30,
+            cookie_secure: false,
         }
     }
 

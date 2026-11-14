@@ -131,7 +131,7 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
                 .unwrap_or(None);
             if status.as_deref() == Some("cancelled") {
                 let _ = media::remove_item(&state.pool, &state.cfg, &item, true).await;
-                state.emit("item.deleted", &item.id, None);
+                state.emit("item.deleted", &item.id, None, job.owner_id.as_deref());
                 return Ok(());
             }
             if let Some(collection_id) = &job.collection_id {
@@ -141,14 +141,27 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
                     tracing::warn!(%err, %collection_id, "could not attach finished item");
                 }
             }
-            state.emit("item.created", &item.id, job.collection_id.as_deref());
+            state.emit(
+                "item.created",
+                &item.id,
+                job.collection_id.as_deref(),
+                job.owner_id.as_deref(),
+            );
             if let Some(collection_id) = &job.collection_id {
-                state.emit("collection.changed", collection_id, None);
+                state.emit(
+                    "collection.changed",
+                    collection_id,
+                    None,
+                    job.owner_id.as_deref(),
+                );
             }
             if item.kind == "picture" {
-                let _ = media::attach_to_collection(&state.pool, &state.default_gallery, &item.id)
-                    .await;
-                state.emit("collection.changed", &state.default_gallery, None);
+                if let Some(owner) = item.owner_id.as_deref() {
+                    if let Ok(default) = media::ensure_default_gallery(&state.pool, owner).await {
+                        let _ = media::attach_to_collection(&state.pool, &default, &item.id).await;
+                        state.emit("collection.changed", &default, None, Some(owner));
+                    }
+                }
             }
             sqlx::query(
                 "UPDATE jobs
@@ -352,9 +365,14 @@ async fn download_ytdlp(state: &AppState, job: &Job) -> Result<Item> {
     let (title, duration_ms, width, height) = read_info(&info_path, &job.url).await;
 
     let mime = models::mime_for_ext(&media::extension_of(&media_path));
+    let owner_id = job
+        .owner_id
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("job has no owner"))?;
     let mut item = media::finalize(
         &state.pool,
         &state.cfg,
+        owner_id,
         &job.kind,
         &title,
         &media_path,
@@ -564,9 +582,14 @@ async fn download_direct(state: &AppState, job: &Job) -> Result<Item> {
     update_progress(&state.pool, &job.id, 0.95, "finalizing", &last_emit).await;
 
     let mime = models::mime_for_ext(&url_ext);
+    let owner_id = job
+        .owner_id
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("job has no owner"))?;
     let item = media::finalize(
         &state.pool,
         &state.cfg,
+        owner_id,
         &job.kind,
         &title,
         &dest,

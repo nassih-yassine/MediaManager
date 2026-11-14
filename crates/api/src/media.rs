@@ -179,6 +179,7 @@ async fn epub_cover(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
 pub async fn finalize(
     pool: &sqlx::SqlitePool,
     cfg: &Config,
+    owner_id: &str,
     kind: &str,
     title: &str,
     media_src: &Path,
@@ -254,11 +255,12 @@ pub async fn finalize(
 
     sqlx::query(
         "INSERT INTO items
-           (id, kind, title, source_url, path, thumb_path, mime, bytes,
+           (id, owner_id, kind, title, source_url, path, thumb_path, mime, bytes,
             duration_ms, width, height, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
+    .bind(owner_id)
     .bind(kind)
     .bind(title)
     .bind(source_url)
@@ -324,36 +326,57 @@ pub async fn backfill_book_covers(pool: &sqlx::SqlitePool, cfg: &Config) -> Resu
 /// pictures are attached the first time it is created.
 pub const DEFAULT_GALLERY_NAME: &str = "All pictures";
 
-pub async fn ensure_default_gallery(pool: &sqlx::SqlitePool) -> Result<String> {
+pub async fn ensure_default_gallery(pool: &sqlx::SqlitePool, owner_id: &str) -> Result<String> {
     if let Some(id) = sqlx::query_scalar::<_, String>(
         "SELECT id FROM playlists
-          WHERE kind = 'gallery' AND name = ?
-          ORDER BY created_at LIMIT 1",
+          WHERE owner_id = ? AND kind = 'gallery' AND is_default = 1
+          LIMIT 1",
     )
-    .bind(DEFAULT_GALLERY_NAME)
+    .bind(owner_id)
     .fetch_optional(pool)
     .await?
     {
         return Ok(id);
     }
 
+    // Upgrade path: adopt the pre-auth "All pictures" gallery for this owner.
+    if let Some(id) = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM playlists
+          WHERE owner_id IS NULL AND kind = 'gallery' AND name = ?
+          ORDER BY created_at LIMIT 1",
+    )
+    .bind(DEFAULT_GALLERY_NAME)
+    .fetch_optional(pool)
+    .await?
+    {
+        sqlx::query("UPDATE playlists SET owner_id = ?, is_default = 1 WHERE id = ?")
+            .bind(owner_id)
+            .bind(&id)
+            .execute(pool)
+            .await?;
+        return Ok(id);
+    }
+
     let id = uuid::Uuid::now_v7().to_string();
     let now = db::now_ms();
     sqlx::query(
-        "INSERT INTO playlists (id, name, kind, created_at, updated_at)
-         VALUES (?, ?, 'gallery', ?, ?)",
+        "INSERT INTO playlists (id, owner_id, name, kind, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, 'gallery', 1, ?, ?)",
     )
     .bind(&id)
+    .bind(owner_id)
     .bind(DEFAULT_GALLERY_NAME)
     .bind(now)
     .bind(now)
     .execute(pool)
     .await?;
 
-    let pictures: Vec<String> =
-        sqlx::query_scalar("SELECT id FROM items WHERE kind = 'picture' ORDER BY created_at")
-            .fetch_all(pool)
-            .await?;
+    let pictures: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM items WHERE kind = 'picture' AND owner_id = ? ORDER BY created_at",
+    )
+    .bind(owner_id)
+    .fetch_all(pool)
+    .await?;
     for (position, item_id) in pictures.into_iter().enumerate() {
         sqlx::query(
             "INSERT OR IGNORE INTO playlist_items
@@ -465,6 +488,10 @@ mod tests {
             ytdlp: "yt-dlp".into(),
             ffmpeg: "ffmpeg".into(),
             opener: "xdg-open".into(),
+            admin_email: None,
+            admin_password: None,
+            session_days: 30,
+            cookie_secure: false,
         }
     }
 
@@ -559,17 +586,33 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let pool = test_db(&dir).await;
         let now = db::now_ms();
-
-        for (id, kind) in [
-            ("pic-1", "picture"),
-            ("pic-2", "picture"),
-            ("song", "music"),
-        ] {
+        for id in ["owner-a", "owner-b"] {
             sqlx::query(
-                "INSERT INTO items (id, kind, title, path, mime, bytes, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, 'application/octet-stream', 1, ?, ?)",
+                "INSERT INTO users (id, email, name, password_hash, role, created_at, updated_at)
+                 VALUES (?, ?, ?, 'x', 'user', ?, ?)",
             )
             .bind(id)
+            .bind(format!("{id}@example.com"))
+            .bind(id)
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        for (id, kind, owner) in [
+            ("pic-1", "picture", "owner-a"),
+            ("pic-2", "picture", "owner-a"),
+            ("song", "music", "owner-a"),
+            ("other-pic", "picture", "owner-b"),
+        ] {
+            sqlx::query(
+                "INSERT INTO items (id, owner_id, kind, title, path, mime, bytes, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, 'application/octet-stream', 1, ?, ?)",
+            )
+            .bind(id)
+            .bind(owner)
             .bind(kind)
             .bind(id)
             .bind(format!("picture/aa/{id}"))
@@ -580,8 +623,8 @@ mod tests {
             .unwrap();
         }
 
-        let first = ensure_default_gallery(&pool).await.unwrap();
-        let second = ensure_default_gallery(&pool).await.unwrap();
+        let first = ensure_default_gallery(&pool, "owner-a").await.unwrap();
+        let second = ensure_default_gallery(&pool, "owner-a").await.unwrap();
         assert_eq!(first, second, "the gallery is created once");
 
         let count: i64 =
@@ -591,6 +634,16 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(count, 2, "only pictures are filed, not music");
+
+        let other = ensure_default_gallery(&pool, "owner-b").await.unwrap();
+        assert_ne!(first, other, "each owner gets a separate default gallery");
+        let other_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items WHERE playlist_id = ?")
+                .bind(&other)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(other_count, 1);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

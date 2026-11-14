@@ -12,6 +12,7 @@ const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
 #[allow(dead_code)]
 pub struct Item {
     pub rowid: i64,
+    pub owner_id: Option<String>,
     pub id: String,
     pub kind: String,
     pub title: String,
@@ -87,6 +88,7 @@ impl Item {
 #[allow(dead_code)]
 pub struct Job {
     pub id: String,
+    pub owner_id: Option<String>,
     pub dedupe_key: String,
     pub url: String,
     pub kind: String,
@@ -218,8 +220,10 @@ pub fn default_mode(kind: &str) -> &'static str {
 #[allow(dead_code)]
 pub struct Playlist {
     pub id: String,
+    pub owner_id: Option<String>,
     pub name: String,
     pub kind: String,
+    pub is_default: i64,
     pub cover_path: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -231,6 +235,7 @@ pub struct PlaylistSummaryRow {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub is_default: i64,
     pub cover_path: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -268,7 +273,7 @@ impl PlaylistSummaryRow {
             id: self.id.clone(),
             name: self.name.clone(),
             kind: self.kind.clone(),
-            is_default: false,
+            is_default: self.is_default != 0,
             item_count: self.item_count,
             cover_url: self
                 .cover_path

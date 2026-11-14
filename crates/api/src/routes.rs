@@ -2,8 +2,9 @@ use std::path::Path;
 use std::process::Stdio;
 
 use axum::{
-    extract::{DefaultBodyLimit, Multipart, Path as AxumPath, Query, State},
-    http::StatusCode,
+    body::Body,
+    extract::{DefaultBodyLimit, Multipart, Path as AxumPath, Query, Request, State},
+    http::{header::SET_COOKIE, HeaderMap, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse, Response,
@@ -17,8 +18,11 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Sqlite};
 use std::convert::Infallible;
+use tower::ServiceExt;
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeFile;
 
+use crate::auth::{self, AdminUser, AuthUser};
 use crate::db;
 use crate::media;
 use crate::models::{
@@ -63,6 +67,20 @@ impl ApiError {
             message: "internal error".to_string(),
         }
     }
+    pub fn unauthorized() -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthorized",
+            message: "sign in to continue".to_string(),
+        }
+    }
+    pub fn forbidden() -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "forbidden",
+            message: "admin access required".to_string(),
+        }
+    }
 }
 
 impl IntoResponse for ApiError {
@@ -105,26 +123,23 @@ pub fn router(state: AppState) -> Router {
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
 
-    let files = Router::new()
-        .nest_service(
-            "/music",
-            tower_http::services::ServeDir::new(state.cfg.library_dir.join("music")),
-        )
-        .nest_service(
-            "/video",
-            tower_http::services::ServeDir::new(state.cfg.library_dir.join("video")),
-        )
-        .nest_service(
-            "/picture",
-            tower_http::services::ServeDir::new(state.cfg.library_dir.join("picture")),
-        )
-        .nest_service(
-            "/book",
-            tower_http::services::ServeDir::new(state.cfg.library_dir.join("book")),
-        );
-
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/auth/status", get(auth_status))
+        .route("/api/auth/setup", post(auth_setup))
+        .route("/api/auth/login", post(auth_login))
+        .route("/api/auth/logout", post(auth_logout))
+        .route("/api/auth/me", get(auth_me))
+        .route("/api/auth/password", post(change_password))
+        .route(
+            "/api/admin/users",
+            get(admin_list_users).post(admin_create_user),
+        )
+        .route(
+            "/api/admin/users/{id}",
+            axum::routing::patch(admin_update_user).delete(admin_delete_user),
+        )
+        .route("/api/admin/users/{id}/password", post(admin_reset_password))
         .route("/api/events", get(sse_events))
         .route("/api/metrics", get(metrics))
         .route("/api/items", get(list_items))
@@ -167,11 +182,12 @@ pub fn router(state: AppState) -> Router {
                 state.cfg.max_download_bytes() as usize
             )),
         )
-        .nest("/files", files)
-        .nest_service(
-            "/thumbs",
-            tower_http::services::ServeDir::new(state.cfg.thumbs_dir()),
-        )
+        .route("/files/{*path}", get(serve_file))
+        .route("/thumbs/{*path}", get(serve_thumb))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            csrf_guard,
+        ))
         .layer(cors)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
@@ -208,6 +224,7 @@ fn parse_cursor(cursor: &Option<String>) -> Option<(i64, i64)> {
 
 async fn list_items(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Query(params): Query<ListParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if let Some(kind) = params.kind.as_deref() {
@@ -232,7 +249,9 @@ async fn list_items(
     if use_fts {
         count.push(" JOIN items_fts ON items_fts.rowid = i.rowid");
     }
-    count.push(" WHERE 1 = 1");
+    count
+        .push(" WHERE i.owner_id = ")
+        .push_bind(user.id.clone());
     if let Some(kind) = params.kind.as_deref().filter(|k| models::valid_kind(k)) {
         count.push(" AND i.kind = ").push_bind(kind.to_string());
     }
@@ -259,7 +278,7 @@ async fn list_items(
     if use_fts {
         rows.push(" JOIN items_fts ON items_fts.rowid = i.rowid");
     }
-    rows.push(" WHERE 1 = 1");
+    rows.push(" WHERE i.owner_id = ").push_bind(user.id.clone());
     if let Some(kind) = params.kind.as_deref().filter(|k| models::valid_kind(k)) {
         rows.push(" AND i.kind = ").push_bind(kind.to_string());
     }
@@ -327,10 +346,12 @@ async fn list_items(
 
 async fn get_item(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<ItemDto>, ApiError> {
-    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ? AND owner_id = ?")
         .bind(&id)
+        .bind(&user.id)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::not_found("item not found"))?;
@@ -344,6 +365,7 @@ struct PatchItem {
 
 async fn patch_item(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<PatchItem>,
 ) -> Result<Json<ItemDto>, ApiError> {
@@ -354,12 +376,14 @@ async fn patch_item(
             "title cannot be empty",
         ));
     }
-    let result = sqlx::query("UPDATE items SET title = ?, updated_at = ? WHERE id = ?")
-        .bind(title)
-        .bind(db::now_ms())
-        .bind(&id)
-        .execute(&state.pool)
-        .await?;
+    let result =
+        sqlx::query("UPDATE items SET title = ?, updated_at = ? WHERE id = ? AND owner_id = ?")
+            .bind(title)
+            .bind(db::now_ms())
+            .bind(&id)
+            .bind(&user.id)
+            .execute(&state.pool)
+            .await?;
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("item not found"));
     }
@@ -367,7 +391,7 @@ async fn patch_item(
         .bind(&id)
         .fetch_one(&state.pool)
         .await?;
-    state.emit("item.updated", &item.id, None);
+    state.emit("item.updated", &item.id, None, Some(&user.id));
     Ok(Json(item.to_dto()))
 }
 
@@ -378,11 +402,13 @@ struct DeleteParams {
 
 async fn delete_item(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Query(params): Query<DeleteParams>,
 ) -> Result<StatusCode, ApiError> {
-    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ? AND owner_id = ?")
         .bind(&id)
+        .bind(&user.id)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::not_found("item not found"))?;
@@ -393,7 +419,7 @@ async fn delete_item(
         params.delete_file.unwrap_or(false),
     )
     .await?;
-    state.emit("item.deleted", &item.id, None);
+    state.emit("item.deleted", &item.id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -404,17 +430,21 @@ struct ProgressBody {
 }
 async fn update_item_progress(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<ProgressBody>,
 ) -> Result<StatusCode, ApiError> {
     // Guard against a bogus client writing nonsense; 24h is a sane ceiling.
     let position = body.position_ms.clamp(0, 86_400_000);
-    let result = sqlx::query("UPDATE items SET position_ms = ?, last_played_at = ? WHERE id = ?")
-        .bind(position)
-        .bind(db::now_ms())
-        .bind(&id)
-        .execute(&state.pool)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE items SET position_ms = ?, last_played_at = ? WHERE id = ? AND owner_id = ?",
+    )
+    .bind(position)
+    .bind(db::now_ms())
+    .bind(&id)
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?;
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("item not found"));
     }
@@ -425,6 +455,7 @@ async fn update_item_progress(
 /// add-to-playlist picker so it can show checkmarks without N requests.
 async fn item_playlists(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Query(params): Query<PlaylistParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -433,8 +464,9 @@ async fn item_playlists(
         .as_deref()
         .map(|value| collection_kind(Some(value)))
         .transpose()?;
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM items WHERE id = ?")
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM items WHERE id = ? AND owner_id = ?")
         .bind(&id)
+        .bind(&user.id)
         .fetch_optional(&state.pool)
         .await?
         .is_some();
@@ -448,9 +480,11 @@ async fn item_playlists(
                 EXISTS(SELECT 1 FROM playlist_items x
                         WHERE x.playlist_id = p.id AND x.item_id = ?) AS contains
            FROM playlists p
+          WHERE p.owner_id = ?
           ORDER BY p.name COLLATE NOCASE",
     )
     .bind(&id)
+    .bind(&user.id)
     .fetch_all(&state.pool)
     .await?;
 
@@ -473,10 +507,12 @@ async fn item_playlists(
 
 async fn open_item(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, ApiError> {
-    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ? AND owner_id = ?")
         .bind(&id)
+        .bind(&user.id)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::not_found("item not found"))?;
@@ -543,6 +579,7 @@ fn resolve_job_mode(
 
 async fn create_job(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Json(body): Json<NewJob>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let url = body.url.trim();
@@ -556,10 +593,13 @@ async fn create_job(
         .map_err(|(code, message)| ApiError::bad_request(code, message))?;
 
     if let Some(collection_id) = &body.collection_id {
-        let target = sqlx::query_scalar::<_, String>("SELECT kind FROM playlists WHERE id = ?")
-            .bind(collection_id)
-            .fetch_optional(&state.pool)
-            .await?;
+        let target = sqlx::query_scalar::<_, String>(
+            "SELECT kind FROM playlists WHERE id = ? AND owner_id = ?",
+        )
+        .bind(collection_id)
+        .bind(&user.id)
+        .fetch_optional(&state.pool)
+        .await?;
         let Some(target_kind) = target else {
             return Err(ApiError::not_found("playlist not found"));
         };
@@ -573,9 +613,11 @@ async fn create_job(
 
     let key = dedupe_key(url, &body.kind, &mode);
     if let Some(existing) = sqlx::query_as::<_, Job>(
-        "SELECT * FROM jobs WHERE dedupe_key = ? AND status IN ('queued','running') LIMIT 1",
+        "SELECT * FROM jobs
+          WHERE dedupe_key = ? AND owner_id = ? AND status IN ('queued','running') LIMIT 1",
     )
     .bind(&key)
+    .bind(&user.id)
     .fetch_optional(&state.pool)
     .await?
     {
@@ -585,8 +627,12 @@ async fn create_job(
         ));
     }
 
-    let active = db::count_by_status(&state.pool, "queued").await
-        + db::count_by_status(&state.pool, "running").await;
+    let active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM jobs WHERE owner_id = ? AND status IN ('queued','running')",
+    )
+    .bind(&user.id)
+    .fetch_one(&state.pool)
+    .await?;
     if active >= state.cfg.max_queued {
         return Err(ApiError {
             status: StatusCode::TOO_MANY_REQUESTS,
@@ -598,10 +644,12 @@ async fn create_job(
     let id = uuid::Uuid::now_v7().to_string();
     let now = db::now_ms();
     sqlx::query(
-        "INSERT INTO jobs (id, dedupe_key, url, kind, mode, status, scheduled_at, created_at, updated_at, collection_id)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)",
+        "INSERT INTO jobs
+           (id, owner_id, dedupe_key, url, kind, mode, status, scheduled_at, created_at, updated_at, collection_id)
+         VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)",
     )
     .bind(&id)
+    .bind(&user.id)
     .bind(&key)
     .bind(url)
     .bind(&body.kind)
@@ -631,6 +679,7 @@ struct ClearJobsBody {
 /// worker notices the cancellation, then their partial files are discarded.
 async fn clear_jobs(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Json(body): Json<ClearJobsBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let now = db::now_ms();
@@ -640,18 +689,22 @@ async fn clear_jobs(
     if body.scope == "active" || body.scope == "all" {
         let result = sqlx::query(
             "UPDATE jobs SET status = 'cancelled', updated_at = ?
-              WHERE status IN ('queued','running')",
+              WHERE owner_id = ? AND status IN ('queued','running')",
         )
         .bind(now)
+        .bind(&user.id)
         .execute(&state.pool)
         .await?;
         cancelled = result.rows_affected();
     }
 
     if body.scope == "finished" || body.scope == "all" {
-        let result = sqlx::query("DELETE FROM jobs WHERE status IN ('done','failed','cancelled')")
-            .execute(&state.pool)
-            .await?;
+        let result = sqlx::query(
+            "DELETE FROM jobs WHERE owner_id = ? AND status IN ('done','failed','cancelled')",
+        )
+        .bind(&user.id)
+        .execute(&state.pool)
+        .await?;
         deleted = result.rows_affected();
     }
 
@@ -674,10 +727,12 @@ struct JobListParams {
 
 async fn list_jobs(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Query(params): Query<JobListParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let limit = params.limit.unwrap_or(50).clamp(1, 200);
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT * FROM jobs WHERE 1 = 1");
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT * FROM jobs WHERE owner_id = ");
+    qb.push_bind(user.id.clone());
     if params.active.unwrap_or(0) == 1 {
         qb.push(" AND status IN ('queued','running')");
     } else if let Some(status) = params.status.as_deref() {
@@ -692,10 +747,12 @@ async fn list_jobs(
 
 async fn get_job(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let job = sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = ?")
+    let job = sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = ? AND owner_id = ?")
         .bind(&id)
+        .bind(&user.id)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::not_found("job not found"))?;
@@ -704,14 +761,16 @@ async fn get_job(
 
 async fn cancel_job(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let result = sqlx::query(
         "UPDATE jobs SET status = 'cancelled', updated_at = ?
-          WHERE id = ? AND status IN ('queued','running')",
+          WHERE id = ? AND owner_id = ? AND status IN ('queued','running')",
     )
     .bind(db::now_ms())
     .bind(&id)
+    .bind(&user.id)
     .execute(&state.pool)
     .await?;
     if result.rows_affected() == 0 {
@@ -735,6 +794,7 @@ struct UploadParams {
 
 async fn upload(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Query(params): Query<UploadParams>,
     mut multipart: Multipart,
 ) -> Result<Json<ItemDto>, ApiError> {
@@ -809,6 +869,7 @@ async fn upload(
     let item = media::finalize(
         &state.pool,
         &state.cfg,
+        &user.id,
         &params.kind,
         &title,
         &src,
@@ -822,10 +883,12 @@ async fn upload(
     .await?;
     let _ = tokio::fs::remove_dir_all(&dir).await;
     if item.kind == "picture" {
-        let _ = media::attach_to_collection(&state.pool, &state.default_gallery, &item.id).await;
-        state.emit("collection.changed", &state.default_gallery, None);
+        if let Ok(default) = media::ensure_default_gallery(&state.pool, &user.id).await {
+            let _ = media::attach_to_collection(&state.pool, &default, &item.id).await;
+            state.emit("collection.changed", &default, None, Some(&user.id));
+        }
     }
-    state.emit("item.created", &item.id, None);
+    state.emit("item.created", &item.id, None, Some(&user.id));
 
     Ok(Json(item.to_dto()))
 }
@@ -865,6 +928,7 @@ struct PlaylistParams {
 
 async fn list_playlists(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Query(params): Query<PlaylistParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let kind = params
@@ -873,12 +937,12 @@ async fn list_playlists(
         .map(|value| collection_kind(Some(value)))
         .transpose()?;
     let filter = if kind.is_some() {
-        " WHERE p.kind = ?"
+        " WHERE p.owner_id = ? AND p.kind = ?"
     } else {
-        ""
+        " WHERE p.owner_id = ?"
     };
     let sql = format!(
-        "SELECT p.id, p.name, p.kind, p.cover_path, p.created_at, p.updated_at,
+        "SELECT p.id, p.name, p.kind, p.is_default, p.cover_path, p.created_at, p.updated_at,
                 COUNT(pi.item_id) AS item_count,
                 (SELECT i.thumb_path
                    FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
@@ -896,15 +960,12 @@ async fn list_playlists(
           GROUP BY p.id
           ORDER BY p.name COLLATE NOCASE"
     );
-    let mut query = sqlx::query_as::<_, PlaylistSummaryRow>(&sql);
+    let mut query = sqlx::query_as::<_, PlaylistSummaryRow>(&sql).bind(&user.id);
     if let Some(kind) = kind {
         query = query.bind(kind);
     }
     let rows = query.fetch_all(&state.pool).await?;
-    let mut playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
-    for playlist in &mut playlists {
-        playlist.is_default = playlist.id == state.default_gallery;
-    }
+    let playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
     Ok(Json(json!({ "playlists": playlists })))
 }
 
@@ -916,6 +977,7 @@ struct NewPlaylist {
 
 async fn create_playlist(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     Json(body): Json<NewPlaylist>,
 ) -> Result<(StatusCode, Json<PlaylistSummaryDto>), ApiError> {
     let name = clean_playlist_name(&body.name)?;
@@ -923,17 +985,18 @@ async fn create_playlist(
     let id = uuid::Uuid::now_v7().to_string();
     let now = db::now_ms();
     sqlx::query(
-        "INSERT INTO playlists (id, name, kind, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO playlists (id, owner_id, name, kind, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
+    .bind(&user.id)
     .bind(&name)
     .bind(kind)
     .bind(now)
     .bind(now)
     .execute(&state.pool)
     .await?;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
 
     Ok((
         StatusCode::CREATED,
@@ -954,21 +1017,25 @@ async fn create_playlist(
 
 async fn get_playlist(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<PlaylistDetailDto>, ApiError> {
-    let playlist = sqlx::query_as::<_, Playlist>("SELECT * FROM playlists WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::not_found("playlist not found"))?;
+    let playlist =
+        sqlx::query_as::<_, Playlist>("SELECT * FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::not_found("playlist not found"))?;
 
     let items = sqlx::query_as::<_, Item>(
         "SELECT i.* FROM playlist_items pi
            JOIN items i ON i.id = pi.item_id
-          WHERE pi.playlist_id = ?
+          WHERE pi.playlist_id = ? AND i.owner_id = ?
           ORDER BY pi.position, pi.added_at",
     )
     .bind(&id)
+    .bind(&user.id)
     .fetch_all(&state.pool)
     .await?;
 
@@ -981,7 +1048,7 @@ async fn get_playlist(
                 .iter()
                 .find_map(|item| item.thumb_path.as_deref().map(models::thumb_url))
         });
-    let is_default = playlist.id == state.default_gallery;
+    let is_default = playlist.is_default != 0;
 
     Ok(Json(PlaylistDetailDto {
         id: playlist.id,
@@ -997,20 +1064,23 @@ async fn get_playlist(
 
 async fn rename_playlist(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<NewPlaylist>,
 ) -> Result<StatusCode, ApiError> {
     let name = clean_playlist_name(&body.name)?;
-    let result = sqlx::query("UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?")
-        .bind(&name)
-        .bind(db::now_ms())
-        .bind(&id)
-        .execute(&state.pool)
-        .await?;
+    let result =
+        sqlx::query("UPDATE playlists SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?")
+            .bind(&name)
+            .bind(db::now_ms())
+            .bind(&id)
+            .bind(&user.id)
+            .execute(&state.pool)
+            .await?;
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("playlist not found"));
     }
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1021,16 +1091,19 @@ struct DeleteCollectionParams {
 
 async fn delete_playlist(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Query(params): Query<DeleteCollectionParams>,
 ) -> Result<StatusCode, ApiError> {
-    let playlist = sqlx::query_as::<_, Playlist>("SELECT * FROM playlists WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::not_found("playlist not found"))?;
+    let playlist =
+        sqlx::query_as::<_, Playlist>("SELECT * FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::not_found("playlist not found"))?;
 
-    if playlist.id == state.default_gallery {
+    if playlist.is_default != 0 {
         return Err(ApiError::bad_request(
             "default_gallery",
             "the default gallery cannot be deleted",
@@ -1054,34 +1127,37 @@ async fn delete_playlist(
 
         if mode == "delete_items" {
             for item_id in &item_ids {
-                if let Some(item) = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
-                    .bind(item_id)
-                    .fetch_optional(&state.pool)
-                    .await?
+                if let Some(item) =
+                    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ? AND owner_id = ?")
+                        .bind(item_id)
+                        .bind(&user.id)
+                        .fetch_optional(&state.pool)
+                        .await?
                 {
                     if let Err(err) = media::remove_item(&state.pool, &state.cfg, &item, true).await
                     {
                         tracing::warn!(%err, item = %item_id, "could not delete gallery picture");
                     } else {
-                        state.emit("item.deleted", item_id, None);
+                        state.emit("item.deleted", item_id, None, Some(&user.id));
                     }
                 }
             }
         } else {
+            let default = media::ensure_default_gallery(&state.pool, &user.id).await?;
             for item_id in &item_ids {
-                if let Err(err) =
-                    media::attach_to_collection(&state.pool, &state.default_gallery, item_id).await
+                if let Err(err) = media::attach_to_collection(&state.pool, &default, item_id).await
                 {
                     tracing::warn!(%err, item = %item_id, "could not move picture to default gallery");
                 }
             }
-            state.emit("collection.changed", &state.default_gallery, None);
+            state.emit("collection.changed", &default, None, Some(&user.id));
         }
     }
 
     let cover = playlist.cover_path;
-    let result = sqlx::query("DELETE FROM playlists WHERE id = ?")
+    let result = sqlx::query("DELETE FROM playlists WHERE id = ? AND owner_id = ?")
         .bind(&id)
+        .bind(&user.id)
         .execute(&state.pool)
         .await?;
     if result.rows_affected() == 0 {
@@ -1092,7 +1168,7 @@ async fn delete_playlist(
             let _ = tokio::fs::remove_file(path).await;
         }
     }
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1104,21 +1180,27 @@ struct PlaylistItemsBody {
 
 async fn add_playlist_items(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<PlaylistItemsBody>,
 ) -> Result<StatusCode, ApiError> {
-    let kind = sqlx::query_scalar::<_, String>("SELECT kind FROM playlists WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::not_found("playlist not found"))?;
+    let kind =
+        sqlx::query_scalar::<_, String>("SELECT kind FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::not_found("playlist not found"))?;
 
     if kind == "gallery" {
         for item_id in &body.item_ids {
-            let item_kind = sqlx::query_scalar::<_, String>("SELECT kind FROM items WHERE id = ?")
-                .bind(item_id)
-                .fetch_optional(&state.pool)
-                .await?;
+            let item_kind = sqlx::query_scalar::<_, String>(
+                "SELECT kind FROM items WHERE id = ? AND owner_id = ?",
+            )
+            .bind(item_id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?;
             if let Some(item_kind) = item_kind {
                 if item_kind != "picture" {
                     return Err(ApiError::bad_request(
@@ -1145,31 +1227,43 @@ async fn add_playlist_items(
         sqlx::query(
             "INSERT OR IGNORE INTO playlist_items
                (playlist_id, item_id, position, added_at)
-             SELECT ?, i.id, ?, ? FROM items i WHERE i.id = ?",
+             SELECT ?, i.id, ?, ? FROM items i WHERE i.id = ? AND i.owner_id = ?",
         )
         .bind(&id)
         .bind(start + 1 + offset as i64)
         .bind(now)
         .bind(item_id)
+        .bind(&user.id)
         .execute(&mut *tx)
         .await?;
     }
 
-    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ? AND owner_id = ?")
         .bind(now)
         .bind(&id)
+        .bind(&user.id)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
 
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn remove_playlist_item(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath((id, item_id)): AxumPath<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
+    let owned =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?;
+    if owned.is_none() {
+        return Err(ApiError::not_found("playlist not found"));
+    }
     sqlx::query("DELETE FROM playlist_items WHERE playlist_id = ? AND item_id = ?")
         .bind(&id)
         .bind(&item_id)
@@ -1180,15 +1274,25 @@ async fn remove_playlist_item(
         .bind(&id)
         .execute(&state.pool)
         .await?;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn reorder_playlist(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<PlaylistItemsBody>,
 ) -> Result<StatusCode, ApiError> {
+    let owned =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?;
+    if owned.is_none() {
+        return Err(ApiError::not_found("playlist not found"));
+    }
     let now = db::now_ms();
     let mut tx = state.pool.begin().await?;
     for (position, item_id) in body.item_ids.iter().enumerate() {
@@ -1205,7 +1309,7 @@ async fn reorder_playlist(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1221,20 +1325,24 @@ struct CoverBody {
 
 async fn set_cover_from_item(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<CoverBody>,
 ) -> Result<StatusCode, ApiError> {
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&state.pool)
-        .await?
-        .is_some();
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?
+            .is_some();
     if !exists {
         return Err(ApiError::not_found("playlist not found"));
     }
 
-    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ? AND owner_id = ?")
         .bind(&body.item_id)
+        .bind(&user.id)
         .fetch_optional(&state.pool)
         .await?
         .ok_or_else(|| ApiError::not_found("item not found"))?;
@@ -1268,20 +1376,23 @@ async fn set_cover_from_item(
         .bind(&id)
         .execute(&state.pool)
         .await?;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn upload_cover(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
     mut multipart: Multipart,
 ) -> Result<StatusCode, ApiError> {
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&state.pool)
-        .await?
-        .is_some();
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ? AND owner_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?
+            .is_some();
     if !exists {
         return Err(ApiError::not_found("playlist not found"));
     }
@@ -1336,43 +1447,541 @@ async fn upload_cover(
     media::make_jpeg_thumb(&state.cfg, &source, &dest)
         .await
         .map_err(ApiError::internal)?;
-    sqlx::query("UPDATE playlists SET cover_path = ?, updated_at = ? WHERE id = ?")
-        .bind(&rel)
-        .bind(db::now_ms())
-        .bind(&id)
-        .execute(&state.pool)
-        .await?;
+    sqlx::query(
+        "UPDATE playlists SET cover_path = ?, updated_at = ? WHERE id = ? AND owner_id = ?",
+    )
+    .bind(&rel)
+    .bind(db::now_ms())
+    .bind(&id)
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?;
     let _ = tokio::fs::remove_dir_all(&dir).await;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn remove_cover(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, ApiError> {
-    let result = sqlx::query("UPDATE playlists SET cover_path = NULL, updated_at = ? WHERE id = ?")
-        .bind(db::now_ms())
-        .bind(&id)
-        .execute(&state.pool)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE playlists SET cover_path = NULL, updated_at = ? WHERE id = ? AND owner_id = ?",
+    )
+    .bind(db::now_ms())
+    .bind(&id)
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?;
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("playlist not found"));
     }
     let dest = state.cfg.library_dir.join(cover_rel(&id));
     let _ = tokio::fs::remove_file(dest).await;
-    state.emit("collection.changed", &id, None);
+    state.emit("collection.changed", &id, None, Some(&user.id));
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn admin_list_users(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let rows = sqlx::query_as::<_, auth::User>(
+        "SELECT id, email, name, role, disabled, created_at, updated_at
+           FROM users ORDER BY created_at",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let mut users = Vec::with_capacity(rows.len());
+    for user in rows {
+        let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items WHERE owner_id = ?")
+            .bind(&user.id)
+            .fetch_one(&state.pool)
+            .await?;
+        let bytes: i64 =
+            sqlx::query_scalar("SELECT COALESCE(SUM(bytes), 0) FROM items WHERE owner_id = ?")
+                .bind(&user.id)
+                .fetch_one(&state.pool)
+                .await?;
+        let playlists: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM playlists WHERE owner_id = ?")
+                .bind(&user.id)
+                .fetch_one(&state.pool)
+                .await?;
+        let active_jobs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM jobs WHERE owner_id = ? AND status IN ('queued','running')",
+        )
+        .bind(&user.id)
+        .fetch_one(&state.pool)
+        .await?;
+        users.push(json!({
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "disabled": user.disabled != 0,
+            "items": items,
+            "bytes": bytes,
+            "playlists": playlists,
+            "activeJobs": active_jobs,
+            "createdAt": user.created_at,
+        }));
+    }
+    Ok(Json(json!({ "users": users })))
+}
+
+#[derive(Deserialize)]
+struct AdminNewUser {
+    email: String,
+    name: String,
+    password: String,
+    role: Option<String>,
+}
+
+async fn admin_create_user(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+    Json(body): Json<AdminNewUser>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let role = body.role.as_deref().unwrap_or("user");
+    let user = auth::create_user(&state.pool, &body.email, &body.name, &body.password, role)
+        .await
+        .map_err(|err| ApiError::bad_request("invalid_user", err.to_string()))?;
+    media::ensure_default_gallery(&state.pool, &user.id).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "user": user_dto(&user) })),
+    ))
+}
+
+#[derive(Deserialize)]
+struct AdminUpdateUser {
+    name: Option<String>,
+    role: Option<String>,
+    disabled: Option<bool>,
+}
+
+async fn admin_update_user(
+    State(state): State<AppState>,
+    AdminUser(admin): AdminUser,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<AdminUpdateUser>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let target = auth::find_user(&state.pool, &id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user not found"))?;
+    if body.role.is_some() || body.disabled.is_some() {
+        if target.id == admin.id {
+            return Err(ApiError::bad_request(
+                "self_change",
+                "you cannot change your own role or disable yourself",
+            ));
+        }
+        if target.is_admin()
+            && (body.role.as_deref() == Some("user") || body.disabled == Some(true))
+        {
+            let other_admins: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM users
+                  WHERE role = 'admin' AND disabled = 0 AND id != ?",
+            )
+            .bind(&target.id)
+            .fetch_one(&state.pool)
+            .await?;
+            if other_admins == 0 {
+                return Err(ApiError::bad_request(
+                    "last_admin",
+                    "at least one enabled admin must remain",
+                ));
+            }
+        }
+    }
+    if let Some(name) = body.name.as_deref() {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(ApiError::bad_request("invalid_name", "name is required"));
+        }
+        sqlx::query("UPDATE users SET name = ?, updated_at = ? WHERE id = ?")
+            .bind(name)
+            .bind(db::now_ms())
+            .bind(&target.id)
+            .execute(&state.pool)
+            .await?;
+    }
+    if let Some(role) = body.role.as_deref() {
+        if role != "admin" && role != "user" {
+            return Err(ApiError::bad_request(
+                "invalid_role",
+                "role must be admin or user",
+            ));
+        }
+        sqlx::query("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
+            .bind(role)
+            .bind(db::now_ms())
+            .bind(&target.id)
+            .execute(&state.pool)
+            .await?;
+    }
+    if let Some(disabled) = body.disabled {
+        sqlx::query("UPDATE users SET disabled = ?, updated_at = ? WHERE id = ?")
+            .bind(if disabled { 1 } else { 0 })
+            .bind(db::now_ms())
+            .bind(&target.id)
+            .execute(&state.pool)
+            .await?;
+        if disabled {
+            let _ = sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+                .bind(&target.id)
+                .execute(&state.pool)
+                .await;
+        }
+    }
+    let updated = auth::find_user(&state.pool, &target.id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user not found"))?;
+    Ok(Json(json!({ "user": user_dto(&updated) })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminResetPassword {
+    password: String,
+}
+
+async fn admin_reset_password(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<AdminResetPassword>,
+) -> Result<StatusCode, ApiError> {
+    if auth::find_user(&state.pool, &id).await?.is_none() {
+        return Err(ApiError::not_found("user not found"));
+    }
+    auth::set_password(&state.pool, &id, &body.password)
+        .await
+        .map_err(|err| ApiError::bad_request("weak_password", err.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminDeleteParams {
+    delete_content: Option<bool>,
+}
+
+async fn admin_delete_user(
+    State(state): State<AppState>,
+    AdminUser(admin): AdminUser,
+    AxumPath(id): AxumPath<String>,
+    Query(params): Query<AdminDeleteParams>,
+) -> Result<StatusCode, ApiError> {
+    if id == admin.id {
+        return Err(ApiError::bad_request(
+            "self_delete",
+            "you cannot delete your own account",
+        ));
+    }
+    let target = auth::find_user(&state.pool, &id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user not found"))?;
+    if target.is_admin() {
+        let other_admins: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM users
+              WHERE role = 'admin' AND disabled = 0 AND id != ?",
+        )
+        .bind(&target.id)
+        .fetch_one(&state.pool)
+        .await?;
+        if other_admins == 0 {
+            return Err(ApiError::bad_request(
+                "last_admin",
+                "at least one enabled admin must remain",
+            ));
+        }
+    }
+    if params.delete_content != Some(true) {
+        return Err(ApiError::bad_request(
+            "content_required",
+            "pass deleteContent=true to delete the user's content",
+        ));
+    }
+
+    let _ = sqlx::query("UPDATE jobs SET status = 'cancelled', updated_at = ? WHERE owner_id = ?")
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await;
+
+    let items = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE owner_id = ?")
+        .bind(&id)
+        .fetch_all(&state.pool)
+        .await?;
+    for item in &items {
+        if let Err(err) = media::remove_item(&state.pool, &state.cfg, item, true).await {
+            tracing::warn!(%err, item = %item.id, "could not delete user item");
+        }
+    }
+
+    let covers: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT id, cover_path FROM playlists WHERE owner_id = ?")
+            .bind(&id)
+            .fetch_all(&state.pool)
+            .await?;
+    for (_, cover) in &covers {
+        if let Some(cover) = cover {
+            if let Some(path) = media::safe_join(&state.cfg.library_dir, cover) {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+        }
+    }
+
+    sqlx::query("DELETE FROM playlists WHERE owner_id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    sqlx::query("DELETE FROM jobs WHERE owner_id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn user_dto(user: &auth::User) -> serde_json::Value {
+    json!({
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+    })
+}
+
+async fn auth_status(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let needs_setup = auth::setup_needed(&state.pool).await?;
+    Ok(Json(json!({ "needsSetup": needs_setup })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetupBody {
+    email: String,
+    name: Option<String>,
+    password: String,
+}
+
+async fn auth_setup(
+    State(state): State<AppState>,
+    Json(body): Json<SetupBody>,
+) -> Result<Response, ApiError> {
+    if !auth::setup_needed(&state.pool).await? {
+        return Err(ApiError::bad_request(
+            "setup_complete",
+            "an account already exists",
+        ));
+    }
+    auth::validate_password(&body.password)
+        .map_err(|msg| ApiError::bad_request("weak_password", msg))?;
+    let name = body
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| body.email.split('@').next().unwrap_or("Admin"));
+    let user = auth::create_user(&state.pool, &body.email, name, &body.password, "admin")
+        .await
+        .map_err(|err| ApiError::bad_request("invalid_account", err.to_string()))?;
+    auth::adopt_legacy(&state.pool).await?;
+    media::ensure_default_gallery(&state.pool, &user.id).await?;
+    let token = auth::create_session(&state.pool, &user.id, state.cfg.session_days).await?;
+    let cookie = auth::set_cookie_header(&state.cfg, &token);
+    Ok((
+        [(SET_COOKIE, cookie)],
+        Json(json!({ "user": user_dto(&user) })),
+    )
+        .into_response())
+}
+
+#[derive(Deserialize)]
+struct LoginBody {
+    email: String,
+    password: String,
+}
+
+async fn auth_login(
+    State(state): State<AppState>,
+    Json(body): Json<LoginBody>,
+) -> Result<Response, ApiError> {
+    let key = body.email.trim().to_ascii_lowercase();
+    if !state.login_limiter.check(&key) {
+        return Err(ApiError {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            code: "rate_limited",
+            message: "too many attempts; try again in a few minutes".to_string(),
+        });
+    }
+    let Some(user) = auth::authenticate(&state.pool, &body.email, &body.password).await? else {
+        state.login_limiter.fail(&key);
+        return Err(ApiError::unauthorized());
+    };
+    if user.disabled != 0 {
+        state.login_limiter.fail(&key);
+        return Err(ApiError::unauthorized());
+    }
+    state.login_limiter.reset(&key);
+    let token = auth::create_session(&state.pool, &user.id, state.cfg.session_days).await?;
+    let cookie = auth::set_cookie_header(&state.cfg, &token);
+    Ok((
+        [(SET_COOKIE, cookie)],
+        Json(json!({ "user": user_dto(&user) })),
+    )
+        .into_response())
+}
+
+async fn auth_logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Some(token) = auth::session_token(&headers) {
+        let _ = auth::delete_session(&state.pool, &token).await;
+    }
+    ([(SET_COOKIE, auth::clear_cookie())], StatusCode::NO_CONTENT).into_response()
+}
+
+async fn auth_me(AuthUser(user): AuthUser) -> Json<serde_json::Value> {
+    Json(json!({ "user": user_dto(&user) }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PasswordBody {
+    current_password: String,
+    new_password: String,
+}
+
+async fn change_password(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<PasswordBody>,
+) -> Result<StatusCode, ApiError> {
+    if !auth::check_password(&state.pool, &user.id, &body.current_password).await? {
+        return Err(ApiError::bad_request(
+            "wrong_password",
+            "current password is incorrect",
+        ));
+    }
+    auth::set_password(&state.pool, &user.id, &body.new_password)
+        .await
+        .map_err(|err| ApiError::bad_request("weak_password", err.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Serve a library file only to its owner. `ServeFile` keeps HTTP Range support
+/// (video seeking), unlike a buffered handler.
+async fn serve_file(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    AxumPath(rel): AxumPath<String>,
+    req: Request,
+) -> Result<Response, ApiError> {
+    let rel = rel.trim_start_matches('/');
+    let Some(full) = media::safe_join(&state.cfg.library_dir, rel) else {
+        return Err(ApiError::not_found("file not found"));
+    };
+    let owner: Option<Option<String>> =
+        sqlx::query_scalar("SELECT owner_id FROM items WHERE path = ?")
+            .bind(rel)
+            .fetch_optional(&state.pool)
+            .await?;
+    match owner {
+        Some(Some(owner)) if owner == user.id => serve_disk(full, req).await,
+        _ => Err(ApiError::not_found("file not found")),
+    }
+}
+
+async fn serve_thumb(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    AxumPath(rel): AxumPath<String>,
+    req: Request,
+) -> Result<Response, ApiError> {
+    let rel = rel.trim_start_matches('/');
+    let Some(full) = media::safe_join(&state.cfg.thumbs_dir(), rel) else {
+        return Err(ApiError::not_found("thumbnail not found"));
+    };
+    let stored = format!(".thumbs/{rel}");
+    let item_owner: Option<Option<String>> =
+        sqlx::query_scalar("SELECT owner_id FROM items WHERE thumb_path = ?")
+            .bind(&stored)
+            .fetch_optional(&state.pool)
+            .await?;
+    let allowed = match item_owner {
+        Some(Some(owner)) if owner == user.id => true,
+        _ => {
+            let cover_owner: Option<Option<String>> =
+                sqlx::query_scalar("SELECT owner_id FROM playlists WHERE cover_path = ?")
+                    .bind(&stored)
+                    .fetch_optional(&state.pool)
+                    .await?;
+            matches!(cover_owner, Some(Some(owner)) if owner == user.id)
+        }
+    };
+    if !allowed {
+        return Err(ApiError::not_found("thumbnail not found"));
+    }
+    serve_disk(full, req).await
+}
+
+/// Reject cross-origin state changes. Requests without an Origin (curl, tests)
+/// are allowed; the API is loopback-only.
+async fn csrf_guard(
+    State(state): State<AppState>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Result<Response, ApiError> {
+    use axum::http::header::ORIGIN;
+    if !matches!(
+        *req.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+    ) {
+        if let Some(origin) = req.headers().get(ORIGIN) {
+            if origin.to_str().ok() != Some(state.cfg.web_origin.as_str()) {
+                return Err(ApiError::forbidden());
+            }
+        }
+    }
+    Ok(next.run(req).await)
+}
+
+async fn serve_disk(path: std::path::PathBuf, req: Request) -> Result<Response, ApiError> {
+    let response = ServeFile::new(path)
+        .oneshot(req)
+        .await
+        .map_err(ApiError::internal)?;
+    Ok(response.map(Body::new))
 }
 
 async fn sse_events(
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let rx = state.events.subscribe();
-    let stream = stream::unfold(rx, |mut rx| async move {
+    let stream = stream::unfold((rx, user.id), |(mut rx, owner)| async move {
         loop {
             match rx.recv().await {
-                Ok(payload) => return Some((Ok(Event::default().data(payload)), rx)),
+                Ok(payload) => {
+                    let belongs = serde_json::from_str::<serde_json::Value>(&payload)
+                        .ok()
+                        .and_then(|value| {
+                            value
+                                .get("ownerId")
+                                .and_then(|id| id.as_str())
+                                .map(|id| id == owner)
+                        })
+                        .unwrap_or(false);
+                    if belongs {
+                        return Some((Ok(Event::default().data(payload)), (rx, owner)));
+                    }
+                }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
             }
@@ -1386,24 +1995,19 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
         .fetch_one(&state.pool)
         .await
         .is_ok();
-    let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items")
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or(0);
-    let queued = db::count_by_status(&state.pool, "queued").await;
-    let running = db::count_by_status(&state.pool, "running").await;
-
+    let needs_setup = auth::setup_needed(&state.pool).await.unwrap_or(false);
     Ok(Json(json!({
         "status": if db_ok { "ok" } else { "degraded" },
         "db": if db_ok { "ok" } else { "unavailable" },
-        "items": items,
-        "queueDepth": queued,
-        "active": running,
         "fts": state.fts,
+        "needsSetup": needs_setup,
     })))
 }
 
-async fn metrics(State(state): State<AppState>) -> Result<String, ApiError> {
+async fn metrics(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+) -> Result<String, ApiError> {
     let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items")
         .fetch_one(&state.pool)
         .await
@@ -1455,6 +2059,146 @@ mod tests {
         assert_eq!(collection_kind(Some("playlist")).unwrap(), "playlist");
         assert_eq!(collection_kind(Some("gallery")).unwrap(), "gallery");
         assert!(collection_kind(Some("album")).is_err());
+    }
+
+    async fn test_state(dir: &std::path::Path) -> AppState {
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(dir.join("routes-test.db"))
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let (events, _) = tokio::sync::broadcast::channel(16);
+        AppState {
+            pool,
+            cfg: std::sync::Arc::new(crate::config::Config {
+                library_dir: dir.join("library"),
+                db_path: dir.join("routes-test.db"),
+                bind: "127.0.0.1:0".into(),
+                web_origin: "http://localhost:3000".into(),
+                max_concurrent: 1,
+                max_queued: 10,
+                max_download_mb: 10,
+                heartbeat_s: 30,
+                lease_s: 60,
+                role: crate::config::Role::Api,
+                ytdlp: "yt-dlp".into(),
+                ffmpeg: "ffmpeg".into(),
+                opener: "xdg-open".into(),
+                admin_email: None,
+                admin_password: None,
+                session_days: 30,
+                cookie_secure: false,
+            }),
+            fts: false,
+            client: reqwest::Client::new(),
+            events,
+            login_limiter: std::sync::Arc::new(auth::LoginLimiter::default()),
+        }
+    }
+
+    fn request(uri: &str, cookie: Option<&str>) -> Request {
+        let mut builder = axum::http::Request::builder().uri(uri);
+        if let Some(cookie) = cookie {
+            builder = builder.header(axum::http::header::COOKIE, cookie);
+        }
+        builder.body(Body::empty()).unwrap()
+    }
+
+    /// The core isolation contract: no session gets 401, and another user's
+    /// item and file are 404 rather than 403.
+    #[tokio::test]
+    async fn other_users_items_and_files_are_invisible() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-routes-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(dir.join("library/picture/aa")).unwrap();
+        std::fs::write(dir.join("library/picture/aa/pic.png"), b"png").unwrap();
+        let state = test_state(&dir).await;
+
+        let alice = auth::create_user(&state.pool, "a@example.com", "Alice", "secret123", "user")
+            .await
+            .unwrap();
+        let bob = auth::create_user(&state.pool, "b@example.com", "Bob", "secret123", "user")
+            .await
+            .unwrap();
+        let now = db::now_ms();
+        sqlx::query(
+            "INSERT INTO items
+               (id, owner_id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('alice-pic', ?, 'picture', 'Alice pic', 'picture/aa/pic.png',
+                     'image/png', 3, ?, ?)",
+        )
+        .bind(&alice.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        let alice_token = auth::create_session(&state.pool, &alice.id, 30)
+            .await
+            .unwrap();
+        let bob_token = auth::create_session(&state.pool, &bob.id, 30)
+            .await
+            .unwrap();
+        let alice_cookie = format!("mm_session={alice_token}");
+        let bob_cookie = format!("mm_session={bob_token}");
+        let app = router(state);
+
+        let anonymous = app
+            .clone()
+            .oneshot(request("/api/items", None))
+            .await
+            .unwrap();
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+        let bobs_list = app
+            .clone()
+            .oneshot(request("/api/items", Some(&bob_cookie)))
+            .await
+            .unwrap();
+        assert_eq!(bobs_list.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(bobs_list.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(
+            !body.contains("alice-pic"),
+            "Bob's list leaked Alice's item"
+        );
+
+        let bobs_item = app
+            .clone()
+            .oneshot(request("/api/items/alice-pic", Some(&bob_cookie)))
+            .await
+            .unwrap();
+        assert_eq!(bobs_item.status(), StatusCode::NOT_FOUND);
+
+        let bobs_file = app
+            .clone()
+            .oneshot(request("/files/picture/aa/pic.png", Some(&bob_cookie)))
+            .await
+            .unwrap();
+        assert_eq!(bobs_file.status(), StatusCode::NOT_FOUND);
+
+        let alices_item = app
+            .clone()
+            .oneshot(request("/api/items/alice-pic", Some(&alice_cookie)))
+            .await
+            .unwrap();
+        assert_eq!(alices_item.status(), StatusCode::OK);
+
+        let alices_file = app
+            .clone()
+            .oneshot(request("/files/picture/aa/pic.png", Some(&alice_cookie)))
+            .await
+            .unwrap();
+        assert_eq!(alices_file.status(), StatusCode::OK);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

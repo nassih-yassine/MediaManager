@@ -22,6 +22,10 @@ pub struct Config {
     pub ytdlp: String,
     pub ffmpeg: String,
     pub opener: String,
+    pub admin_email: Option<String>,
+    pub admin_password: Option<String>,
+    pub session_days: i64,
+    pub cookie_secure: bool,
 }
 
 fn env_or(name: &str, default: &str) -> String {
@@ -72,6 +76,14 @@ impl Config {
             ytdlp: env_or("MM_YTDLP", "yt-dlp"),
             ffmpeg: env_or("MM_FFMPEG", "ffmpeg"),
             opener: env_or("MM_OPENER", "xdg-open"),
+            admin_email: std::env::var("MM_ADMIN_EMAIL")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
+            admin_password: std::env::var("MM_ADMIN_PASSWORD")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
+            session_days: env_or("MM_SESSION_DAYS", "30").parse().unwrap_or(30),
+            cookie_secure: env_or("MM_COOKIE_SECURE", "0") == "1",
         })
     }
 
