@@ -31,6 +31,7 @@ export interface Item {
   height: number | null;
   positionMs: number;
   lastPlayedAt: number | null;
+  evictedAt: number | null;
   createdAt: number;
   fileUrl: string;
   thumbUrl: string | null;

@@ -165,6 +165,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/items/{id}/playlists", get(item_playlists))
         .route("/api/jobs", get(list_jobs).post(create_job))
         .route("/api/jobs/clear", post(clear_jobs))
+        .route("/api/items/{id}/restore", post(restore_item))
+        .route("/api/maintenance/evict", post(evict_media))
         .route("/api/jobs/{id}", get(get_job).delete(cancel_job))
         .route("/api/playlists", get(list_playlists).post(create_playlist))
         .route(
@@ -812,6 +814,96 @@ async fn cancel_job(
 struct UploadParams {
     kind: String,
     title: Option<String>,
+}
+
+async fn restore_item(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    AxumPath(id): AxumPath<String>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ? AND owner_id = ?")
+        .bind(&id)
+        .bind(&user.id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::not_found("item not found"))?;
+
+    let exists = media::safe_join(&state.cfg.library_dir, &item.path)
+        .map(|path| path.exists())
+        .unwrap_or(false);
+    if item.evicted_at.is_none() && exists {
+        return Ok((StatusCode::OK, Json(json!({ "status": "ready" }))));
+    }
+    if !matches!(item.kind.as_str(), "music" | "video") {
+        return Err(ApiError::bad_request(
+            "not_restorable",
+            "only audio and video can be restored",
+        ));
+    }
+    let Some(source_url) = item.source_url.as_deref() else {
+        return Err(ApiError::bad_request(
+            "not_restorable",
+            "this item has no source URL to download again",
+        ));
+    };
+    if let Some(existing) = sqlx::query_as::<_, Job>(
+        "SELECT * FROM jobs
+          WHERE restore_item_id = ? AND status IN ('queued','running') LIMIT 1",
+    )
+    .bind(&id)
+    .fetch_optional(&state.pool)
+    .await?
+    {
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(json!({ "status": "restoring", "job": existing.to_dto() })),
+        ));
+    }
+
+    let mode = resolve_job_mode(&item.kind, None)
+        .map_err(|(code, message)| ApiError::bad_request(code, message))?;
+    let key = dedupe_key(source_url, &item.kind, &mode);
+    let job_id = uuid::Uuid::now_v7().to_string();
+    let now = db::now_ms();
+    sqlx::query(
+        "INSERT INTO jobs
+           (id, owner_id, dedupe_key, url, kind, mode, status, scheduled_at,
+            created_at, updated_at, restore_item_id)
+         VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)",
+    )
+    .bind(&job_id)
+    .bind(&user.id)
+    .bind(&key)
+    .bind(source_url)
+    .bind(&item.kind)
+    .bind(&mode)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .bind(&id)
+    .execute(&state.pool)
+    .await?;
+
+    let job = sqlx::query_as::<_, Job>("SELECT * FROM jobs WHERE id = ?")
+        .bind(&job_id)
+        .fetch_one(&state.pool)
+        .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "status": "restoring", "job": job.to_dto() })),
+    ))
+}
+
+async fn evict_media(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let evicted =
+        media::evict_unplayed(&state.pool, &state.cfg, state.cfg.evict_after_days).await?;
+    for (id, owner_id) in &evicted {
+        state.emit("item.updated", id, None, owner_id.as_deref());
+    }
+    Ok(Json(json!({ "evicted": evicted.len() })))
 }
 
 async fn upload(
@@ -2613,6 +2705,8 @@ mod tests {
                 admin_password: None,
                 session_days: 30,
                 cookie_secure: false,
+                evict_after_days: 30,
+                evict_check_hours: 24,
             }),
             fts: false,
             client: reqwest::Client::new(),
@@ -3340,6 +3434,119 @@ mod tests {
         );
         assert_eq!(bobs["cursor"].as_i64().unwrap(), 0);
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn restore_creates_one_job_for_the_owner() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-restore-api-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let alice = auth::create_user(&state.pool, "a@example.com", "Alice", "secret123", "user")
+            .await
+            .unwrap();
+        let bob = auth::create_user(&state.pool, "b@example.com", "Bob", "secret123", "user")
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &alice.id, 30)
+            .await
+            .unwrap();
+        let cookie = format!("mm_session={token}");
+        let now = db::now_ms();
+        sqlx::query(
+            "INSERT INTO items
+               (id, owner_id, kind, title, source_url, path, mime, bytes,
+                evicted_at, created_at, updated_at)
+             VALUES ('gone', ?, 'music', 'Track', 'https://example.com/a',
+                     'music/aa/gone.mp3', 'audio/mpeg', 1, ?, ?, ?)",
+        )
+        .bind(&alice.id)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO items
+               (id, owner_id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('upload', ?, 'music', 'Upload', 'music/aa/upload.mp3',
+                     'audio/mpeg', 1, ?, ?)",
+        )
+        .bind(&alice.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        let pool = state.pool.clone();
+        let app = router(state);
+
+        let first = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/items/gone/restore")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let second = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/items/gone/restore")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::ACCEPTED);
+        let jobs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM jobs WHERE restore_item_id = 'gone' AND status = 'queued'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(jobs, 1);
+
+        let no_source = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/items/upload/restore")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_source.status(), StatusCode::BAD_REQUEST);
+
+        let bob_token = auth::create_session(&pool, &bob.id, 30).await.unwrap();
+        let foreign = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/items/gone/restore")
+                    .header(
+                        axum::http::header::COOKIE,
+                        format!("mm_session={bob_token}"),
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

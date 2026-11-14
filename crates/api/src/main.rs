@@ -93,6 +93,9 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let mut handles = Vec::new();
+    if cfg.role != Role::Worker {
+        handles.push(spawn_eviction(state.clone()));
+    }
     if cfg.role != Role::Api {
         handles.extend(worker::spawn_workers(state.clone()));
         handles.push(worker::spawn_reaper(state.clone()));
@@ -126,6 +129,31 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     Ok(())
+}
+
+/// Run the idle-media eviction once at startup and then every
+/// `MM_EVICT_CHECK_HOURS`. `MM_EVICT_AFTER_DAYS=0` disables it.
+fn spawn_eviction(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let every = std::time::Duration::from_secs(state.cfg.evict_check_hours.max(1) * 3600);
+        loop {
+            if state.cfg.evict_after_days > 0 {
+                match media::evict_unplayed(&state.pool, &state.cfg, state.cfg.evict_after_days)
+                    .await
+                {
+                    Ok(items) if !items.is_empty() => {
+                        for (id, owner) in &items {
+                            state.emit("item.updated", id, None, owner.as_deref());
+                        }
+                        tracing::info!(count = items.len(), "evicted idle media files");
+                    }
+                    Ok(_) => {}
+                    Err(err) => tracing::warn!(%err, "idle media eviction failed"),
+                }
+            }
+            tokio::time::sleep(every).await;
+        }
+    })
 }
 
 #[cfg(unix)]

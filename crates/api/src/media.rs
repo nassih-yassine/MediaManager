@@ -428,6 +428,120 @@ pub async fn attach_to_collection(
     Ok(())
 }
 
+/// Delete media files for audio/video items that have not been played for
+/// `days`, keeping the row and its thumbnail. Only items with a source URL are
+/// eligible because they can be restored.
+pub async fn evict_unplayed(
+    pool: &sqlx::SqlitePool,
+    cfg: &Config,
+    days: i64,
+) -> Result<Vec<(String, Option<String>)>> {
+    if days <= 0 {
+        return Ok(Vec::new());
+    }
+    let cutoff = db::now_ms() - days * 24 * 60 * 60 * 1000;
+    let rows: Vec<(String, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, owner_id, path FROM items
+          WHERE kind IN ('music','video')
+            AND source_url IS NOT NULL
+            AND evicted_at IS NULL
+            AND COALESCE(last_played_at, created_at) < ?
+            AND NOT EXISTS (
+              SELECT 1 FROM jobs j
+               WHERE (j.item_id = items.id OR j.restore_item_id = items.id)
+                 AND j.status IN ('queued','running')
+            )",
+    )
+    .bind(cutoff)
+    .fetch_all(pool)
+    .await?;
+
+    let mut evicted = Vec::new();
+    for (id, owner_id, path) in rows {
+        let Some(file) = safe_join(&cfg.library_dir, &path) else {
+            continue;
+        };
+        match tokio::fs::remove_file(&file).await {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                tracing::warn!(%err, item = %id, "could not evict media file");
+                continue;
+            }
+        }
+        sqlx::query("UPDATE items SET evicted_at = ? WHERE id = ? AND evicted_at IS NULL")
+            .bind(db::now_ms())
+            .bind(&id)
+            .execute(pool)
+            .await?;
+        evicted.push((id, owner_id));
+    }
+    Ok(evicted)
+}
+
+/// Point an existing (evicted) item at the freshly downloaded copy and remove
+/// the temporary row the normal finalize step created.
+pub async fn merge_restored(
+    pool: &sqlx::SqlitePool,
+    cfg: &Config,
+    existing_id: &str,
+    downloaded: &Item,
+) -> Result<Item> {
+    let existing = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+        .bind(existing_id)
+        .fetch_optional(pool)
+        .await?
+        .context("item to restore no longer exists")?;
+    if existing.owner_id != downloaded.owner_id {
+        anyhow::bail!("refusing to merge a download from another owner");
+    }
+
+    if existing.path != downloaded.path {
+        if let Some(old) = safe_join(&cfg.library_dir, &existing.path) {
+            let _ = tokio::fs::remove_file(old).await;
+        }
+    }
+    if existing.thumb_path != downloaded.thumb_path {
+        if let Some(old) = existing.thumb_path.as_deref() {
+            if let Some(path) = safe_join(&cfg.library_dir, old) {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+        }
+    }
+
+    // Delete the temporary row before pointing the existing item at its path:
+    // items.path is unique, so the reverse order violates the constraint.
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM items WHERE id = ?")
+        .bind(&downloaded.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "UPDATE items SET
+           path = ?, thumb_path = ?, mime = ?, bytes = ?, duration_ms = ?,
+           width = ?, height = ?, evicted_at = NULL, updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(&downloaded.path)
+    .bind(&downloaded.thumb_path)
+    .bind(&downloaded.mime)
+    .bind(downloaded.bytes)
+    .bind(downloaded.duration_ms)
+    .bind(downloaded.width)
+    .bind(downloaded.height)
+    .bind(db::now_ms())
+    .bind(existing_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+        .bind(existing_id)
+        .fetch_one(pool)
+        .await
+        .map_err(Into::into)
+}
+
 /// Remove an item's files (best effort) and its row. FTS triggers handle search.
 pub async fn remove_item(
     pool: &sqlx::SqlitePool,
@@ -492,6 +606,8 @@ mod tests {
             admin_password: None,
             session_days: 30,
             cookie_secure: false,
+            evict_after_days: 30,
+            evict_check_hours: 24,
         }
     }
 
@@ -754,6 +870,179 @@ mod tests {
             .unwrap();
         assert_eq!(playlists, 1, "the playlist itself stays");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Idle audio/video with a source URL loses only its media file.
+    #[tokio::test]
+    async fn evicts_old_unplayed_media_but_keeps_metadata() {
+        let dir = std::env::temp_dir().join(format!("mm-evict-{}", uuid::Uuid::now_v7()));
+        for path in ["music/aa", "picture/aa", "video/aa", ".thumbs/aa"] {
+            std::fs::create_dir_all(dir.join(path)).unwrap();
+        }
+        let pool = test_db(&dir).await;
+        let cfg = test_config(&dir);
+        let now = db::now_ms();
+        let old = now - 40 * 24 * 60 * 60 * 1000;
+
+        sqlx::query(
+            "INSERT INTO users (id, email, name, password_hash, role, created_at, updated_at)
+             VALUES ('u1', 'u@example.com', 'User', 'x', 'user', ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        for (id, kind, source, seen, evicted) in [
+            ("old", "music", Some("https://example.com/a"), old, true),
+            ("recent", "music", Some("https://example.com/b"), now, false),
+            ("nosource", "music", None, old, false),
+            ("pic", "picture", Some("https://example.com/c"), old, false),
+        ] {
+            let path = format!("{kind}/aa/{id}.mp3");
+            sqlx::query(
+                "INSERT INTO items
+                   (id, owner_id, kind, title, source_url, path, mime, bytes,
+                    last_played_at, created_at, updated_at)
+                 VALUES (?, 'u1', ?, ?, ?, ?, 'audio/mpeg', 1, ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(kind)
+            .bind(id)
+            .bind(source)
+            .bind(&path)
+            .bind(seen)
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+            if !evicted {
+                std::fs::write(dir.join(&path), b"data").unwrap();
+            }
+        }
+        std::fs::write(dir.join(".thumbs/aa/old.jpg"), b"thumb").unwrap();
+
+        // An item with an active restore/download job is skipped.
+        sqlx::query(
+            "INSERT INTO items
+               (id, owner_id, kind, title, source_url, path, mime, bytes,
+                last_played_at, created_at, updated_at)
+             VALUES ('busy', 'u1', 'video', 'Busy', 'https://example.com/d',
+                     'video/aa/busy.mp3', 'audio/mpeg', 1, ?, ?, ?)",
+        )
+        .bind(old)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        std::fs::write(dir.join("video/aa/busy.mp3"), b"data").unwrap();
+        sqlx::query(
+            "INSERT INTO jobs (id, owner_id, dedupe_key, url, kind, mode, status,
+                               scheduled_at, created_at, updated_at, item_id)
+             VALUES ('job-1', 'u1', 'k', 'https://example.com/d', 'video', 'full',
+                     'running', ?, ?, ?, 'busy')",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let evicted = evict_unplayed(&pool, &cfg, 30).await.unwrap();
+        assert_eq!(evicted.len(), 1);
+        assert_eq!(evicted[0].0, "old");
+        assert!(!dir.join("music/aa/old.mp3").exists());
+        assert!(dir.join(".thumbs/aa/old.jpg").exists(), "thumbnail stays");
+        let row: (i64, i64) =
+            sqlx::query_as("SELECT bytes, evicted_at FROM items WHERE id = 'old'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, 1, "metadata stays");
+        assert!(row.1 > 0);
+        assert!(dir.join("music/aa/recent.mp3").exists());
+        assert!(dir.join("music/aa/nosource.mp3").exists());
+        assert!(dir.join("picture/aa/pic.mp3").exists());
+        assert!(dir.join("video/aa/busy.mp3").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Restoring reuses the existing item id and removes the temporary row.
+    #[tokio::test]
+    async fn restore_merges_into_the_existing_item() {
+        let dir = std::env::temp_dir().join(format!("mm-restore-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(dir.join("music/aa")).unwrap();
+        std::fs::create_dir_all(dir.join("music/bb")).unwrap();
+        std::fs::create_dir_all(dir.join(".thumbs/aa")).unwrap();
+        std::fs::create_dir_all(dir.join(".thumbs/bb")).unwrap();
+        let pool = test_db(&dir).await;
+        let cfg = test_config(&dir);
+        let now = db::now_ms();
+        for id in ["u1"] {
+            sqlx::query(
+                "INSERT INTO users (id, email, name, password_hash, role, created_at, updated_at)
+                 VALUES (?, ?, ?, 'x', 'user', ?, ?)",
+            )
+            .bind(id)
+            .bind(format!("{id}@example.com"))
+            .bind(id)
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "INSERT INTO items (id, owner_id, kind, title, source_url, path, thumb_path,
+                                mime, bytes, evicted_at, created_at, updated_at)
+             VALUES ('existing', 'u1', 'music', 'Track', 'https://example.com/a',
+                     'music/aa/existing.mp3', '.thumbs/aa/existing.jpg', 'audio/mpeg',
+                     1, ?, ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO items (id, owner_id, kind, title, source_url, path, thumb_path,
+                                mime, bytes, created_at, updated_at)
+             VALUES ('temp', 'u1', 'music', 'Track', 'https://example.com/a',
+                     'music/bb/temp.mp3', '.thumbs/bb/temp.jpg', 'audio/mpeg', 42, ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        std::fs::write(dir.join("music/bb/temp.mp3"), b"new").unwrap();
+        std::fs::write(dir.join(".thumbs/bb/temp.jpg"), b"new-thumb").unwrap();
+        std::fs::write(dir.join(".thumbs/aa/existing.jpg"), b"old-thumb").unwrap();
+
+        let downloaded = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = 'temp'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let merged = merge_restored(&pool, &cfg, "existing", &downloaded)
+            .await
+            .unwrap();
+        assert_eq!(merged.id, "existing");
+        assert_eq!(merged.path, "music/bb/temp.mp3");
+        assert_eq!(merged.bytes, 42);
+        assert_eq!(merged.evicted_at, None);
+        let temp: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items WHERE id = 'temp'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(temp, 0);
+        assert!(!dir.join(".thumbs/aa/existing.jpg").exists());
+        assert!(dir.join(".thumbs/bb/temp.jpg").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

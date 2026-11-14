@@ -155,6 +155,26 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   clients pull `GET /api/sync/changes?since=<seq>`, and media bytes stream on
   demand instead of syncing. Never make a client-local DB the source of truth.
 
+## Idle eviction and restore
+
+- `MM_EVICT_AFTER_DAYS` (default 30, 0 disables) removes **only media files** for
+  `music`/`video` items that have a `source_url`, are not evicted, have no active
+  download/restore job, and whose `last_played_at` (fallback `created_at`) is older
+  than the cutoff. The row, its thumbnail, playlists and position stay.
+- The scheduler runs at startup and every `MM_EVICT_CHECK_HOURS` in `api`/`combined`
+  roles (`spawn_eviction`). `POST /api/maintenance/evict` runs it on demand for an
+  admin. Never evict uploads: without `source_url` they cannot come back.
+- `POST /api/items/:id/restore` queues a job with `jobs.restore_item_id`. The worker
+  downloads normally, then `media::merge_restored` deletes the temporary item row
+  and repoints the existing item in one transaction (items.path is unique). Keep
+  that order.
+- The player calls restore when a flagged item errors, polls the job, then reloads
+  the item and retries with a cache-busting query. Do not restore silently when
+  `evicted_at` is null; the file may simply be missing.
+- `make setup` / `scripts/first-run.sh` creates the first admin interactively and
+  exits if one exists. It is not used by the container entrypoint; env bootstrap
+  remains for deployments.
+
 ## Sync foundation
 
 - `sync_changes` is append-only and owner-scoped; the cursor is `seq`. Triggers log

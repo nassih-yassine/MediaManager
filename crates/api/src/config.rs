@@ -26,6 +26,9 @@ pub struct Config {
     pub admin_password: Option<String>,
     pub session_days: i64,
     pub cookie_secure: bool,
+    /// Days since last play (or creation) before media files are evicted; 0 disables.
+    pub evict_after_days: i64,
+    pub evict_check_hours: u64,
 }
 
 fn env_or(name: &str, default: &str) -> String {
@@ -84,6 +87,8 @@ impl Config {
                 .filter(|v| !v.trim().is_empty()),
             session_days: env_or("MM_SESSION_DAYS", "30").parse().unwrap_or(30),
             cookie_secure: env_or("MM_COOKIE_SECURE", "0") == "1",
+            evict_after_days: env_or("MM_EVICT_AFTER_DAYS", "30").parse().unwrap_or(30),
+            evict_check_hours: env_or("MM_EVICT_CHECK_HOURS", "24").parse().unwrap_or(24),
         })
     }
 

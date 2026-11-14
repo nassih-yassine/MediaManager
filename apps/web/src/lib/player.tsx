@@ -25,6 +25,7 @@ import {
   resumeTarget,
 } from "@/lib/player-utils";
 import { api as apiRequest } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 import { useRealtime } from "@/lib/realtime";
 
 export type RepeatMode = "off" | "all" | "one";
@@ -95,6 +96,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
   const [shuffle, setShuffle] = useState(false);
+  const [mediaVersion, setMediaVersion] = useState(0);
+  const restoringRef = useRef(false);
+  const toast = useToast();
 
   const current = queue[index] ?? null;
 
@@ -233,7 +237,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (wantPlayRef.current) {
       void el.play().catch(() => setPlaying(false));
     }
-  }, [current?.id, current]);
+  }, [current?.id, current, mediaVersion]);
 
   // Clearing the queue must actually stop the element; removing the src prop
   // alone can leave audio playing.
@@ -285,6 +289,51 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     });
   }, [current, playing, play, pause, next, prev]);
+
+  const restoreCurrent = useCallback(
+    async (item: Item) => {
+      if (restoringRef.current) return;
+      restoringRef.current = true;
+      try {
+        const started = await apiRequest<{
+          status: string;
+          job?: { id: string };
+        }>(`/api/items/${item.id}/restore`, { method: "POST" });
+        if (started.status === "ready") {
+          setMediaVersion((value) => value + 1);
+          wantPlayRef.current = true;
+          return;
+        }
+        const jobId = started.job?.id;
+        if (!jobId) throw new Error("Could not start the restore");
+        toast("Restoring media…", "info");
+        for (let attempt = 0; attempt < 150; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const job = await apiRequest<{ status: string }>(`/api/jobs/${jobId}`);
+          if (job.status === "failed") throw new Error("Restore failed");
+          if (job.status === "cancelled") return;
+          if (job.status === "done") break;
+        }
+        const fresh = await apiRequest<Item>(`/api/items/${item.id}`);
+        setQueue((current) =>
+          current.map((entry) => (entry.id === item.id ? fresh : entry)),
+        );
+        setMediaVersion((value) => value + 1);
+        wantPlayRef.current = true;
+        toast("Media restored", "success");
+      } catch (err) {
+        toast((err as Error).message, "error");
+      } finally {
+        restoringRef.current = false;
+      }
+    },
+    [toast],
+  );
+
+  const handleMediaError = useCallback(() => {
+    setPlaying(false);
+    if (current?.evictedAt) void restoreCurrent(current);
+  }, [current, restoreCurrent]);
 
   const playNow = useCallback(
     (items: Item[], startAt = 0) => {
@@ -533,7 +582,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       >
         <video
           ref={videoRef}
-          src={current?.fileUrl}
+          src={`${current?.fileUrl ?? ""}${mediaVersion ? `?v=${mediaVersion}` : ""}`}
           playsInline
           preload="metadata"
           className="aspect-video w-full bg-black"
@@ -564,7 +613,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onEnded={handleEnded}
-          onError={() => setPlaying(false)}
+          onError={handleMediaError}
           onDoubleClick={(event) => {
             const el = event.currentTarget;
             if (document.fullscreenElement) void document.exitFullscreen();

@@ -152,6 +152,8 @@ mod tests {
             admin_password: None,
             session_days: 30,
             cookie_secure: false,
+            evict_after_days: 30,
+            evict_check_hours: 24,
         }
     }
 

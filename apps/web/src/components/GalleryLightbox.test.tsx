@@ -18,6 +18,7 @@ function item(id: string, title: string): Item {
     height: 96,
     positionMs: 0,
     lastPlayedAt: null,
+    evictedAt: null,
     createdAt: 1,
     fileUrl: `/files/picture/${id}.png`,
     thumbUrl: `/thumbs/picture/${id}.jpg`,

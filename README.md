@@ -28,6 +28,9 @@ lands in a plain folder tree on disk.
   grid stays gallery-first.
 - Custom playlist/gallery covers from an item or an upload.
 - Clear the play queue and the download activity explicitly.
+- Idle audio/video files are removed after `MM_EVICT_AFTER_DAYS` (default 30) while
+  metadata and thumbnails stay; playing them again downloads them automatically.
+- `make setup` creates the first admin interactively.
 - Four themes (Slate, Paper, Ocean, Moss) in light and dark.
 - Books open in your native reader; the cover is the file's first page.
 - Multi-select in the library for bulk queue / playlist / delete.
@@ -62,7 +65,8 @@ npm run dev
 
 The window points at `http://localhost:3001` (override with `MM_DESKTOP_URL`).
 
-Open <http://localhost:3000>. First run shows **Create the admin account**; existing
+Open <http://localhost:3000>. First run shows **Create the admin account** (or run
+`make setup`); existing
 media is adopted by that account. Set `MM_ADMIN_EMAIL`/`MM_ADMIN_PASSWORD` to create
 it at startup instead. Additional users are created in **Admin**. To run E2E against
 an account: `MM_E2E_EMAIL=you@example.com MM_E2E_PASSWORD=... make e2e`.

@@ -122,7 +122,7 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
     heartbeat.abort();
 
     match outcome {
-        Ok(item) => {
+        Ok(mut item) => {
             // A cancel that landed mid-download wins over the finished file.
             let status = sqlx::query_scalar::<_, String>("SELECT status FROM jobs WHERE id = ?")
                 .bind(&job.id)
@@ -134,32 +134,44 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
                 state.emit("item.deleted", &item.id, None, job.owner_id.as_deref());
                 return Ok(());
             }
-            if let Some(collection_id) = &job.collection_id {
-                if let Err(err) =
-                    media::attach_to_collection(&state.pool, collection_id, &item.id).await
-                {
-                    tracing::warn!(%err, %collection_id, "could not attach finished item");
-                }
+            let restoring = job.restore_item_id.is_some();
+            if let Some(restore_id) = job.restore_item_id.as_deref() {
+                item = media::merge_restored(&state.pool, &state.cfg, restore_id, &item).await?;
             }
-            state.emit(
-                "item.created",
-                &item.id,
-                job.collection_id.as_deref(),
-                job.owner_id.as_deref(),
-            );
-            if let Some(collection_id) = &job.collection_id {
+            if !restoring {
+                if let Some(collection_id) = &job.collection_id {
+                    if let Err(err) =
+                        media::attach_to_collection(&state.pool, collection_id, &item.id).await
+                    {
+                        tracing::warn!(%err, %collection_id, "could not attach finished item");
+                    }
+                }
                 state.emit(
-                    "collection.changed",
-                    collection_id,
-                    None,
+                    if restoring {
+                        "item.updated"
+                    } else {
+                        "item.created"
+                    },
+                    &item.id,
+                    job.collection_id.as_deref(),
                     job.owner_id.as_deref(),
                 );
-            }
-            if item.kind == "picture" {
-                if let Some(owner) = item.owner_id.as_deref() {
-                    if let Ok(default) = media::ensure_default_gallery(&state.pool, owner).await {
-                        let _ = media::attach_to_collection(&state.pool, &default, &item.id).await;
-                        state.emit("collection.changed", &default, None, Some(owner));
+                if let Some(collection_id) = &job.collection_id {
+                    state.emit(
+                        "collection.changed",
+                        collection_id,
+                        None,
+                        job.owner_id.as_deref(),
+                    );
+                }
+                if item.kind == "picture" {
+                    if let Some(owner) = item.owner_id.as_deref() {
+                        if let Ok(default) = media::ensure_default_gallery(&state.pool, owner).await
+                        {
+                            let _ =
+                                media::attach_to_collection(&state.pool, &default, &item.id).await;
+                            state.emit("collection.changed", &default, None, Some(owner));
+                        }
                     }
                 }
             }
@@ -630,12 +642,17 @@ async fn notify_job_done(
     let Some(owner) = job.owner_id.as_deref() else {
         return Ok(None);
     };
+    let verb = if job.restore_item_id.is_some() {
+        "Restored"
+    } else {
+        "Downloaded"
+    };
     Ok(Some(
         crate::notifications::create(
             pool,
             owner,
             "job_done",
-            &format!("Downloaded: {}", item.title),
+            &format!("{verb}: {}", item.title),
             Some(&job.url),
             Some(&format!("/watch/{}", item.id)),
         )
@@ -794,6 +811,7 @@ mod tests {
             progress: 0.0,
             error: None,
             item_id: None,
+            restore_item_id: None,
             collection_id: None,
             priority: 0,
             attempts: 1,
@@ -823,6 +841,7 @@ mod tests {
             width: None,
             height: None,
             sha256: None,
+            evicted_at: None,
             position_ms: 0,
             last_played_at: None,
             created_at: 1,
