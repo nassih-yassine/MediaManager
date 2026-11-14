@@ -88,7 +88,7 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - **Galleries are playlists with `kind='gallery'`**, not a second table. The API
   rejects non-picture items; the UI uses the same `PlaylistMenu` with
   `kind="gallery"` on picture cards. Pictures and galleries share the Library's
-  **Pictures tab** (galleries on top, `ungrouped=1` pictures below); `/galleries`
+  **Galleries tab** (galleries on top, `ungrouped=1` pictures below); `/galleries`
   redirects to `/?kind=picture`, while `/galleries/:id` is the grid detail page.
 - **Adding from inside a collection:** `AddItemsDialog` searches the library and
   appends via `POST /api/playlists/:id/items`. The Add media form can target a

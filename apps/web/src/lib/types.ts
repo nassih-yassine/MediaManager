@@ -76,6 +76,6 @@ export const KINDS: { value: Kind | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "music", label: "Audio" },
   { value: "video", label: "Video" },
-  { value: "picture", label: "Pictures" },
+  { value: "picture", label: "Galleries" },
   { value: "book", label: "Books" },
 ];

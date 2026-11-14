@@ -82,6 +82,9 @@ export function PlaylistView() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const pictureInput = useRef<HTMLInputElement | null>(null);
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -199,6 +202,52 @@ export function PlaylistView() {
     player.playNow(items, 0);
   }
 
+  async function uploadPictures(list: FileList | File[]) {
+    if (!playlist) return;
+    const files = Array.from(list).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (files.length === 0) return;
+    setUploading(true);
+    let added = 0;
+    const failures: string[] = [];
+    for (const file of files) {
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        const res = await fetch("/api/uploads?kind=picture", {
+          method: "POST",
+          body,
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(data?.error ?? "Upload failed");
+        }
+        const created = (await res.json()) as { id: string };
+        await api(`/api/playlists/${playlist.id}/items`, {
+          method: "POST",
+          body: JSON.stringify({ itemIds: [created.id] }),
+        });
+        added += 1;
+      } catch (err) {
+        failures.push(`${file.name}: ${(err as Error).message}`);
+      }
+    }
+    window.dispatchEvent(new Event("mm:playlists-changed"));
+    if (added > 0) {
+      toast(
+        `Added ${added} ${added === 1 ? "picture" : "pictures"} to “${playlist.name}”`,
+        "success",
+      );
+    }
+    if (failures.length > 0) toast(failures[0], "error");
+    if (pictureInput.current) pictureInput.current.value = "";
+    setUploading(false);
+    await load();
+  }
+
   if (error && !playlist) {
     return (
       <div className="max-w-xl">
@@ -278,14 +327,37 @@ export function PlaylistView() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {gallery ? (
-              <button
-                type="button"
-                onClick={() => setAddOpen(true)}
-                className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90"
-              >
-                <ImageIcon className="h-3.5 w-3.5" />
-                Add pictures
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90"
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Add pictures
+                </button>
+                <button
+                  type="button"
+                  onClick={() => pictureInput.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-2 rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink disabled:opacity-50"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  {uploading ? "Uploading…" : "Upload pictures"}
+                </button>
+                <input
+                  ref={pictureInput}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    if (event.target.files?.length) {
+                      void uploadPictures(event.target.files);
+                    }
+                  }}
+                />
+              </>
             ) : (
               <>
                 <button
@@ -359,7 +431,25 @@ export function PlaylistView() {
           </Link>
         </div>
       ) : gallery ? (
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDropActive(true);
+          }}
+          onDragLeave={() => setDropActive(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDropActive(false);
+            if (event.dataTransfer.files?.length) {
+              void uploadPictures(event.dataTransfer.files);
+            }
+          }}
+          className={`mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 ${
+            dropActive
+              ? "rounded-2xl outline-2 outline-offset-4 outline-dashed outline-accent"
+              : ""
+          }`}
+        >
           {playlist.items.map((item) => (
             <div
               key={item.id}

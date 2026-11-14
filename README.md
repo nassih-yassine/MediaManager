@@ -8,7 +8,8 @@ lands in a plain folder tree on disk.
   and a drag-to-reorder queue that survives navigation.
 - Resume where you stopped: positions are saved per item (even across reloads).
 - Playlists that hold any mix of items, with drag reordering.
-- Pictures tab: galleries on top, loose pictures below; create a gallery inline.
+- Galleries tab: galleries on top, loose pictures below; create a gallery inline.
+- Upload pictures directly from a gallery, or drop them onto its grid.
 - Add to a collection from its own page, or pick a target while adding media.
 - Live updates: new items, deletes and playlist changes appear without a reload.
 - `All pictures` default gallery; upload several pictures at once.

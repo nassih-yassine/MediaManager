@@ -339,10 +339,11 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
 - **Playlists** (`/playlists`, `/playlists/:id`): create, rename, delete, play all,
   drag to reorder, remove entries. Adding is done from the library's multi-select bar
   or an item page. Deleting an item cascades out of playlists.
-- **Galleries** live inside the Library's **Pictures** tab: gallery cards on top,
-  loose (ungrouped) pictures below. `/galleries/:id` is the detail grid; `/galleries`
-  redirects to `/?kind=picture`. Galleries reuse the playlist tables with
-  `kind='gallery'`, accept only pictures, and are added from picture cards.
+- **Galleries** live inside the Library's **Galleries** tab (kind filter `picture`):
+  gallery cards on top, loose (ungrouped) pictures below. `/galleries/:id` is the
+  detail grid; `/galleries` redirects to `/?kind=picture`. Galleries reuse the playlist
+  tables with `kind='gallery'`, accept only pictures, and are added from picture cards.
+  The gallery page can also upload pictures directly (button or drop onto the grid).
 - **Adding from a collection:** a playlist or gallery page has an "Add items" /
   "Add pictures" dialog that searches the library and appends a selection. The Add
   media form can also target a playlist/gallery up front; downloads attach on
