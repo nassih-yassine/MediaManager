@@ -329,6 +329,41 @@ pub async fn remove_item(pool: &sqlx::SqlitePool, cfg: &Config, item: &Item, del
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Role;
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    async fn test_db(dir: &Path) -> sqlx::SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(dir.join("test.db"))
+                    .create_if_missing(true)
+                    .foreign_keys(true),
+            )
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    fn test_config(dir: &Path) -> Config {
+        Config {
+            library_dir: dir.to_path_buf(),
+            db_path: dir.join("test.db"),
+            bind: "127.0.0.1:0".into(),
+            web_origin: "http://localhost:3000".into(),
+            max_concurrent: 1,
+            max_queued: 10,
+            max_download_mb: 10,
+            heartbeat_s: 30,
+            lease_s: 60,
+            role: Role::Combined,
+            ytdlp: "yt-dlp".into(),
+            ffmpeg: "ffmpeg".into(),
+            opener: "xdg-open".into(),
+        }
+    }
 
     #[test]
     fn rejects_path_traversal() {
@@ -351,5 +386,124 @@ mod tests {
     fn extension_lowercases() {
         assert_eq!(extension_of(Path::new("a/b/X.MP4")), "mp4");
         assert_eq!(extension_of(Path::new("noext")), "");
+    }
+
+    /// Regression: deleting a downloaded item used to fail with a foreign-key
+    /// error because `jobs.item_id` had no ON DELETE action.
+    #[tokio::test]
+    async fn deletes_an_item_that_has_a_job() {
+        let dir = std::env::temp_dir().join(format!("mm-del-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = test_db(&dir).await;
+        let cfg = test_config(&dir);
+        let now = db::now_ms();
+
+        let rel = "music/ab/test.mp3";
+        let file = dir.join(rel);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"audio").unwrap();
+
+        sqlx::query(
+            "INSERT INTO items (id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('item-1', 'music', 'Track', ?, 'audio/mpeg', 5, ?, ?)",
+        )
+        .bind(rel)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO jobs
+               (id, dedupe_key, url, kind, mode, status, scheduled_at, created_at, updated_at, item_id)
+             VALUES ('job-1', 'k', 'https://example.com', 'music', 'full', 'done', ?, ?, ?, 'item-1')",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = 'item-1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let outcome = remove_item(&pool, &cfg, &item, true).await;
+        assert!(outcome.is_ok(), "delete failed: {:?}", outcome.err());
+
+        let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(items, 0);
+        assert!(!file.exists(), "file should be gone from disk");
+
+        let job_item: Option<String> = sqlx::query_scalar("SELECT item_id FROM jobs WHERE id = 'job-1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(job_item, None, "the job should survive with no item link");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Deleting an item must also remove it from every playlist.
+    #[tokio::test]
+    async fn deleting_an_item_cascades_out_of_playlists() {
+        let dir = std::env::temp_dir().join(format!("mm-pl-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = test_db(&dir).await;
+        let cfg = test_config(&dir);
+        let now = db::now_ms();
+
+        let rel = "music/ab/pl.mp3";
+        let file = dir.join(rel);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"audio").unwrap();
+
+        sqlx::query(
+            "INSERT INTO items (id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('item-2', 'music', 'In playlist', ?, 'audio/mpeg', 5, ?, ?)",
+        )
+        .bind(rel)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO playlists (id, name, created_at, updated_at) VALUES ('p1','Mix',?,?)")
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO playlist_items (playlist_id, item_id, position, added_at)
+             VALUES ('p1','item-2',0,?)",
+        )
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = 'item-2'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        remove_item(&pool, &cfg, &item, true).await.unwrap();
+
+        let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(left, 0);
+        let playlists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM playlists")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(playlists, 1, "the playlist itself stays");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

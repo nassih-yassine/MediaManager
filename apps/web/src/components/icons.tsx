@@ -146,3 +146,131 @@ export function OpenIcon({ className = base }: Props) {
     </svg>
   );
 }
+
+export function SearchIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" className={className} aria-hidden>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </svg>
+  );
+}
+
+export function LibraryIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M4 5.5v13M9 5.5v13" />
+      <path d="M13.5 5.8l5 12.4" />
+    </svg>
+  );
+}
+
+export function AddMediaIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="3.5" y="4.5" width="12" height="15" rx="2.5" />
+      <path d="M18.5 9v9M22 11.5h-7M8 8.5h3M8 12h3" />
+    </svg>
+  );
+}
+
+export function DiscIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" className={className} aria-hidden>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="2.2" />
+    </svg>
+  );
+}
+
+export function SelectIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="4" y="4" width="16" height="16" rx="4" strokeDasharray="3 3" />
+      <path d="M8.5 12.5l2.5 2.5 4.5-5" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+export function ArrowUpIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 19V5M6 11l6-6 6 6" />
+    </svg>
+  );
+}
+
+export function ArrowDownIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 5v14M18 13l-6 6-6-6" />
+    </svg>
+  );
+}
+
+export function MoreIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
+    </svg>
+  );
+}
+
+export function MovieIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M7 5v14M17 5v14M3 12h18" />
+    </svg>
+  );
+}
+
+export function ImageIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <circle cx="8.5" cy="9.5" r="1.4" />
+      <path d="M21 16l-4.5-4.5L7 21" />
+    </svg>
+  );
+}
+
+export function BookIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+      <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5z" />
+    </svg>
+  );
+}
+
+export function LinkIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M10 13.5a4 4 0 0 0 5.7 0l2.8-2.8a4 4 0 1 0-5.7-5.7L11.5 6.3" />
+      <path d="M14 10.5a4 4 0 0 0-5.7 0L5.5 13.3a4 4 0 1 0 5.7 5.7l1.3-1.3" />
+    </svg>
+  );
+}

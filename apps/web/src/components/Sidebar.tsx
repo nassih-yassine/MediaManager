@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ThemePicker } from "@/components/ThemePicker";
-import { PlusIcon } from "@/components/icons";
+import { AddMediaIcon, DiscIcon, LibraryIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { PlaylistSummary } from "@/lib/types";
 
 const NAV = [
-  { href: "/", label: "Library" },
-  { href: "/add", label: "Add media" },
+  { href: "/", label: "Library", icon: LibraryIcon },
+  { href: "/add", label: "Add media", icon: AddMediaIcon },
 ];
 
 export function Sidebar() {
@@ -25,7 +25,7 @@ export function Sidebar() {
         if (!cancelled) setPlaylists(data.playlists);
       })
       .catch(() => {
-        // backend not up yet; the lists simply stay empty
+        // the library error banner covers a missing backend
       });
     return () => {
       cancelled = true;
@@ -33,75 +33,89 @@ export function Sidebar() {
   }, [pathname]);
 
   return (
-    <aside className="w-full border-b border-line bg-panel/60 md:sticky md:top-0 md:h-dvh md:w-[236px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
-      <div className="flex items-center justify-between gap-4 p-4 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-6 md:p-6">
-        <Link href="/" className="flex shrink-0 items-baseline gap-1.5">
-          <span className="text-[17px] font-semibold tracking-tight">Media</span>
-          <span className="text-[17px] font-semibold tracking-tight text-accent">
-            Manager
+    <aside className="w-full border-b border-line bg-panel/50 md:sticky md:top-0 md:h-dvh md:w-[252px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-7 md:px-5 md:py-6">
+        <Link href="/" className="group flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent text-[15px] font-bold text-accent-ink transition-transform group-hover:-rotate-3">
+            M
+          </span>
+          <span className="text-[15px] leading-none font-semibold tracking-tight">
+            MediaManager
           </span>
         </Link>
 
-        <nav className="flex gap-1 md:w-full md:flex-col md:gap-1.5">
+        <nav className="flex items-center gap-1 md:w-full md:flex-col md:items-stretch md:gap-1">
           {NAV.map((item) => {
             const active =
               item.href === "/"
                 ? pathname === "/"
                 : pathname.startsWith(item.href);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
                   active
                     ? "bg-panel-2 text-ink"
-                    : "text-muted hover:bg-panel-2 hover:text-ink"
+                    : "text-muted hover:bg-panel-2/70 hover:text-ink"
                 }`}
               >
-                {item.label}
+                <Icon className="h-4 w-4" />
+                <span className="font-medium">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="hidden md:mt-2 md:block md:w-full">
-          <div className="flex items-center justify-between px-3 pb-1.5">
-            <span className="text-[11px] font-medium tracking-wide text-muted uppercase">
+        <div className="hidden md:block md:w-full">
+          <div className="flex items-center justify-between px-2.5 pb-2">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-muted uppercase">
               Playlists
             </span>
             <Link
               href="/playlists"
-              aria-label="Manage playlists"
-              className="rounded p-1 text-muted transition-colors hover:text-ink"
+              aria-label="New playlist"
+              className="rounded-md p-1 text-muted transition-colors hover:bg-panel-2 hover:text-ink"
             >
               <PlusIcon className="h-3.5 w-3.5" />
             </Link>
           </div>
+
           <div className="space-y-0.5">
             {playlists.length === 0 ? (
-              <p className="px-3 py-1 text-xs text-muted">None yet</p>
+              <Link
+                href="/playlists"
+                className="block rounded-lg px-2.5 py-2 text-xs leading-relaxed text-muted transition-colors hover:bg-panel-2 hover:text-ink"
+              >
+                Create your first playlist to group a mix of music, books and pictures.
+              </Link>
             ) : (
-              playlists.slice(0, 10).map((playlist) => {
+              playlists.slice(0, 12).map((playlist) => {
                 const active = pathname === `/playlists/${playlist.id}`;
                 return (
                   <Link
                     key={playlist.id}
                     href={`/playlists/${playlist.id}`}
-                    className={`block truncate rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
+                    className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
                       active
                         ? "bg-panel-2 text-ink"
-                        : "text-muted hover:bg-panel-2 hover:text-ink"
+                        : "text-muted hover:bg-panel-2/70 hover:text-ink"
                     }`}
                   >
-                    {playlist.name}
+                    <DiscIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    <span className="min-w-0 flex-1 truncate">{playlist.name}</span>
+                    <span className="text-[11px] text-muted tabular-nums">
+                      {playlist.itemCount}
+                    </span>
                   </Link>
                 );
               })
             )}
-            {playlists.length > 10 ? (
+            {playlists.length > 12 ? (
               <Link
                 href="/playlists"
-                className="block px-3 py-1.5 text-xs text-muted hover:text-ink"
+                className="block px-2.5 py-1.5 text-xs text-muted hover:text-ink"
               >
                 All playlists…
               </Link>
@@ -111,8 +125,8 @@ export function Sidebar() {
 
         <div className="hidden md:mt-auto md:block md:w-full">
           <ThemePicker />
-          <p className="mt-3 px-3 text-xs leading-relaxed text-muted">
-            Files live in your library folder; this app only indexes them.
+          <p className="mt-3 px-2.5 text-[11px] leading-relaxed text-muted">
+            Your files stay in one folder on disk. This app only indexes them.
           </p>
         </div>
 

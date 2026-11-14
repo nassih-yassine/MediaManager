@@ -8,13 +8,16 @@ import { useEffect, useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
 import { ItemActions } from "@/components/ItemActions";
 import { PauseIcon, PlayIcon } from "@/components/icons";
+import { useToast } from "@/components/ui/Toast";
 import { api, formatBytes, formatDate, formatDuration } from "@/lib/api";
+import { kindLabel } from "@/lib/kind";
 import { usePlayer } from "@/lib/player";
 import type { Item } from "@/lib/types";
 
 export function WatchView() {
   const { id } = useParams<{ id: string }>();
   const player = usePlayer();
+  const toast = useToast();
   const [item, setItem] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +45,7 @@ export function WatchView() {
     return (
       <div className="max-w-4xl animate-pulse">
         <div className="h-4 w-24 rounded bg-panel-2" />
-        <div className="mt-4 h-7 w-2/3 rounded bg-panel-2" />
+        <div className="mt-4 h-9 w-2/3 rounded bg-panel-2" />
         <div className="mt-6 aspect-video w-full rounded-2xl bg-panel-2" />
       </div>
     );
@@ -53,79 +56,113 @@ export function WatchView() {
   const duration = formatDuration(item.durationMs);
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-5xl">
       <Link href="/" className="text-sm text-muted transition-colors hover:text-ink">
         ← Library
       </Link>
 
-      <h1 className="mt-3 text-2xl leading-tight font-semibold tracking-tight">
-        {item.title}
-      </h1>
-      <p className="mt-1.5 text-sm text-muted">
-        {item.kind} · {formatBytes(item.bytes)}
-        {duration ? ` · ${duration}` : ""} · {formatDate(item.createdAt)}
-      </p>
-
-      <div
-        className={`relative mt-6 overflow-hidden rounded-2xl border border-line bg-black ${
-          isMusic ? "mx-auto aspect-square w-full max-w-sm" : "aspect-video w-full"
-        }`}
-      >
+      <section className="relative mt-4 overflow-hidden rounded-3xl border border-line bg-panel">
         {item.thumbUrl ? (
           <img
             src={item.thumbUrl}
             alt=""
-            className="h-full w-full object-cover"
+            aria-hidden
+            className="absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl"
           />
-        ) : (
-          <div className="flex h-full items-center justify-center text-5xl text-line-strong">
-            {isMusic ? "♪" : "▶"}
+        ) : null}
+        <div className="relative grid gap-6 p-5 sm:grid-cols-[240px_minmax(0,1fr)] sm:p-7">
+          <div
+            className={`relative overflow-hidden rounded-2xl border border-line bg-black shadow-2xl ${
+              isMusic ? "aspect-square" : "aspect-video sm:mt-4"
+            }`}
+          >
+            {item.thumbUrl ? (
+              <img src={item.thumbUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-5xl text-line-strong">
+                {isMusic ? "♪" : "▶"}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (isCurrent) player.toggle();
+                else player.playItem(item);
+              }}
+              aria-label={isCurrent && player.playing ? "Pause" : "Play"}
+              className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors hover:bg-black/30"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-ink shadow-xl transition-transform hover:scale-105">
+                {isCurrent && player.playing ? (
+                  <PauseIcon className="h-5 w-5" />
+                ) : (
+                  <PlayIcon className="ml-0.5 h-5 w-5" />
+                )}
+              </span>
+            </button>
           </div>
-        )}
-        <div className="absolute inset-0 bg-black/25" />
+
+          <div className="flex min-w-0 flex-col justify-end">
+            <p className="text-[10px] font-semibold tracking-[0.18em] text-muted uppercase">
+              {kindLabel(item.kind)}
+            </p>
+            <h1 className="mt-1.5 text-3xl leading-[1.1] font-semibold tracking-tight sm:text-[2.6rem]">
+              {item.title}
+            </h1>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <span className="rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-muted">
+                {formatBytes(item.bytes)}
+              </span>
+              {duration ? (
+                <span className="rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-muted">
+                  {duration}
+                </span>
+              ) : null}
+              <span className="rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-muted">
+                {formatDate(item.createdAt)}
+              </span>
+            </div>
+
+            <div className="mt-5">
+              <ItemActions item={item} />
+            </div>
+            <p className="mt-3 text-[11px] text-muted">
+              {item.kind === "video"
+                ? "Video opens in the floating panel. Double-click it for fullscreen."
+                : "Audio keeps playing while you browse. Use the bar below."}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <DeleteButton id={item.id} />
+        {item.sourceUrl ? (
+          <a
+            href={item.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
+          >
+            Source
+          </a>
+        ) : null}
+        <a
+          href={item.fileUrl}
+          className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
+        >
+          Open file
+        </a>
         <button
           type="button"
           onClick={() => {
-            if (isCurrent) player.toggle();
-            else player.playItem(item);
+            void navigator.clipboard?.writeText(item.fileUrl);
+            toast("File link copied", "success");
           }}
-          aria-label={isCurrent && player.playing ? "Pause" : "Play"}
-          className="absolute inset-0 flex items-center justify-center"
+          className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
         >
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-ink shadow-xl transition-transform hover:scale-105">
-            {isCurrent && player.playing ? (
-              <PauseIcon className="h-6 w-6" />
-            ) : (
-              <PlayIcon className="ml-1 h-6 w-6" />
-            )}
-          </span>
+          Copy link
         </button>
-      </div>
-      <p className="mt-2 text-center text-xs text-muted">
-        Plays in the bottom bar. Double-click the floating video for fullscreen.
-      </p>
-
-      <div className="mt-6 border-t border-line pt-5">
-        <ItemActions item={item} />
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <DeleteButton id={item.id} />
-          {item.sourceUrl ? (
-            <a
-              href={item.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
-            >
-              Source
-            </a>
-          ) : null}
-          <a
-            href={item.fileUrl}
-            className="rounded-lg border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
-          >
-            Open file
-          </a>
-        </div>
       </div>
     </div>
   );

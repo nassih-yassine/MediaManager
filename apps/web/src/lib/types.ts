@@ -44,6 +44,7 @@ export interface PlaylistSummary {
   name: string;
   itemCount: number;
   thumbUrl: string | null;
+  thumbUrls: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -58,7 +59,7 @@ export interface PlaylistDetail {
 
 export const KINDS: { value: Kind | "all"; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "music", label: "Music" },
+  { value: "music", label: "Audio" },
   { value: "video", label: "Video" },
   { value: "picture", label: "Pictures" },
   { value: "book", label: "Books" },

@@ -155,6 +155,7 @@ struct ListParams {
     q: Option<String>,
     limit: Option<i64>,
     cursor: Option<String>,
+    sort: Option<String>,
 }
 
 fn fts_terms(q: &str) -> Vec<String> {
@@ -221,22 +222,37 @@ async fn list_items(
     } else if let Some(like) = &like {
         rows.push(" AND i.title LIKE ").push_bind(like.clone());
     }
-    if let Some((ts, rowid)) = cursor {
-        rows.push(" AND (i.created_at, i.rowid) < (")
-            .push_bind(ts)
-            .push(", ")
-            .push_bind(rowid)
-            .push(")");
+
+    let sort = params.sort.as_deref().unwrap_or("newest");
+    let (order_sql, ascending) = match sort {
+        "oldest" => ("i.created_at ASC, i.rowid ASC", true),
+        "title" => ("i.title COLLATE NOCASE ASC", false),
+        "largest" => ("i.bytes DESC", false),
+        "duration" => ("i.duration_ms DESC", false),
+        _ => ("i.created_at DESC, i.rowid DESC", false),
+    };
+    let cursor_sortable = sort == "newest" || sort == "oldest";
+
+    if let Some((ts, rowid)) = cursor.filter(|_| cursor_sortable) {
+        rows.push(if ascending {
+            " AND (i.created_at, i.rowid) > ("
+        } else {
+            " AND (i.created_at, i.rowid) < ("
+        })
+        .push_bind(ts)
+        .push(", ")
+        .push_bind(rowid)
+        .push(")");
     }
-    rows.push(" ORDER BY i.created_at DESC, i.rowid DESC LIMIT ")
-        .push_bind(limit + 1);
+    rows.push(" ORDER BY ").push(order_sql);
+    rows.push(" LIMIT ").push_bind(limit + 1);
 
     let mut items: Vec<Item> = rows.build_query_as().fetch_all(&state.pool).await?;
     let has_more = items.len() as i64 > limit;
     if has_more {
         items.truncate(limit as usize);
     }
-    let next_cursor = if has_more {
+    let next_cursor = if has_more && cursor_sortable {
         items
             .last()
             .map(|i| format!("{}:{}", i.created_at, i.rowid))
@@ -620,8 +636,14 @@ async fn list_playlists(
                 COUNT(pi.item_id) AS item_count,
                 (SELECT i.thumb_path
                    FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
-                  WHERE pi2.playlist_id = p.id
-                  ORDER BY pi2.position LIMIT 1) AS thumb_path
+                  WHERE pi2.playlist_id = p.id AND i.thumb_path IS NOT NULL
+                  ORDER BY pi2.position LIMIT 1) AS thumb_path,
+                (SELECT json_group_array(thumb_path) FROM (
+                   SELECT i.thumb_path
+                     FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
+                    WHERE pi2.playlist_id = p.id AND i.thumb_path IS NOT NULL
+                    ORDER BY pi2.position LIMIT 4
+                 )) AS thumbs_json
            FROM playlists p
            LEFT JOIN playlist_items pi ON pi.playlist_id = p.id
           GROUP BY p.id
@@ -662,6 +684,7 @@ async fn create_playlist(
             name,
             item_count: 0,
             thumb_url: None,
+            thumb_urls: Vec::new(),
             created_at: now,
             updated_at: now,
         }),

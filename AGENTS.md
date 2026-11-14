@@ -12,7 +12,8 @@ make dev        # API :8787 + web :3000
 make api        # API only
 make worker     # worker only (MM_ROLE=worker)
 make web        # Next dev server only
-make test       # cargo test (7 unit tests)
+make test       # cargo test (9) + vitest (26)
+make test-web   # vitest only
 make check      # cargo check + tsc --noEmit
 make lint       # eslint
 cd apps/web && npm run build   # works with the backend down
@@ -22,6 +23,12 @@ Single Rust test from the repo root:
 
 ```sh
 cargo test --manifest-path crates/api/Cargo.toml <name>
+```
+
+Single frontend test:
+
+```sh
+cd apps/web && npx vitest run src/lib/player-utils.test.ts
 ```
 
 Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
@@ -52,6 +59,11 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - Downloads and uploads stream to disk and are capped by `MM_MAX_DOWNLOAD_MB`.
 - No sqlx compile-time macros: queries are runtime strings, so there is no
   `DATABASE_URL` / `cargo sqlx prepare` step.
+- **Naming:** the stored kind is `music` (DB, files, jobs, URLs). The UI calls it
+  **Audio** via `lib/kind.ts`. Do not rename the DB value; it would break files and
+  jobs.
+- `GET /api/items` accepts `sort=newest|oldest|title|largest|duration`. Cursor
+  pagination is only valid for `newest`/`oldest`; other sorts return one page.
 
 ## Player, queue, playlists, themes
 
@@ -71,6 +83,10 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   `--accent`, `--accent-ink`, `--danger` for four families × light/dark. To add a
   theme: two CSS blocks plus a swatch in `ThemePicker.tsx`. `data-theme`/`data-mode`
   are set by the inline script in `layout.tsx` before paint.
+- Typography is Space Grotesk (installed locally) with JetBrains Mono for numbers.
+  No webfont download; keep it that way so builds work offline.
+- Keyboard: Space play/pause, ←/→ seek 5s, N/P next/prev, M mute, Q queue drawer,
+  `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`.
 
 ## Books
 
@@ -89,6 +105,8 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   forever. Stop dev, build, then start dev again. This has already bitten once.
 - If a page is stuck on "Loading…", first check the Network tab for 404 chunks and
   restart the dev server; the API being down renders an error banner instead.
+- `pkill -f target/debug/mm` matches the calling shell and kills it. Use
+  `pgrep -x mm` and `kill <pid>`.
 
 - **yt-dlp JS runtime:** only `deno` is enabled by default and deno is not
   installed here. Every invocation passes `--no-js-runtimes --js-runtimes node`
@@ -102,8 +120,14 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   image sequence patterns.
 - Permanent download errors (video unavailable, 404/403, private) fail the job
   immediately; everything else retries 3x with exponential backoff.
-- `pkill -f target/debug/mm` matches the calling shell and kills it. Use
-  `pgrep -x mm` and `kill <pid>`.
+- **Deleting a downloaded item** used to fail with `FOREIGN KEY constraint failed`
+  because `jobs.item_id` had no delete action. Migration `0003` rebuilds `jobs` with
+  `ON DELETE SET NULL`. Regression test: `deletes_an_item_that_has_a_job`.
+- Bug fixes go test-first: backend tests live in the module (`#[cfg(test)]`), frontend
+  tests are Vitest files next to the code (`*.test.ts`). A fix without a reproducing
+  test is incomplete.
+- The Add form has **no audio/video mode toggle**: music is always `audio+thumb`;
+  choosing Video is how you get the full file. Don't re-add the toggle.
 - Port 3000 is sometimes already held by another local dev server; Next falls
   back to 3001 and the app still works, because `/api` and `/files` are proxied
   server-side. Check the port in the Next banner before assuming 3000.

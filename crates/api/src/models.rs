@@ -225,6 +225,7 @@ pub struct PlaylistSummaryRow {
     pub updated_at: i64,
     pub item_count: i64,
     pub thumb_path: Option<String>,
+    pub thumbs_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -234,17 +235,27 @@ pub struct PlaylistSummaryDto {
     pub name: String,
     pub item_count: i64,
     pub thumb_url: Option<String>,
+    pub thumb_urls: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
 
 impl PlaylistSummaryRow {
     pub fn to_dto(&self) -> PlaylistSummaryDto {
+        let thumb_urls = self
+            .thumbs_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Vec<String>>(raw).ok())
+            .unwrap_or_default()
+            .iter()
+            .map(|path| thumb_url(path))
+            .collect();
         PlaylistSummaryDto {
             id: self.id.clone(),
             name: self.name.clone(),
             item_count: self.item_count,
             thumb_url: self.thumb_path.as_deref().map(thumb_url),
+            thumb_urls,
             created_at: self.created_at,
             updated_at: self.updated_at,
         }

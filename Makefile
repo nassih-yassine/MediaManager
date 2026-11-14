@@ -15,7 +15,8 @@ help:
 	@echo "make api       run API only"
 	@echo "make worker    run worker only (MM_ROLE=worker)"
 	@echo "make web       run Next dev server"
-	@echo "make test      cargo test"
+	@echo "make test      cargo test + vitest"
+	@echo "make test-web  vitest only"
 	@echo "make check     cargo check + tsc --noEmit"
 	@echo "make lint      eslint"
 
@@ -44,6 +45,10 @@ build:
 
 test:
 	cargo test --manifest-path $(API_DIR)/Cargo.toml
+	cd $(WEB_DIR) && npm test
+
+test-web:
+	cd $(WEB_DIR) && npm test
 
 check:
 	cargo check --manifest-path $(API_DIR)/Cargo.toml

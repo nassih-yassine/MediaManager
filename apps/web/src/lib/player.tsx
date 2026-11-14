@@ -11,6 +11,13 @@ import {
 } from "react";
 
 import type { Item } from "@/lib/types";
+import {
+  indexAfterRemoval,
+  moveItem,
+  nextIndex,
+  prevIndex,
+  removeAt as removeAtUtil,
+} from "@/lib/player-utils";
 
 export type RepeatMode = "off" | "all" | "one";
 
@@ -128,17 +135,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const next = useCallback(() => {
-    if (queue.length === 0) return;
-    if (index + 1 < queue.length) {
-      wantPlayRef.current = true;
-      setIndex(index + 1);
-    } else if (repeat === "all") {
-      wantPlayRef.current = true;
-      setIndex(0);
-    } else {
+    const target = nextIndex(index, queue.length, repeat);
+    if (target == null) {
       wantPlayRef.current = false;
       setPlaying(false);
+      return;
     }
+    wantPlayRef.current = true;
+    setIndex(target);
   }, [index, queue.length, repeat]);
 
   const prev = useCallback(() => {
@@ -148,13 +152,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       el.currentTime = 0;
       return;
     }
-    if (index > 0) {
-      wantPlayRef.current = true;
-      setIndex(index - 1);
-    } else if (repeat === "all" && queue.length > 0) {
-      wantPlayRef.current = true;
-      setIndex(queue.length - 1);
-    }
+    const target = prevIndex(index, queue.length, repeat);
+    if (target == null) return;
+    wantPlayRef.current = true;
+    setIndex(target);
   }, [index, queue.length, repeat]);
 
   const handleEnded = useCallback(() => {
@@ -263,43 +264,36 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const removeAt = useCallback(
     (at: number) => {
-      setQueue((prev) => {
-        const nextQueue = prev.filter((_, i) => i !== at);
-        if (nextQueue.length === 0) {
-          setIndex(0);
-          setPlaying(false);
-          wantPlayRef.current = false;
-          return nextQueue;
-        }
-        setIndex((currentIndex) => {
-          if (at < currentIndex) return currentIndex - 1;
-          if (at === currentIndex) return Math.min(currentIndex, nextQueue.length - 1);
-          return currentIndex;
-        });
-        return nextQueue;
-      });
+      if (at < 0 || at >= queue.length) return;
+      const nextQueue = removeAtUtil(queue, at);
+      const nextIndexValue = indexAfterRemoval(
+        index,
+        at,
+        queue.length,
+        nextQueue.length,
+      );
+      if (nextQueue.length === 0) {
+        wantPlayRef.current = false;
+        setPlaying(false);
+      }
+      setQueue(nextQueue);
+      setIndex(nextIndexValue);
     },
-    [],
+    [queue, index],
   );
 
   const move = useCallback(
     (from: number, to: number) => {
-      if (from === to) return;
-      setQueue((prev) => {
-        if (from < 0 || from >= prev.length || to < 0 || to >= prev.length) return prev;
-        const nextQueue = [...prev];
-        const [moved] = nextQueue.splice(from, 1);
-        nextQueue.splice(to, 0, moved);
-        setIndex((currentIndex) => {
-          if (from === currentIndex) return to;
-          if (from < currentIndex && to >= currentIndex) return currentIndex - 1;
-          if (from > currentIndex && to <= currentIndex) return currentIndex + 1;
-          return currentIndex;
-        });
-        return nextQueue;
-      });
+      const nextQueue = moveItem(queue, from, to);
+      if (nextQueue === queue) return;
+      let nextIndexValue = index;
+      if (from === index) nextIndexValue = to;
+      else if (from < index && to >= index) nextIndexValue = index - 1;
+      else if (from > index && to <= index) nextIndexValue = index + 1;
+      setQueue(nextQueue);
+      setIndex(nextIndexValue);
     },
-    [],
+    [queue, index],
   );
 
   const clearQueue = useCallback(() => {
@@ -313,25 +307,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const removeItem = useCallback(
     (id: string) => {
-      setQueue((prev) => {
-        const at = prev.findIndex((i) => i.id === id);
-        if (at === -1) return prev;
-        const nextQueue = prev.filter((i) => i.id !== id);
-        if (nextQueue.length === 0) {
-          setIndex(0);
-          setPlaying(false);
-          wantPlayRef.current = false;
-          return nextQueue;
-        }
-        setIndex((currentIndex) => {
-          if (at < currentIndex) return currentIndex - 1;
-          if (at === currentIndex) return Math.min(currentIndex, nextQueue.length - 1);
-          return currentIndex;
-        });
-        return nextQueue;
-      });
+      const at = queue.findIndex((item) => item.id === id);
+      if (at === -1) return;
+      const nextQueue = removeAtUtil(queue, at);
+      const nextIndexValue = indexAfterRemoval(
+        index,
+        at,
+        queue.length,
+        nextQueue.length,
+      );
+      if (nextQueue.length === 0) {
+        wantPlayRef.current = false;
+        setPlaying(false);
+      }
+      setQueue(nextQueue);
+      setIndex(nextIndexValue);
     },
-    [],
+    [queue, index],
   );
 
   const toggle = useCallback(() => {

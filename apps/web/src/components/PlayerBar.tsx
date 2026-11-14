@@ -2,8 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { useToast } from "@/components/ui/Toast";
 import {
   CheckIcon,
   CloseIcon,
@@ -19,6 +20,7 @@ import {
   VolumeIcon,
 } from "@/components/icons";
 import { usePlayer } from "@/lib/player";
+import { kindLabel } from "@/lib/kind";
 import type { Item } from "@/lib/types";
 
 function clock(seconds: number): string {
@@ -29,6 +31,20 @@ function clock(seconds: number): string {
   return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function Equalizer() {
+  return (
+    <span className="inline-flex h-3 items-end gap-[2px]" aria-hidden>
+      {[0, 1, 2].map((bar) => (
+        <span
+          key={bar}
+          className="eq-bar w-[2px] rounded-full bg-accent"
+          style={{ height: "100%", animationDelay: `${bar * 120}ms` }}
+        />
+      ))}
+    </span>
+  );
 }
 
 function QueueRow({
@@ -62,11 +78,11 @@ function QueueRow({
         const from = Number(event.dataTransfer.getData("text/plain"));
         if (Number.isInteger(from) && from !== at) onDrop(from, at);
       }}
-      className={`group flex items-center gap-2.5 rounded-lg border px-2 py-1.5 ${
+      className={`group flex items-center gap-2.5 rounded-lg border px-2 py-1.5 transition-colors ${
         active
-          ? "border-accent/50 bg-panel-2"
+          ? "border-accent/40 bg-panel-2"
           : "border-transparent hover:bg-panel-2"
-      } ${dragging ? "opacity-50" : ""}`}
+      } ${dragging ? "opacity-40" : ""}`}
     >
       <button
         type="button"
@@ -74,7 +90,7 @@ function QueueRow({
         className="min-w-0 flex-1 text-left"
       >
         <span className="flex items-center gap-2.5">
-          <span className="h-8 w-8 shrink-0 overflow-hidden rounded bg-canvas">
+          <span className="h-9 w-9 shrink-0 overflow-hidden rounded-md bg-canvas">
             {item.thumbUrl ? (
               <img src={item.thumbUrl} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -87,7 +103,9 @@ function QueueRow({
             <span className="block truncate text-[13px] leading-tight">
               {item.title}
             </span>
-            <span className="mt-0.5 block text-[11px] text-muted">{item.kind}</span>
+            <span className="mt-0.5 block font-mono text-[10px] text-muted">
+              {kindLabel(item.kind)}
+            </span>
           </span>
         </span>
       </button>
@@ -106,26 +124,88 @@ function QueueRow({
 
 export function PlayerBar() {
   const player = usePlayer();
+  const toast = useToast();
   const [queueOpen, setQueueOpen] = useState(false);
+
+  // Space toggles, arrows seek, N/P skip, M mutes, Q opens the queue.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"]')) return;
+
+      switch (event.key) {
+        case " ":
+          event.preventDefault();
+          player.toggle();
+          break;
+        case "ArrowRight":
+          event.preventDefault();
+          player.seek(player.progress + 5);
+          break;
+        case "ArrowLeft":
+          event.preventDefault();
+          player.seek(Math.max(0, player.progress - 5));
+          break;
+        case "n":
+        case "N":
+          player.next();
+          break;
+        case "p":
+        case "P":
+          player.prev();
+          break;
+        case "m":
+        case "M":
+          player.toggleMute();
+          break;
+        case "q":
+        case "Q":
+          setQueueOpen((value) => !value);
+          break;
+        default:
+          break;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [player]);
 
   const current = player.current;
   if (!current) return null;
 
   const nextTrack = player.queue[player.index + 1] ?? null;
+  const progress = Math.min(player.progress, player.duration || 0);
 
   return (
     <>
       {queueOpen ? (
-        <div className="fixed right-0 bottom-[72px] z-50 flex max-h-[58vh] w-[min(400px,100vw)] flex-col border-t border-l border-line bg-panel shadow-2xl">
-          <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
-            <p className="text-xs font-medium tracking-wide text-muted uppercase">
-              Queue · {player.queue.length}
-            </p>
+        <div className="animate-pop-in fixed right-2 bottom-[96px] z-50 flex max-h-[58vh] w-[min(400px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <div>
+              <p className="text-[10px] font-semibold tracking-[0.16em] text-muted uppercase">
+                Up next
+              </p>
+              <p className="mt-0.5 font-mono text-[11px] text-muted">
+                {player.queue.length} in queue
+              </p>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={player.clearQueue}
-                className="rounded px-2 py-1 text-xs text-muted hover:text-danger"
+                onClick={() => {
+                  player.clearQueue();
+                  toast("Queue cleared", "info");
+                }}
+                className="rounded-md px-2 py-1 text-xs text-muted hover:text-danger"
               >
                 Clear
               </button>
@@ -133,16 +213,16 @@ export function PlayerBar() {
                 type="button"
                 onClick={() => setQueueOpen(false)}
                 aria-label="Close queue"
-                className="rounded p-1 text-muted hover:text-ink"
+                className="rounded-md p-1 text-muted hover:text-ink"
               >
                 <CloseIcon />
               </button>
             </div>
           </div>
-          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+          <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
             {player.queue.length === 0 ? (
-              <li className="px-2 py-6 text-center text-sm text-muted">
-                Queue is empty.
+              <li className="px-2 py-8 text-center text-sm text-muted">
+                Nothing queued.
               </li>
             ) : (
               player.queue.map((item, at) => (
@@ -157,148 +237,154 @@ export function PlayerBar() {
               ))
             )}
           </ul>
-          <p className="border-t border-line px-3 py-2 text-[11px] text-muted">
-            Drag rows to reorder · {nextTrack ? `Next: ${nextTrack.title}` : "End of queue"}
+          <p className="border-t border-line px-4 py-2 text-[11px] text-muted">
+            Drag to reorder · {nextTrack ? `Next: ${nextTrack.title}` : "End of queue"}
           </p>
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-panel/95 backdrop-blur">
-        <input
-          type="range"
-          min={0}
-          max={player.duration || 0}
-          step={0.1}
-          value={Math.min(player.progress, player.duration || 0)}
-          onChange={(event) => player.seek(Number(event.target.value))}
-          aria-label="Seek"
-          className="block h-1.5 w-full cursor-pointer"
-        />
-        <div className="mx-auto grid max-w-[1560px] grid-cols-[1fr_auto] items-center gap-3 px-3 py-2.5 sm:grid-cols-[1fr_auto_1fr] md:px-6">
-          {/* Now playing */}
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-line bg-panel-2">
-              {current.thumbUrl ? (
-                <img
-                  src={current.thumbUrl}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="flex h-full items-center justify-center text-sm text-muted uppercase">
-                  {current.kind.slice(0, 1)}
-                </span>
-              )}
-            </div>
-            <div className="min-w-0">
-              <Link
-                href={
-                  current.kind === "music" || current.kind === "video"
-                    ? `/watch/${current.id}`
-                    : `/read/${current.id}`
-                }
-                className="block truncate text-sm font-medium hover:underline"
-              >
-                {current.title}
-              </Link>
-              <p className="mt-0.5 truncate text-xs text-muted">
-                {player.playing ? "Playing" : "Paused"} · {current.kind}
-              </p>
-            </div>
-          </div>
-
-          {/* Transport */}
-          <div className="order-3 col-span-2 flex items-center justify-center gap-1 sm:order-none sm:col-span-1">
-            <button
-              type="button"
-              onClick={player.toggleShuffle}
-              aria-label="Shuffle"
-              aria-pressed={player.shuffle}
-              className={`rounded-md p-2 transition-colors ${
-                player.shuffle ? "text-accent" : "text-muted hover:text-ink"
-              }`}
-            >
-              <ShuffleIcon />
-            </button>
-            <button
-              type="button"
-              onClick={player.prev}
-              aria-label="Previous"
-              className="rounded-md p-2 text-muted transition-colors hover:text-ink"
-            >
-              <PrevIcon />
-            </button>
-            <button
-              type="button"
-              onClick={player.toggle}
-              aria-label={player.playing ? "Pause" : "Play"}
-              className="mx-1 flex h-10 w-10 items-center justify-center rounded-full bg-accent text-accent-ink transition-opacity hover:opacity-90"
-            >
-              {player.playing ? (
-                <PauseIcon className="h-4 w-4" />
-              ) : (
-                <PlayIcon className="ml-0.5 h-4 w-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={player.next}
-              aria-label="Next"
-              className="rounded-md p-2 text-muted transition-colors hover:text-ink"
-            >
-              <NextIcon />
-            </button>
-            <button
-              type="button"
-              onClick={player.cycleRepeat}
-              aria-label={`Repeat: ${player.repeat}`}
-              className={`hidden rounded-md p-2 transition-colors sm:block ${
-                player.repeat === "off" ? "text-muted hover:text-ink" : "text-accent"
-              }`}
-            >
-              {player.repeat === "one" ? <RepeatOneIcon /> : <RepeatIcon />}
-            </button>
-            <span className="ml-2 hidden text-[11px] text-muted tabular-nums md:inline">
-              {clock(player.progress)} / {clock(player.duration)}
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-panel/90 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1600px] px-3 pt-2 md:px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="w-10 shrink-0 text-right font-mono text-[10px] text-muted tabular-nums">
+              {clock(progress)}
             </span>
-          </div>
-
-          {/* Output */}
-          <div className="flex items-center justify-end gap-1">
-            <button
-              type="button"
-              onClick={player.toggleMute}
-              aria-label={player.muted ? "Unmute" : "Mute"}
-              className="rounded-md p-2 text-muted transition-colors hover:text-ink"
-            >
-              {player.muted || player.volume === 0 ? <MuteIcon /> : <VolumeIcon />}
-            </button>
             <input
               type="range"
               min={0}
-              max={1}
-              step={0.01}
-              value={player.muted ? 0 : player.volume}
-              onChange={(event) => player.setVolume(Number(event.target.value))}
-              aria-label="Volume"
-              className="hidden h-1 w-20 cursor-pointer lg:block"
+              max={player.duration || 0}
+              step={0.1}
+              value={progress}
+              onChange={(event) => player.seek(Number(event.target.value))}
+              aria-label="Seek"
+              className="block h-1.5 w-full cursor-pointer"
             />
-            <button
-              type="button"
-              onClick={() => setQueueOpen((value) => !value)}
-              aria-label="Queue"
-              aria-pressed={queueOpen}
-              className={`relative rounded-md p-2 transition-colors ${
-                queueOpen ? "text-accent" : "text-muted hover:text-ink"
-              }`}
-            >
-              <QueueIcon />
-              {player.queue.length > 0 ? (
-                <span className="absolute -top-0.5 -right-0.5 rounded-full bg-accent px-1 text-[10px] leading-4 font-semibold text-accent-ink tabular-nums">
-                  {player.queue.length}
-                </span>
-              ) : null}
-            </button>
+            <span className="w-10 shrink-0 font-mono text-[10px] text-muted tabular-nums">
+              {clock(player.duration)}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 sm:grid-cols-[1fr_auto_1fr]">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-line bg-panel-2">
+                {current.thumbUrl ? (
+                  <img
+                    src={current.thumbUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-full items-center justify-center text-sm text-muted uppercase">
+                    {current.kind.slice(0, 1)}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <Link
+                  href={
+                    current.kind === "music" || current.kind === "video"
+                      ? `/watch/${current.id}`
+                      : `/read/${current.id}`
+                  }
+                  className="block truncate text-sm font-medium hover:underline"
+                >
+                  {current.title}
+                </Link>
+                <p className="mt-0.5 flex items-center gap-1.5 truncate font-mono text-[10px] text-muted">
+                  {player.playing ? <Equalizer /> : null}
+                  {player.playing ? "Playing" : "Paused"} · {kindLabel(current.kind)}
+                </p>
+              </div>
+            </div>
+
+            <div className="order-3 col-span-2 flex items-center justify-center gap-0.5 sm:order-none sm:col-span-1">
+              <button
+                type="button"
+                onClick={player.toggleShuffle}
+                aria-label="Shuffle"
+                aria-pressed={player.shuffle}
+                className={`rounded-lg p-2 transition-colors ${
+                  player.shuffle ? "text-accent" : "text-muted hover:text-ink"
+                }`}
+              >
+                <ShuffleIcon />
+              </button>
+              <button
+                type="button"
+                onClick={player.prev}
+                aria-label="Previous"
+                className="rounded-lg p-2 text-muted transition-colors hover:text-ink"
+              >
+                <PrevIcon />
+              </button>
+              <button
+                type="button"
+                onClick={player.toggle}
+                aria-label={player.playing ? "Pause" : "Play"}
+                className="mx-1 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lg transition-transform hover:scale-105"
+              >
+                {player.playing ? (
+                  <PauseIcon className="h-4 w-4" />
+                ) : (
+                  <PlayIcon className="ml-0.5 h-4 w-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={player.next}
+                aria-label="Next"
+                className="rounded-lg p-2 text-muted transition-colors hover:text-ink"
+              >
+                <NextIcon />
+              </button>
+              <button
+                type="button"
+                onClick={player.cycleRepeat}
+                aria-label={`Repeat: ${player.repeat}`}
+                className={`hidden rounded-lg p-2 transition-colors sm:block ${
+                  player.repeat === "off" ? "text-muted hover:text-ink" : "text-accent"
+                }`}
+              >
+                {player.repeat === "one" ? <RepeatOneIcon /> : <RepeatIcon />}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-end gap-1">
+              <button
+                type="button"
+                onClick={player.toggleMute}
+                aria-label={player.muted ? "Unmute" : "Mute"}
+                className="rounded-lg p-2 text-muted transition-colors hover:text-ink"
+              >
+                {player.muted || player.volume === 0 ? <MuteIcon /> : <VolumeIcon />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={player.muted ? 0 : player.volume}
+                onChange={(event) => player.setVolume(Number(event.target.value))}
+                aria-label="Volume"
+                className="hidden h-1 w-20 cursor-pointer lg:block"
+              />
+              <button
+                type="button"
+                onClick={() => setQueueOpen((value) => !value)}
+                aria-label="Queue"
+                aria-pressed={queueOpen}
+                className={`relative rounded-lg p-2 transition-colors ${
+                  queueOpen ? "text-accent" : "text-muted hover:text-ink"
+                }`}
+              >
+                <QueueIcon />
+                {player.queue.length > 0 ? (
+                  <span className="absolute -top-0.5 -right-0.5 rounded-full bg-accent px-1 font-mono text-[9px] leading-4 font-semibold text-accent-ink tabular-nums">
+                    {player.queue.length}
+                  </span>
+                ) : null}
+              </button>
+            </div>
           </div>
         </div>
       </div>

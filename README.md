@@ -38,7 +38,7 @@ Run only the API: `make api`. Run a separate worker: `make worker`.
 ## Checks
 
 ```sh
-make test        # cargo test
+make test        # cargo test + vitest
 make check       # cargo check + tsc --noEmit
 make lint        # eslint
 ```

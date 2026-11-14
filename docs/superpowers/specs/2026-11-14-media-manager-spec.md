@@ -271,7 +271,7 @@ GET    /api/jobs              ?active=1|status=&limit=
 GET    /api/jobs/:id
 DELETE /api/jobs/:id          cancel queued/running
 POST   /api/uploads           multipart, {kind}                  size-capped
-GET    /api/items             ?kind=&q=&limit=&cursor=            keyset pagination
+GET    /api/items             ?kind=&q=&limit=&cursor=&sort=       keyset pagination
 GET    /api/items/:id
 PATCH  /api/items/:id         {title}
 DELETE /api/items/:id?delete_file=true
@@ -292,6 +292,12 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
 - **Playback is client-side.** The web app owns one `<video>` element mounted in the
   root layout, queue and volume in `localStorage`, and a Media Session handler for OS
   keys. No server "now playing" row: two tabs would fight over it.
+- **Names vs values:** the stored kind is `music`; the UI labels it **Audio**
+  (`lib/kind.ts`). Music is always downloaded as `audio+thumb`; full video is the
+  separate Video kind, not a mode toggle.
+- **Sorting:** `sort=newest|oldest|title|largest|duration`. Keyset cursors apply to
+  `newest`/`oldest` only.
+- **Keyboard:** Space play/pause, ←/→ seek, N/P skip, M mute, Q queue, `/` search.
 - **Playlists are ordered and server-side.** Positions are integers; reorder writes
   the client's full ordered id list in one transaction. Duplicates are prevented by
   the composite primary key.
