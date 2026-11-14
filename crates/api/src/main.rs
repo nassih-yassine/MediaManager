@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod media;
 mod models;
+mod notifications;
 mod routes;
 mod state;
 mod worker;
