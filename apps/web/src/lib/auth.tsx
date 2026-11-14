@@ -9,8 +9,14 @@ import {
 } from "react";
 
 import { api } from "@/lib/api";
+import { applyAppearance, type ThemeMode, type ThemeName } from "@/lib/appearance";
 import { resetRealtime } from "@/lib/realtime";
 import type { AuthUser } from "@/lib/types";
+
+export interface Preferences {
+  theme: ThemeName;
+  themeMode: ThemeMode;
+}
 
 /** Everything tied to the signed-in account, not the browser. */
 function clearUserState() {
@@ -24,10 +30,12 @@ interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   needsSetup: boolean;
+  preferences: Preferences | null;
   login: (email: string, password: string) => Promise<void>;
   setup: (email: string, name: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  savePreferences: (partial: Partial<Preferences>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -36,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [preferences, setPreferences] = useState<Preferences | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -47,8 +56,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const me = await api<{ user: AuthUser }>("/api/auth/me").catch(() => null);
       setUser(me?.user ?? null);
+      if (me?.user) {
+        const profile = await api<{ theme: ThemeName; themeMode: ThemeMode }>(
+          "/api/profile",
+        ).catch(() => null);
+        if (profile) {
+          setPreferences({ theme: profile.theme, themeMode: profile.themeMode });
+          applyAppearance(profile.theme, profile.themeMode);
+        }
+      }
     } catch {
       setUser(null);
+    }
+  }, []);
+
+  const savePreferences = useCallback(async (partial: Partial<Preferences>) => {
+    setPreferences((current) => {
+      const next = {
+        theme: partial.theme ?? current?.theme ?? "slate",
+        themeMode: partial.themeMode ?? current?.themeMode ?? "dark",
+      };
+      applyAppearance(next.theme, next.themeMode);
+      return next;
+    });
+    try {
+      await api("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify(partial),
+      });
+    } catch {
+      // Keep the local choice; the next successful save syncs it.
     }
   }, []);
 
@@ -92,12 +129,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
+    setPreferences(null);
     clearUserState();
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, needsSetup, login, setup, logout, refresh }}
+      value={{
+        user,
+        loading,
+        needsSetup,
+        preferences,
+        login,
+        setup,
+        logout,
+        refresh,
+        savePreferences,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -108,4 +156,9 @@ export function useAuth(): AuthState {
   const value = useContext(AuthContext);
   if (!value) throw new Error("useAuth must be used inside AuthProvider");
   return value;
+}
+
+/** For components that also render outside the signed-in shell (tests, docs). */
+export function useOptionalAuth(): AuthState | null {
+  return useContext(AuthContext);
 }

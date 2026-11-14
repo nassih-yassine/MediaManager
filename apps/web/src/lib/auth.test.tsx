@@ -67,6 +67,30 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anon"));
   });
 
+  it("loads account-level theme preferences", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: false });
+      if (path === "/api/auth/me") return Promise.resolve({ user: ADMIN });
+      if (path === "/api/profile")
+        return Promise.resolve({ theme: "ocean", themeMode: "light" });
+      return Promise.reject(new Error("unexpected"));
+    });
+    function ThemeProbe() {
+      const { preferences } = useAuth();
+      return <span data-testid="theme">{`${preferences?.theme}/${preferences?.themeMode}`}</span>;
+    }
+    render(
+      <AuthProvider>
+        <ThemeProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("theme")).toHaveTextContent("ocean/light"),
+    );
+    expect(document.documentElement.dataset.theme).toBe("ocean");
+    expect(document.documentElement.dataset.mode).toBe("light");
+  });
+
   it("clears the previous account's queue when the session expires", async () => {
     localStorage.setItem("mm.player.v1", "{\"queue\":[\"someone-else\"]}");
     mocks.api.mockImplementation((path: string) => {

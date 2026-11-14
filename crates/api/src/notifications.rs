@@ -106,12 +106,12 @@ pub async fn notify_all_users(
 }
 
 pub async fn unread_count(pool: &SqlitePool, user_id: &str) -> anyhow::Result<i64> {
-    Ok(
-        sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL")
-            .bind(user_id)
-            .fetch_one(pool)
-            .await?,
+    Ok(sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
     )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 #[cfg(test)]
@@ -160,9 +160,16 @@ mod tests {
         let a = user(&pool, "a@example.com", "user", 0).await;
         let b = user(&pool, "b@example.com", "user", 0).await;
 
-        create(&pool, &a, "job_done", "Downloaded", Some("Track"), Some("/watch/1"))
-            .await
-            .unwrap();
+        create(
+            &pool,
+            &a,
+            "job_done",
+            "Downloaded",
+            Some("Track"),
+            Some("/watch/1"),
+        )
+        .await
+        .unwrap();
         create(&pool, &a, "job_failed", "Failed", None, None)
             .await
             .unwrap();
@@ -185,9 +192,15 @@ mod tests {
         let off = user(&pool, "off@example.com", "admin", 1).await;
         let user_id = user(&pool, "u@example.com", "user", 0).await;
 
-        let ids = notify_admins(&pool, "report_new", "New report", Some("bug"), Some("/admin"))
-            .await
-            .unwrap();
+        let ids = notify_admins(
+            &pool,
+            "report_new",
+            "New report",
+            Some("bug"),
+            Some("/admin"),
+        )
+        .await
+        .unwrap();
         assert_eq!(ids.len(), 1);
         assert_eq!(unread_count(&pool, &admin).await.unwrap(), 1);
         assert_eq!(unread_count(&pool, &off).await.unwrap(), 0);

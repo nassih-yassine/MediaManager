@@ -131,6 +131,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/logout", post(auth_logout))
         .route("/api/auth/me", get(auth_me))
         .route("/api/auth/password", post(change_password))
+        .route("/api/profile", get(get_profile).patch(update_profile))
         .route(
             "/api/admin/users",
             get(admin_list_users).post(admin_create_user),
@@ -1497,7 +1498,7 @@ async fn admin_list_users(
     AdminUser(_admin): AdminUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let rows = sqlx::query_as::<_, auth::User>(
-        "SELECT id, email, name, role, disabled, created_at, updated_at
+        "SELECT id, email, name, role, disabled, theme, theme_mode, created_at, updated_at
            FROM users ORDER BY created_at",
     )
     .fetch_all(&state.pool)
@@ -1867,6 +1868,77 @@ async fn auth_me(AuthUser(user): AuthUser) -> Json<serde_json::Value> {
     Json(json!({ "user": user_dto(&user) }))
 }
 
+const THEMES: [&str; 4] = ["slate", "paper", "ocean", "moss"];
+
+fn profile_json(user: &auth::User) -> serde_json::Value {
+    json!({
+        "user": user_dto(user),
+        "theme": user.theme,
+        "themeMode": user.theme_mode,
+    })
+}
+
+async fn get_profile(AuthUser(user): AuthUser) -> Json<serde_json::Value> {
+    Json(profile_json(&user))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileBody {
+    name: Option<String>,
+    theme: Option<String>,
+    theme_mode: Option<String>,
+}
+
+async fn update_profile(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<ProfileBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut name = user.name.clone();
+    if let Some(raw) = body.name.as_deref() {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > 80 {
+            return Err(ApiError::bad_request(
+                "invalid_name",
+                "name must be 1 to 80 characters",
+            ));
+        }
+        name = trimmed.to_string();
+    }
+    let theme = body.theme.clone().unwrap_or_else(|| user.theme.clone());
+    if !THEMES.contains(&theme.as_str()) {
+        return Err(ApiError::bad_request(
+            "invalid_preference",
+            "theme must be slate, paper, ocean or moss",
+        ));
+    }
+    let theme_mode = body
+        .theme_mode
+        .clone()
+        .unwrap_or_else(|| user.theme_mode.clone());
+    if theme_mode != "light" && theme_mode != "dark" {
+        return Err(ApiError::bad_request(
+            "invalid_preference",
+            "themeMode must be light or dark",
+        ));
+    }
+    sqlx::query(
+        "UPDATE users SET name = ?, theme = ?, theme_mode = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(&name)
+    .bind(&theme)
+    .bind(&theme_mode)
+    .bind(db::now_ms())
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?;
+    let updated = auth::find_user(&state.pool, &user.id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("user not found"))?;
+    Ok(Json(profile_json(&updated)))
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PasswordBody {
@@ -2229,6 +2301,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn profile_updates_theme_and_rejects_unknown_values() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-profile-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let user = auth::create_user(&state.pool, "a@example.com", "Ann", "secret123", "user")
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &user.id, 30)
+            .await
+            .unwrap();
+        let cookie = format!("mm_session={token}");
+        let pool = state.pool.clone();
+        let app = router(state);
+
+        let bad = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::PATCH)
+                    .uri("/api/profile")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"theme":"neon"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+        let ok = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::PATCH)
+                    .uri("/api/profile")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"name":"Annie","theme":"ocean","themeMode":"light"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(ok.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(ok.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("\"theme\":\"ocean\""));
+        assert!(body.contains("\"themeMode\":\"light\""));
+        assert!(body.contains("Annie"));
+
+        let stored = auth::find_user(&pool, &user.id).await.unwrap().unwrap();
+        assert_eq!(stored.theme, "ocean");
+        assert_eq!(stored.theme_mode, "light");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn only_books_can_reach_the_native_opener() {
         use tower::ServiceExt;
         let dir = std::env::temp_dir().join(format!("mm-open-{}", uuid::Uuid::now_v7()));
@@ -2237,7 +2370,9 @@ mod tests {
         let user = auth::create_user(&state.pool, "a@example.com", "Ann", "secret123", "user")
             .await
             .unwrap();
-        let token = auth::create_session(&state.pool, &user.id, 30).await.unwrap();
+        let token = auth::create_session(&state.pool, &user.id, 30)
+            .await
+            .unwrap();
         let now = db::now_ms();
         sqlx::query(
             "INSERT INTO items

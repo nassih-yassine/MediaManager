@@ -26,6 +26,8 @@ pub struct User {
     pub name: String,
     pub role: String,
     pub disabled: i64,
+    pub theme: String,
+    pub theme_mode: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -171,7 +173,7 @@ pub async fn create_first_admin(
 
 pub async fn find_user(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<User>> {
     Ok(sqlx::query_as::<_, User>(
-        "SELECT id, email, name, role, disabled, created_at, updated_at FROM users WHERE id = ?",
+        "SELECT id, email, name, role, disabled, theme, theme_mode, created_at, updated_at FROM users WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -180,7 +182,7 @@ pub async fn find_user(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<Use
 
 pub async fn find_user_by_email(pool: &SqlitePool, email: &str) -> anyhow::Result<Option<User>> {
     Ok(sqlx::query_as::<_, User>(
-        "SELECT id, email, name, role, disabled, created_at, updated_at FROM users WHERE email = ?",
+        "SELECT id, email, name, role, disabled, theme, theme_mode, created_at, updated_at FROM users WHERE email = ?",
     )
     .bind(email.trim())
     .fetch_optional(pool)
@@ -291,7 +293,7 @@ pub async fn user_for_token(pool: &SqlitePool, token: &str) -> anyhow::Result<Op
     let token_hash = hash_token(token);
     let now = now_ms();
     let user = sqlx::query_as::<_, User>(
-        "SELECT u.id, u.email, u.name, u.role, u.disabled, u.created_at, u.updated_at
+        "SELECT u.id, u.email, u.name, u.role, u.disabled, u.theme, u.theme_mode, u.created_at, u.updated_at
          FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0",
     )

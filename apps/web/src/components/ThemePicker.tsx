@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-const STORAGE_KEY = "mm.appearance";
+import { applyAppearance, currentAppearance, type ThemeMode, type ThemeName } from "@/lib/appearance";
+import { useOptionalAuth } from "@/lib/auth";
 
 const THEMES = [
   { id: "slate", label: "Slate", canvas: "#0a0a0b", surface: "#17171a", accent: "#9ae6b4" },
@@ -12,21 +13,13 @@ const THEMES = [
   { id: "moss", label: "Moss", canvas: "#080c09", surface: "#131d16", accent: "#b8e986" },
 ] as const;
 
-type ThemeId = (typeof THEMES)[number]["id"];
-type Mode = "dark" | "light";
-
-function applyAppearance(theme: ThemeId, mode: Mode) {
-  const root = document.documentElement;
-  root.dataset.theme = theme;
-  root.dataset.mode = mode;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme, mode }));
-  } catch {
-    // storage may be unavailable; the page still renders
-  }
-}
+type ThemeId = ThemeName;
+type Mode = ThemeMode;
 
 export function ThemePicker() {
+  const auth = useOptionalAuth();
+  const serverTheme = auth?.preferences?.theme;
+  const serverMode = auth?.preferences?.themeMode;
   const [theme, setTheme] = useState<ThemeId>("slate");
   const [mode, setMode] = useState<Mode>("dark");
   const [open, setOpen] = useState(false);
@@ -40,17 +33,17 @@ export function ThemePicker() {
   } | null>(null);
 
   useEffect(() => {
-    const root = document.documentElement;
-    const initialTheme = (root.dataset.theme as ThemeId) || "slate";
-    const initialMode =
-      (root.dataset.mode as Mode) ||
-      (window.matchMedia("(prefers-color-scheme: light)").matches
-        ? "light"
-        : "dark");
-    setTheme(initialTheme);
-    setMode(initialMode);
-    applyAppearance(initialTheme, initialMode);
-  }, []);
+    if (serverTheme && serverMode) {
+      setTheme(serverTheme);
+      setMode(serverMode);
+      applyAppearance(serverTheme, serverMode);
+      return;
+    }
+    const initial = currentAppearance();
+    setTheme(initial.theme);
+    setMode(initial.mode);
+    applyAppearance(initial.theme, initial.mode);
+  }, [serverTheme, serverMode]);
 
   useEffect(() => {
     if (!open) {
@@ -111,11 +104,13 @@ export function ThemePicker() {
   function pickTheme(next: ThemeId) {
     setTheme(next);
     applyAppearance(next, mode);
+    void auth?.savePreferences({ theme: next });
   }
 
   function pickMode(next: Mode) {
     setMode(next);
     applyAppearance(theme, next);
+    void auth?.savePreferences({ themeMode: next });
   }
 
   return (
