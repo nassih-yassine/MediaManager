@@ -83,6 +83,8 @@ make lint        # eslint
 
 ## CI/CD
 
+Full VM walkthrough: [`docs/deploy-vm.md`](docs/deploy-vm.md) (Oracle Free Tier / any VPS).
+
 GitHub Actions:
 
 - **CI** (`.github/workflows/ci.yml`) on pushes and PRs: Rust fmt + tests; web

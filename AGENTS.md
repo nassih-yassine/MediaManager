@@ -309,7 +309,8 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   Chromium smoke test (bootstraps `MM_ADMIN_*`, seeds a 60s MP3, runs the web on
   :3001), and Docker builds of both images.
 - `.github/workflows/release.yml`: on `v*` tags, Tauri desktop bundles plus
-  `ghcr.io/<repo>/api` and `/web` images. The web image bakes `MM_API_URL` at
+  multi-arch (`amd64`+`arm64`, Oracle Free Tier is ARM) `ghcr.io/<repo>/api` and
+  `/web` images. See `docs/deploy-vm.md` for the VM walkthrough. The web image bakes `MM_API_URL` at
   build time because `next.config.ts` resolves rewrites during `next build`.
 - `.github/workflows/deploy.yml`: SSH to the host and run
   `docker compose -f compose.yaml pull && up -d`. Secrets: `DEPLOY_HOST`,
