@@ -135,7 +135,12 @@ function Card({
                 <PlusIcon className="h-3.5 w-3.5" />
               </button>
             ) : null}
-            <PlaylistMenu itemIds={[item.id]} variant="icon" placement="bottom" />
+            <PlaylistMenu
+              itemIds={[item.id]}
+              kind={item.kind === "picture" ? "gallery" : "playlist"}
+              variant="icon"
+              placement="bottom"
+            />
             <button
               type="button"
               aria-label={`Delete ${item.title}`}
@@ -326,6 +331,11 @@ export function Library() {
     () => items.filter((item) => selected.has(item.id)),
     [items, selected],
   );
+  const bulkKind =
+    selectedItems.length > 0 &&
+    selectedItems.every((item) => item.kind === "picture")
+      ? "gallery"
+      : "playlist";
 
   function queueItem(item: Item) {
     player.addToQueue([item]);
@@ -595,6 +605,7 @@ export function Library() {
             </button>
             <PlaylistMenu
               itemIds={Array.from(selected)}
+              kind={bulkKind}
               variant="pill"
               placement="top"
             />

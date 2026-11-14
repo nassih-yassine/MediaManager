@@ -21,6 +21,7 @@ use crate::models::{
 };
 use crate::state::AppState;
 
+#[derive(Debug)]
 pub struct ApiError {
     status: StatusCode,
     code: &'static str,
@@ -377,7 +378,13 @@ struct ProgressBody {
 async fn item_playlists(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
+    Query(params): Query<PlaylistParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let kind_filter = params
+        .kind
+        .as_deref()
+        .map(|value| collection_kind(Some(value)))
+        .transpose()?;
     let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM items WHERE id = ?")
         .bind(&id)
         .fetch_optional(&state.pool)
@@ -387,8 +394,8 @@ async fn item_playlists(
         return Err(ApiError::not_found("item not found"));
     }
 
-    let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
-        "SELECT p.id, p.name,
+    let rows: Vec<(String, String, String, i64, i64)> = sqlx::query_as(
+        "SELECT p.id, p.name, p.kind,
                 (SELECT COUNT(*) FROM playlist_items pi WHERE pi.playlist_id = p.id) AS item_count,
                 EXISTS(SELECT 1 FROM playlist_items x
                         WHERE x.playlist_id = p.id AND x.item_id = ?) AS contains
@@ -401,10 +408,12 @@ async fn item_playlists(
 
     let playlists: Vec<serde_json::Value> = rows
         .into_iter()
-        .map(|(pid, name, count, contains)| {
+        .filter(|(_, _, kind, _, _)| kind_filter.is_none_or(|filter| kind == filter))
+        .map(|(pid, name, kind, count, contains)| {
             json!({
                 "id": pid,
                 "name": name,
+                "kind": kind,
                 "itemCount": count,
                 "contains": contains != 0,
             })
@@ -704,8 +713,18 @@ async fn upload(
     Ok(Json(item.to_dto()))
 }
 
-fn clean_playlist_name(raw: &str) -> Result<String, ApiError> {
-    let name = raw.trim();
+fn collection_kind(raw: Option<&str>) -> Result<&'static str, ApiError> {
+    match raw.unwrap_or("playlist") {
+        "playlist" => Ok("playlist"),
+        "gallery" => Ok("gallery"),
+        other => Err(ApiError::bad_request(
+            "invalid_kind",
+            format!("collection kind must be playlist or gallery, got {other}"),
+        )),
+    }
+}
+
+fn clean_playlist_name(raw: &str) -> Result<String, ApiError> {    let name = raw.trim();
     if name.is_empty() {
         return Err(ApiError::bad_request(
             "invalid_name",
@@ -721,11 +740,27 @@ fn clean_playlist_name(raw: &str) -> Result<String, ApiError> {
     Ok(name.to_string())
 }
 
+#[derive(Deserialize)]
+struct PlaylistParams {
+    kind: Option<String>,
+}
+
 async fn list_playlists(
     State(state): State<AppState>,
+    Query(params): Query<PlaylistParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let rows = sqlx::query_as::<_, PlaylistSummaryRow>(
-        "SELECT p.id, p.name, p.created_at, p.updated_at,
+    let kind = params
+        .kind
+        .as_deref()
+        .map(|value| collection_kind(Some(value)))
+        .transpose()?;
+    let filter = if kind.is_some() {
+        " WHERE p.kind = ?"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "SELECT p.id, p.name, p.kind, p.created_at, p.updated_at,
                 COUNT(pi.item_id) AS item_count,
                 (SELECT i.thumb_path
                    FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
@@ -739,11 +774,15 @@ async fn list_playlists(
                  )) AS thumbs_json
            FROM playlists p
            LEFT JOIN playlist_items pi ON pi.playlist_id = p.id
+          {filter}
           GROUP BY p.id
-          ORDER BY p.name COLLATE NOCASE",
-    )
-    .fetch_all(&state.pool)
-    .await?;
+          ORDER BY p.name COLLATE NOCASE"
+    );
+    let mut query = sqlx::query_as::<_, PlaylistSummaryRow>(&sql);
+    if let Some(kind) = kind {
+        query = query.bind(kind);
+    }
+    let rows = query.fetch_all(&state.pool).await?;
     let playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
     Ok(Json(json!({ "playlists": playlists })))
 }
@@ -751,6 +790,7 @@ async fn list_playlists(
 #[derive(Deserialize)]
 struct NewPlaylist {
     name: String,
+    kind: Option<String>,
 }
 
 async fn create_playlist(
@@ -758,21 +798,27 @@ async fn create_playlist(
     Json(body): Json<NewPlaylist>,
 ) -> Result<(StatusCode, Json<PlaylistSummaryDto>), ApiError> {
     let name = clean_playlist_name(&body.name)?;
+    let kind = collection_kind(body.kind.as_deref())?;
     let id = uuid::Uuid::now_v7().to_string();
     let now = db::now_ms();
-    sqlx::query("INSERT INTO playlists (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
-        .bind(&id)
-        .bind(&name)
-        .bind(now)
-        .bind(now)
-        .execute(&state.pool)
-        .await?;
+    sqlx::query(
+        "INSERT INTO playlists (id, name, kind, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&name)
+    .bind(kind)
+    .bind(now)
+    .bind(now)
+    .execute(&state.pool)
+    .await?;
 
     Ok((
         StatusCode::CREATED,
         Json(PlaylistSummaryDto {
             id,
             name,
+            kind: kind.to_string(),
             item_count: 0,
             thumb_url: None,
             thumb_urls: Vec::new(),
@@ -805,6 +851,7 @@ async fn get_playlist(
     Ok(Json(PlaylistDetailDto {
         id: playlist.id,
         name: playlist.name,
+        kind: playlist.kind,
         created_at: playlist.created_at,
         updated_at: playlist.updated_at,
         items: items.iter().map(|i| i.to_dto()).collect(),
@@ -854,13 +901,28 @@ async fn add_playlist_items(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<PlaylistItemsBody>,
 ) -> Result<StatusCode, ApiError> {
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ?")
+    let kind = sqlx::query_scalar::<_, String>("SELECT kind FROM playlists WHERE id = ?")
         .bind(&id)
         .fetch_optional(&state.pool)
         .await?
-        .is_some();
-    if !exists {
-        return Err(ApiError::not_found("playlist not found"));
+        .ok_or_else(|| ApiError::not_found("playlist not found"))?;
+
+    if kind == "gallery" {
+        for item_id in &body.item_ids {
+            let item_kind =
+                sqlx::query_scalar::<_, String>("SELECT kind FROM items WHERE id = ?")
+                    .bind(item_id)
+                    .fetch_optional(&state.pool)
+                    .await?;
+            if let Some(item_kind) = item_kind {
+                if item_kind != "picture" {
+                    return Err(ApiError::bad_request(
+                        "gallery_pictures_only",
+                        "galleries can only contain pictures",
+                    ));
+                }
+            }
+        }
     }
 
     let now = db::now_ms();
@@ -1008,8 +1070,15 @@ mod tests {
     }
 
     #[test]
-    fn job_mode_matches_the_kind() {
-        assert_eq!(resolve_job_mode("music", None).unwrap(), "audio+thumb");
+    fn collection_kind_accepts_only_known_values() {
+        assert_eq!(collection_kind(None).unwrap(), "playlist");
+        assert_eq!(collection_kind(Some("playlist")).unwrap(), "playlist");
+        assert_eq!(collection_kind(Some("gallery")).unwrap(), "gallery");
+        assert!(collection_kind(Some("album")).is_err());
+    }
+
+    #[test]
+    fn job_mode_matches_the_kind() {        assert_eq!(resolve_job_mode("music", None).unwrap(), "audio+thumb");
         assert_eq!(resolve_job_mode("video", None).unwrap(), "full");
         assert_eq!(resolve_job_mode("book", Some("full")).unwrap(), "full");
 

@@ -6,12 +6,14 @@ import { CheckIcon, PlaylistAddIcon, PlusIcon } from "@/components/icons";
 import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import type {
+  CollectionKind,
   PlaylistMembership,
   PlaylistSummary,
 } from "@/lib/types";
 
 interface PlaylistMenuProps {
   itemIds: string[];
+  kind?: CollectionKind;
   variant?: "icon" | "pill";
   placement?: "top" | "bottom";
 }
@@ -22,6 +24,7 @@ interface PlaylistMenuProps {
  */
 export function PlaylistMenu({
   itemIds,
+  kind = "playlist",
   variant = "pill",
   placement = "bottom",
 }: PlaylistMenuProps) {
@@ -36,6 +39,7 @@ export function PlaylistMenu({
 
   const single = itemIds.length === 1;
   const itemKey = itemIds.join(",");
+  const noun = kind === "gallery" ? "gallery" : "playlist";
 
   useEffect(() => {
     if (!open) return;
@@ -62,12 +66,15 @@ export function PlaylistMenu({
     const one = ids.length === 1;
     const request = one
       ? api<{ playlists: PlaylistMembership[] }>(
-          `/api/items/${ids[0]}/playlists`,
+          `/api/items/${ids[0]}/playlists?kind=${kind}`,
         ).then((data) => data.playlists)
-      : api<{ playlists: PlaylistSummary[] }>("/api/playlists").then((data) =>
+      : api<{ playlists: PlaylistSummary[] }>(
+          `/api/playlists?kind=${kind}`,
+        ).then((data) =>
           data.playlists.map((playlist) => ({
             id: playlist.id,
             name: playlist.name,
+            kind: playlist.kind,
             itemCount: playlist.itemCount,
             contains: false,
           })),
@@ -87,7 +94,7 @@ export function PlaylistMenu({
     return () => {
       cancelled = true;
     };
-  }, [open, itemKey, toast]);
+  }, [open, itemKey, kind, toast]);
 
   async function toggle(playlist: PlaylistMembership) {
     setBusyId(playlist.id);
@@ -144,7 +151,7 @@ export function PlaylistMenu({
     try {
       const playlist = await api<PlaylistSummary>("/api/playlists", {
         method: "POST",
-        body: JSON.stringify({ name: trimmed }),
+        body: JSON.stringify({ name: trimmed, kind }),
       });
       await api(`/api/playlists/${playlist.id}/items`, {
         method: "POST",
@@ -182,13 +189,15 @@ export function PlaylistMenu({
     >
       <button
         type="button"
-        aria-label="Add to playlist"
+        aria-label={`Add to ${noun}`}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className={trigger}
       >
         <PlaylistAddIcon className="h-3.5 w-3.5" />
-        {variant === "pill" ? <span>Playlist</span> : null}
+        {variant === "pill" ? (
+          <span>{kind === "gallery" ? "Gallery" : "Playlist"}</span>
+        ) : null}
       </button>
 
       {open ? (
@@ -198,7 +207,9 @@ export function PlaylistMenu({
           }`}
         >
           <p className="px-2 pt-1 pb-2 text-[10px] font-semibold tracking-[0.14em] text-muted uppercase">
-            {single ? "Add to playlist" : `Add ${itemIds.length} items to`}
+            {single
+              ? `Add to ${noun}`
+              : `Add ${itemIds.length} items to ${noun}`}
           </p>
 
           {loading ? (

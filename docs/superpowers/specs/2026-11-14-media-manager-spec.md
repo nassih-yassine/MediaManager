@@ -146,6 +146,7 @@ CREATE INDEX idx_jobs_item    ON jobs(item_id);
 -- Playlists (migration 0002). Items are removed with the playlist or the item.
 CREATE TABLE playlists (
   id TEXT PRIMARY KEY, name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'playlist',   -- playlist | gallery
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
 CREATE TABLE playlist_items (
@@ -279,8 +280,8 @@ PATCH  /api/items/:id         {title}
 DELETE /api/items/:id?delete_file=true
 POST   /api/items/:id/open    launch the OS default app (books)
 POST   /api/items/:id/progress {positionMs}                     resume point
-GET    /api/playlists         summaries with count + cover
-POST   /api/playlists         {name}
+GET    /api/playlists         summaries with count + cover  ?kind=playlist|gallery
+POST   /api/playlists         {name, kind?}
 GET    /api/playlists/:id     playlist + ordered items
 PATCH  /api/playlists/:id     {name}
 DELETE /api/playlists/:id
@@ -332,6 +333,10 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
 - **Playlists** (`/playlists`, `/playlists/:id`): create, rename, delete, play all,
   drag to reorder, remove entries. Adding is done from the library's multi-select bar
   or an item page. Deleting an item cascades out of playlists.
+- **Galleries** (`/galleries`, `/galleries/:id`): the same ordered-collection machinery
+  with `kind='gallery'`, limited to pictures. The detail page renders a photo grid
+  instead of a track list; opening a picture uses the normal reader page. The library's
+  per-card picker targets galleries automatically for pictures.
 - **Themes**: every component uses semantic tokens (`--canvas`, `--panel`, `--line`,
   `--ink`, `--muted`, `--accent`, `--accent-ink`, `--danger`) defined in
   `apps/web/src/app/globals.css`. Four families (Slate, Paper, Ocean, Moss) × dark

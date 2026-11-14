@@ -31,10 +31,10 @@ beforeEach(() => {
 describe("PlaylistMenu", () => {
   it("shows playlists and adds a single item", async () => {
     mocks.api.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === "/api/items/item-1/playlists") {
+      if (path === "/api/items/item-1/playlists?kind=playlist") {
         return { playlists: [mix] };
       }
-      if (path === "/api/playlists" && !init) {
+      if (path === "/api/playlists?kind=playlist" && !init) {
         return { playlists: [] };
       }
       return undefined;
@@ -57,7 +57,7 @@ describe("PlaylistMenu", () => {
 
   it("removes an item that is already in the playlist", async () => {
     mocks.api.mockImplementation(async (path: string) => {
-      if (path === "/api/items/item-1/playlists") {
+      if (path === "/api/items/item-1/playlists?kind=playlist") {
         return { playlists: [{ ...mix, contains: true }] };
       }
       return undefined;
@@ -79,7 +79,7 @@ describe("PlaylistMenu", () => {
 
   it("adds several items in one request", async () => {
     mocks.api.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === "/api/playlists" && !init) {
+      if (path === "/api/playlists?kind=playlist" && !init) {
         return {
           playlists: [
             {
@@ -112,11 +112,11 @@ describe("PlaylistMenu", () => {
 
   it("creates a playlist and adds the item", async () => {
     mocks.api.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === "/api/items/item-1/playlists") {
+      if (path === "/api/items/item-1/playlists?kind=playlist") {
         return { playlists: [] };
       }
       if (path === "/api/playlists" && init?.method === "POST") {
-        return { id: "p2", name: "Chill" };
+        return { id: "p2", name: "Chill", kind: "playlist" };
       }
       return undefined;
     });
@@ -137,5 +137,42 @@ describe("PlaylistMenu", () => {
     expect(
       await screen.findByText("Created “Chill” and added the item"),
     ).toBeInTheDocument();
+  });
+
+  it("targets galleries for pictures", async () => {
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === "/api/items/item-1/playlists?kind=gallery") {
+        return {
+          playlists: [
+            {
+              id: "g1",
+              name: "Travel",
+              kind: "gallery",
+              itemCount: 3,
+              contains: false,
+            },
+          ],
+        };
+      }
+      return undefined;
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <PlaylistMenu itemIds={["item-1"]} kind="gallery" />
+      </ToastProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add to gallery" }));
+    await user.click(await screen.findByRole("button", { name: /Travel/ }));
+
+    await waitFor(() =>
+      expect(mocks.api).toHaveBeenCalledWith("/api/playlists/g1/items", {
+        method: "POST",
+        body: JSON.stringify({ itemIds: ["item-1"] }),
+      }),
+    );
+    expect(await screen.findByText("Added to “Travel”")).toBeInTheDocument();
   });
 });

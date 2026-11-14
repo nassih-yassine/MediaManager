@@ -52,7 +52,12 @@ export function ItemActions({ item }: { item: Item }) {
           </button>
         </>
       ) : null}
-      <PlaylistMenu itemIds={[item.id]} variant="pill" placement="bottom" />
+      <PlaylistMenu
+        itemIds={[item.id]}
+        kind={item.kind === "picture" ? "gallery" : "playlist"}
+        variant="pill"
+        placement="bottom"
+      />
     </div>
   );
 }

@@ -218,6 +218,7 @@ pub fn default_mode(kind: &str) -> &'static str {
 pub struct Playlist {
     pub id: String,
     pub name: String,
+    pub kind: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -227,6 +228,7 @@ pub struct Playlist {
 pub struct PlaylistSummaryRow {
     pub id: String,
     pub name: String,
+    pub kind: String,
     pub created_at: i64,
     pub updated_at: i64,
     pub item_count: i64,
@@ -239,6 +241,7 @@ pub struct PlaylistSummaryRow {
 pub struct PlaylistSummaryDto {
     pub id: String,
     pub name: String,
+    pub kind: String,
     pub item_count: i64,
     pub thumb_url: Option<String>,
     pub thumb_urls: Vec<String>,
@@ -259,6 +262,7 @@ impl PlaylistSummaryRow {
         PlaylistSummaryDto {
             id: self.id.clone(),
             name: self.name.clone(),
+            kind: self.kind.clone(),
             item_count: self.item_count,
             thumb_url: self.thumb_path.as_deref().map(thumb_url),
             thumb_urls,
@@ -273,6 +277,7 @@ impl PlaylistSummaryRow {
 pub struct PlaylistDetailDto {
     pub id: String,
     pub name: String,
+    pub kind: String,
     pub created_at: i64,
     pub updated_at: i64,
     pub items: Vec<ItemDto>,

@@ -1,4 +1,5 @@
 export type Kind = "music" | "video" | "picture" | "book";
+export type CollectionKind = "playlist" | "gallery";
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
@@ -44,6 +45,7 @@ export interface ItemsPage {
 export interface PlaylistSummary {
   id: string;
   name: string;
+  kind: CollectionKind;
   itemCount: number;
   thumbUrl: string | null;
   thumbUrls: string[];
@@ -54,6 +56,7 @@ export interface PlaylistSummary {
 export interface PlaylistMembership {
   id: string;
   name: string;
+  kind: CollectionKind;
   itemCount: number;
   contains: boolean;
 }
@@ -61,6 +64,7 @@ export interface PlaylistMembership {
 export interface PlaylistDetail {
   id: string;
   name: string;
+  kind: CollectionKind;
   createdAt: number;
   updatedAt: number;
   items: Item[];

@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   CloseIcon,
   DiscIcon,
+  ImageIcon,
   PauseIcon,
   PlayIcon,
   ShuffleIcon,
@@ -208,11 +209,13 @@ export function PlaylistView() {
     0,
   );
   const playableCount = playlist.items.filter(isPlayable).length;
+  const gallery = playlist.kind === "gallery";
+  const base = gallery ? "/galleries" : "/playlists";
 
   return (
     <div className="max-w-4xl">
-      <Link href="/playlists" className="text-sm text-muted transition-colors hover:text-ink">
-        ← Playlists
+      <Link href={base} className="text-sm text-muted transition-colors hover:text-ink">
+        ← {gallery ? "Galleries" : "Playlists"}
       </Link>
 
       <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-end">
@@ -221,7 +224,7 @@ export function PlaylistView() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold tracking-[0.18em] text-muted uppercase">
-            Playlist
+            {gallery ? "Gallery" : "Playlist"}
           </p>
           {editing ? (
             <form onSubmit={rename} className="mt-1 flex gap-2">
@@ -247,29 +250,45 @@ export function PlaylistView() {
             </h1>
           )}
           <p className="mt-2 font-mono text-[11px] text-muted">
-            {playlist.items.length}{" "}
-            {playlist.items.length === 1 ? "item" : "items"}
-            {totalSeconds > 0 ? ` · ${totalLabel(totalSeconds)}` : ""}
+            {gallery
+              ? `${playlist.items.length} ${
+                  playlist.items.length === 1 ? "picture" : "pictures"
+                }`
+              : `${playlist.items.length} ${
+                  playlist.items.length === 1 ? "item" : "items"
+                }${totalSeconds > 0 ? ` · ${totalLabel(totalSeconds)}` : ""}`}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={playableCount === 0}
-              onClick={() => player.playNow(playlist.items, 0)}
-              className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              <PlayIcon className="h-3.5 w-3.5" />
-              Play all
-            </button>
-            <button
-              type="button"
-              disabled={playableCount < 2}
-              onClick={shufflePlay}
-              className="flex items-center gap-2 rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink disabled:opacity-50"
-            >
-              <ShuffleIcon className="h-3.5 w-3.5" />
-              Shuffle
-            </button>
+            {gallery ? (
+              <Link
+                href="/"
+                className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                Add pictures
+              </Link>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={playableCount === 0}
+                  onClick={() => player.playNow(playlist.items, 0)}
+                  className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  <PlayIcon className="h-3.5 w-3.5" />
+                  Play all
+                </button>
+                <button
+                  type="button"
+                  disabled={playableCount < 2}
+                  onClick={shufflePlay}
+                  className="flex items-center gap-2 rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink disabled:opacity-50"
+                >
+                  <ShuffleIcon className="h-3.5 w-3.5" />
+                  Shuffle
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => setEditing(true)}
@@ -290,10 +309,13 @@ export function PlaylistView() {
 
       {playlist.items.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-line px-6 py-16 text-center">
-          <p className="text-xl font-semibold tracking-tight">Nothing in here yet</p>
+          <p className="text-xl font-semibold tracking-tight">
+            {gallery ? "No pictures yet" : "Nothing in here yet"}
+          </p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
-            Select items in the library, then use “Add” to drop them into this
-            playlist.
+            {gallery
+              ? "Select pictures in the library and use “Gallery” to add them here."
+              : "Select items in the library, then use “Playlist” to drop them in."}
           </p>
           <Link
             href="/"
@@ -301,6 +323,35 @@ export function PlaylistView() {
           >
             Open library
           </Link>
+        </div>
+      ) : gallery ? (
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {playlist.items.map((item) => (
+            <div
+              key={item.id}
+              className="group relative aspect-square overflow-hidden rounded-xl border border-line bg-panel-2"
+            >
+              <Link href={`/read/${item.id}`} className="block h-full w-full">
+                <img
+                  src={item.thumbUrl ?? item.fileUrl}
+                  alt={item.title}
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
+              </Link>
+              <button
+                type="button"
+                onClick={() => removeItem(item.id)}
+                aria-label={`Remove ${item.title} from gallery`}
+                className="absolute top-2 right-2 z-10 rounded-lg border border-white/25 bg-black/45 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:border-danger/60 hover:text-danger"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                <p className="truncate text-[11px] text-white">{item.title}</p>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <ul className="mt-8 space-y-1">
@@ -429,7 +480,9 @@ export function PlaylistView() {
       {playlist.items.length > 0 ? (
         <p className="mt-4 flex items-center gap-1.5 text-[11px] text-muted">
           <TrashIcon className="h-3 w-3" />
-          Drag rows to reorder. Removing here never deletes the file.
+          {gallery
+            ? "Click a picture to open it. Removing here never deletes the file."
+            : "Drag rows to reorder. Removing here never deletes the file."}
         </p>
       ) : null}
 
@@ -437,8 +490,10 @@ export function PlaylistView() {
         open={confirmDelete}
         busy={busy}
         title={`Delete “${playlist.name}”?`}
-        description="The playlist is removed. Its items and files stay in the library."
-        confirmLabel="Delete playlist"
+        description={`The ${gallery ? "gallery" : "playlist"} is removed. Its ${
+          gallery ? "pictures" : "items"
+        } stay in the library.`}
+        confirmLabel={`Delete ${gallery ? "gallery" : "playlist"}`}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={removePlaylist}
       />

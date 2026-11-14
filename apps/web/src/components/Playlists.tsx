@@ -3,12 +3,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { DiscIcon, PlusIcon } from "@/components/icons";
+import { DiscIcon, ImageIcon, PlusIcon } from "@/components/icons";
 import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
-import type { PlaylistSummary } from "@/lib/types";
+import type { CollectionKind, PlaylistSummary } from "@/lib/types";
 
 function Mosaic({ playlist }: { playlist: PlaylistSummary }) {
   const thumbs = playlist.thumbUrls.slice(0, 4);
@@ -45,7 +45,11 @@ function Mosaic({ playlist }: { playlist: PlaylistSummary }) {
   );
 }
 
-export function Playlists() {
+export function Collections({ kind }: { kind: CollectionKind }) {
+  const gallery = kind === "gallery";
+  const base = gallery ? "/galleries" : "/playlists";
+  const noun = gallery ? "gallery" : "playlist";
+  const nounPlural = gallery ? "galleries" : "playlists";
   const toast = useToast();
   const router = useRouter();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
@@ -54,20 +58,22 @@ export function Playlists() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
-      const data = await api<{ playlists: PlaylistSummary[] }>("/api/playlists");
+      const data = await api<{ playlists: PlaylistSummary[] }>(
+        `/api/playlists?kind=${kind}`,
+      );
       setPlaylists(data.playlists);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  }
+  }, [kind]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -78,12 +84,12 @@ export function Playlists() {
     try {
       const created = await api<PlaylistSummary>("/api/playlists", {
         method: "POST",
-        body: JSON.stringify({ name: trimmed }),
+        body: JSON.stringify({ name: trimmed, kind }),
       });
       setName("");
-      toast(`Playlist “${trimmed}” created`, "success");
+      toast(`${gallery ? "Gallery" : "Playlist"} “${trimmed}” created`, "success");
       window.dispatchEvent(new Event("mm:playlists-changed"));
-      router.push(`/playlists/${created.id}`);
+      router.push(`${base}/${created.id}`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -94,21 +100,22 @@ export function Playlists() {
   return (
     <div>
       <p className="text-[10px] font-semibold tracking-[0.18em] text-muted uppercase">
-        Collections
+        {gallery ? "Pictures" : "Collections"}
       </p>
       <h1 className="mt-1 text-[2.1rem] leading-none font-semibold tracking-tight sm:text-[2.6rem]">
-        Playlists
+        {gallery ? "Galleries" : "Playlists"}
       </h1>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-        Named, ordered sets that can mix music, video, books and pictures. Play
-        one straight through.
+        {gallery
+          ? "Groups of pictures with one cover. Open a gallery to browse it as a grid."
+          : "Named, ordered sets that can mix music, video, books and pictures. Play one straight through."}
       </p>
 
       <form onSubmit={create} className="mt-6 flex flex-wrap gap-2">
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Name a new playlist"
+          placeholder={`Name a new ${noun}`}
           maxLength={80}
           className="h-11 min-w-0 flex-1 rounded-full border border-line bg-panel px-4 text-sm placeholder:text-muted/70 focus:border-line-strong focus:outline-none sm:max-w-sm"
         />
@@ -140,13 +147,18 @@ export function Playlists() {
       ) : playlists.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-line px-6 py-20 text-center">
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-panel-2 text-muted">
-            <DiscIcon className="h-6 w-6" />
+            {gallery ? (
+              <ImageIcon className="h-6 w-6" />
+            ) : (
+              <DiscIcon className="h-6 w-6" />
+            )}
           </span>
           <p className="mt-5 text-xl font-semibold tracking-tight">
-            No playlists yet
+            No {nounPlural} yet
           </p>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
-            Create one above, then select items in the library and add them.
+            Create one above, then select {gallery ? "pictures" : "items"} in the
+            library and add them.
           </p>
         </div>
       ) : (
@@ -154,7 +166,7 @@ export function Playlists() {
           {playlists.map((playlist) => (
             <Link
               key={playlist.id}
-              href={`/playlists/${playlist.id}`}
+              href={`${base}/${playlist.id}`}
               className="group animate-fade-up"
             >
               <div className="aspect-square overflow-hidden rounded-xl border border-line bg-panel-2 transition-colors group-hover:border-line-strong">
@@ -162,7 +174,14 @@ export function Playlists() {
               </div>
               <h2 className="mt-2.5 truncate text-sm font-medium">{playlist.name}</h2>
               <p className="mt-0.5 font-mono text-[11px] text-muted">
-                {playlist.itemCount} {playlist.itemCount === 1 ? "item" : "items"}
+                {playlist.itemCount}{" "}
+                {gallery
+                  ? playlist.itemCount === 1
+                    ? "picture"
+                    : "pictures"
+                  : playlist.itemCount === 1
+                    ? "item"
+                    : "items"}
               </p>
             </Link>
           ))}

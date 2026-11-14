@@ -8,6 +8,7 @@ lands in a plain folder tree on disk.
   and a drag-to-reorder queue that survives navigation.
 - Resume where you stopped: positions are saved per item (even across reloads).
 - Playlists that hold any mix of items, with drag reordering.
+- Galleries that group pictures into a browsable grid.
 - Four themes (Slate, Paper, Ocean, Moss) in light and dark.
 - Books open in your native reader; the cover is the file's first page.
 - Multi-select in the library for bulk queue / playlist / delete.
