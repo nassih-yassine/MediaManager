@@ -56,9 +56,9 @@ export function Sidebar() {
   });
 
   return (
-    <aside className="w-full border-b border-line bg-panel/50 md:sticky md:top-0 md:h-dvh md:w-[252px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-7 md:px-5 md:pt-6 md:pb-28">
-        <Link href="/" className="group flex items-center gap-2.5">
+    <aside className="w-full min-w-0 border-b border-line bg-panel/50 md:sticky md:top-0 md:h-dvh md:w-[252px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-2.5 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-7 md:px-5 md:pt-6 md:pb-28">
+        <Link href="/" className="group flex shrink-0 items-center gap-2.5">
           <img
             src="/logo.svg"
             alt=""
@@ -70,7 +70,7 @@ export function Sidebar() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 md:w-full md:flex-col md:items-stretch md:gap-1">
+        <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto md:w-full md:flex-none md:flex-col md:items-stretch md:gap-1 md:overflow-visible">
           {NAV.map((item) => {
             const active =
               item.href === "/"

@@ -12,7 +12,7 @@ fn main() {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse()?))
                 .title("MediaManager")
                 .inner_size(1440.0, 900.0)
-                .min_inner_size(960.0, 640.0)
+                .min_inner_size(360.0, 560.0)
                 .build()?;
             Ok(())
         })
