@@ -138,7 +138,8 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - Typography is Space Grotesk (installed locally) with JetBrains Mono for numbers.
   No webfont download; keep it that way so builds work offline.
 - Keyboard: Space play/pause, ←/→ seek 5s, N/P next/prev, M mute, Q queue drawer,
-  `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`.
+  `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`. Escape
+  leaves library/gallery selection mode (both bars also have an explicit Cancel).
 
 ## Books
 

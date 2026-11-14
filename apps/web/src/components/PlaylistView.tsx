@@ -146,6 +146,18 @@ export function PlaylistView() {
       .catch(() => {});
   }, [selectionMode, playlist]);
 
+  useEffect(() => {
+    if (!selectionMode) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (document.querySelector('[role="dialog"]')) return;
+      setSelectionMode(false);
+      setSelected(new Set());
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectionMode]);
+
   async function rename(event: React.FormEvent) {
     event.preventDefault();
     if (!playlist) return;
@@ -532,7 +544,7 @@ export function PlaylistView() {
                 }}
                 className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
               >
-                {selectionMode ? "Done" : "Select"}
+                {selectionMode ? "Cancel" : "Select"}
               </button>
             ) : null}
             <button
@@ -805,6 +817,15 @@ export function PlaylistView() {
       {selectionMode ? (
         <div className="fixed inset-x-0 bottom-[92px] z-40 px-4">
           <div className="animate-pop-in mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-line bg-panel/95 px-3 py-2.5 shadow-2xl backdrop-blur">
+            <button
+              type="button"
+              onClick={exitSelection}
+              aria-label="Exit selection"
+              className="flex items-center gap-1 rounded-full border border-line px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-ink"
+            >
+              <CloseIcon className="h-3.5 w-3.5" />
+              Cancel
+            </button>
             <span className="mr-1 text-sm font-semibold">
               {selected.size} selected
             </span>
@@ -849,13 +870,6 @@ export function PlaylistView() {
             >
               <TrashIcon className="h-3.5 w-3.5" />
               Delete pictures
-            </button>
-            <button
-              type="button"
-              onClick={exitSelection}
-              className="ml-auto text-xs text-muted hover:text-ink"
-            >
-              Done
             </button>
           </div>
         </div>

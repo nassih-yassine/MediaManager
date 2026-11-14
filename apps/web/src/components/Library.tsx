@@ -378,6 +378,18 @@ export function Library() {
     setSelectionMode(false);
   }
 
+  useEffect(() => {
+    if (!selectionMode) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (document.querySelector('[role="dialog"]')) return;
+      setSelected(new Set());
+      setSelectionMode(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectionMode]);
+
   const selectedItems = useMemo(
     () => items.filter((item) => selected.has(item.id)),
     [items, selected],
@@ -706,6 +718,15 @@ export function Library() {
       {selectionMode ? (
         <div className="fixed inset-x-0 bottom-[92px] z-40 px-4">
           <div className="animate-pop-in mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-line bg-panel/95 px-3 py-2.5 shadow-2xl backdrop-blur">
+            <button
+              type="button"
+              onClick={clearSelection}
+              aria-label="Exit selection"
+              className="flex items-center gap-1 rounded-full border border-line px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-ink"
+            >
+              <CloseIcon className="h-3.5 w-3.5" />
+              Cancel
+            </button>
             <span className="mr-1 text-sm font-semibold">
               {selected.size} selected
             </span>
@@ -760,13 +781,6 @@ export function Library() {
             >
               <TrashIcon className="h-3.5 w-3.5" />
               Delete
-            </button>
-            <button
-              type="button"
-              onClick={clearSelection}
-              className="ml-auto text-xs text-muted hover:text-ink"
-            >
-              Done
             </button>
           </div>
         </div>

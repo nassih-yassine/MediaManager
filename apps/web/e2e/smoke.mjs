@@ -303,6 +303,43 @@ async function main() {
     if (overflow > 1) fail(`horizontal overflow: ${overflow}px`);
     console.log("PASS no horizontal overflow at 1440px");
 
+    // Selection can be left without picking anything: explicit Cancel and Escape.
+    const selectButton = `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Select')`;
+    await evaluate(`${selectButton}.click()`);
+    await waitFor(
+      "document.body.innerText.includes('0 selected')",
+      5000,
+      "selection bar",
+    );
+    if (!(await clickCenter(byLabel("Exit selection")))) {
+      fail("selection bar has no exit control");
+    }
+    await waitFor(
+      "!document.body.innerText.includes('0 selected')",
+      5000,
+      "selection bar to close after Cancel",
+    );
+    await evaluate(`${selectButton}.click()`);
+    await waitFor(
+      "document.body.innerText.includes('0 selected')",
+      5000,
+      "selection bar again",
+    );
+    for (const type of ["keyDown", "keyUp"]) {
+      await cdp("Input.dispatchKeyEvent", {
+        type,
+        key: "Escape",
+        code: "Escape",
+        windowsVirtualKeyCode: 27,
+      });
+    }
+    await waitFor(
+      "!document.body.innerText.includes('0 selected')",
+      5000,
+      "selection bar to close after Escape",
+    );
+    console.log("PASS selection mode exits with Cancel and Escape");
+
     // Resume: store a position, then play that item and confirm the player
     // seeks to it.
     const musicPage = await (
