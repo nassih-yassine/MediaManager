@@ -138,10 +138,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/notifications", get(list_notifications))
         .route("/api/notifications/unread", get(notification_unread))
         .route("/api/notifications/read-all", post(read_all_notifications))
-        .route(
-            "/api/notifications/{id}/read",
-            post(read_notification),
-        )
+        .route("/api/notifications/{id}/read", post(read_notification))
         .route(
             "/api/admin/reports/{id}",
             axum::routing::patch(admin_update_report),
@@ -156,6 +153,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/admin/users/{id}/password", post(admin_reset_password))
         .route("/api/events", get(sse_events))
+        .route("/api/sync/changes", get(list_sync_changes))
         .route("/api/metrics", get(metrics))
         .route("/api/items", get(list_items))
         .route(
@@ -1508,6 +1506,63 @@ async fn remove_cover(
 }
 
 #[derive(Deserialize)]
+struct SyncParams {
+    since: Option<i64>,
+    limit: Option<i64>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct SyncChangeRow {
+    seq: i64,
+    entity: String,
+    entity_id: String,
+    op: String,
+    payload: Option<String>,
+    created_at: i64,
+}
+
+/// Incremental pull of this owner's change log. `cursor` is the highest seq
+/// returned (or the requested `since` when nothing new arrived).
+async fn list_sync_changes(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Query(params): Query<SyncParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let since = params.since.unwrap_or(0).max(0);
+    let limit = params.limit.unwrap_or(500).clamp(1, 1000);
+    let rows = sqlx::query_as::<_, SyncChangeRow>(
+        "SELECT seq, entity, entity_id, op, payload, created_at
+           FROM sync_changes
+          WHERE owner_id = ? AND seq > ?
+          ORDER BY seq LIMIT ?",
+    )
+    .bind(&user.id)
+    .bind(since)
+    .bind(limit)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cursor = rows.last().map(|row| row.seq).unwrap_or(since);
+    let changes: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "seq": row.seq,
+                "entity": row.entity,
+                "entityId": row.entity_id,
+                "op": row.op,
+                "payload": row
+                    .payload
+                    .as_deref()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok()),
+                "createdAt": row.created_at,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "changes": changes, "cursor": cursor })))
+}
+
+#[derive(Deserialize)]
 struct NotificationParams {
     limit: Option<i64>,
 }
@@ -1540,7 +1595,9 @@ async fn list_notifications(
     .fetch_all(&state.pool)
     .await?;
     let unread = crate::notifications::unread_count(&state.pool, &user.id).await?;
-    Ok(Json(json!({ "notifications": notifications, "unread": unread })))
+    Ok(Json(
+        json!({ "notifications": notifications, "unread": unread }),
+    ))
 }
 
 async fn notification_unread(
@@ -1564,11 +1621,12 @@ async fn read_notification(
     .bind(&user.id)
     .execute(&state.pool)
     .await?;
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM notifications WHERE id = ? AND user_id = ?")
-        .bind(&id)
-        .bind(&user.id)
-        .fetch_optional(&state.pool)
-        .await?;
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM notifications WHERE id = ? AND user_id = ?")
+            .bind(&id)
+            .bind(&user.id)
+            .fetch_optional(&state.pool)
+            .await?;
     if result.rows_affected() == 0 && exists.is_none() {
         return Err(ApiError::not_found("notification not found"));
     }
@@ -1579,13 +1637,12 @@ async fn read_all_notifications(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let result = sqlx::query(
-        "UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL",
-    )
-    .bind(db::now_ms())
-    .bind(&user.id)
-    .execute(&state.pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL")
+            .bind(db::now_ms())
+            .bind(&user.id)
+            .execute(&state.pool)
+            .await?;
     Ok(Json(json!({ "updated": result.rows_affected() })))
 }
 
@@ -1614,9 +1671,14 @@ async fn admin_announce(
             "body must be 3 to 2000 characters",
         ));
     }
-    let notified =
-        crate::notifications::notify_all_users(&state.pool, "announcement", title, Some(body), Some("/notifications"))
-            .await?;
+    let notified = crate::notifications::notify_all_users(
+        &state.pool,
+        "announcement",
+        title,
+        Some(body),
+        Some("/notifications"),
+    )
+    .await?;
     let created = notified.len();
     for (notification_id, owner_id) in notified {
         state.emit(
@@ -2671,14 +2733,19 @@ mod tests {
         let bob = auth::create_user(&state.pool, "b@example.com", "Bob", "secret123", "user")
             .await
             .unwrap();
-        let a_token = auth::create_session(&state.pool, &alice.id, 30).await.unwrap();
-        let b_token = auth::create_session(&state.pool, &bob.id, 30).await.unwrap();
+        let a_token = auth::create_session(&state.pool, &alice.id, 30)
+            .await
+            .unwrap();
+        let b_token = auth::create_session(&state.pool, &bob.id, 30)
+            .await
+            .unwrap();
         let a_cookie = format!("mm_session={a_token}");
         let b_cookie = format!("mm_session={b_token}");
 
-        let a_id = crate::notifications::create(&state.pool, &alice.id, "job_done", "A done", None, None)
-            .await
-            .unwrap();
+        let a_id =
+            crate::notifications::create(&state.pool, &alice.id, "job_done", "A done", None, None)
+                .await
+                .unwrap();
         crate::notifications::create(&state.pool, &bob.id, "job_done", "B done", None, None)
             .await
             .unwrap();
@@ -2696,7 +2763,9 @@ mod tests {
             )
             .await
             .unwrap();
-        let body = axum::body::to_bytes(list.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(list.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body = String::from_utf8(body.to_vec()).unwrap();
         assert!(body.contains("A done"));
         assert!(!body.contains("B done"));
@@ -2767,9 +2836,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mm-announce-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&dir).unwrap();
         let state = test_state(&dir).await;
-        let admin = auth::create_user(&state.pool, "admin@example.com", "Admin", "secret123", "admin")
-            .await
-            .unwrap();
+        let admin = auth::create_user(
+            &state.pool,
+            "admin@example.com",
+            "Admin",
+            "secret123",
+            "admin",
+        )
+        .await
+        .unwrap();
         let member = auth::create_user(&state.pool, "u@example.com", "User", "secret123", "user")
             .await
             .unwrap();
@@ -2781,7 +2856,9 @@ mod tests {
             .execute(&state.pool)
             .await
             .unwrap();
-        let token = auth::create_session(&state.pool, &admin.id, 30).await.unwrap();
+        let token = auth::create_session(&state.pool, &admin.id, 30)
+            .await
+            .unwrap();
         let cookie = format!("mm_session={token}");
         let pool = state.pool.clone();
         let app = router(state);
@@ -2794,7 +2871,9 @@ mod tests {
                     .uri("/api/admin/announcements")
                     .header(axum::http::header::COOKIE, &cookie)
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"title":"New release","body":"Galleries are here."}"#))
+                    .body(Body::from(
+                        r#"{"title":"New release","body":"Galleries are here."}"#,
+                    ))
                     .unwrap(),
             )
             .await
@@ -2852,10 +2931,18 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mm-admin-report-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&dir).unwrap();
         let state = test_state(&dir).await;
-        let admin = auth::create_user(&state.pool, "admin@example.com", "Admin", "secret123", "admin")
+        let admin = auth::create_user(
+            &state.pool,
+            "admin@example.com",
+            "Admin",
+            "secret123",
+            "admin",
+        )
+        .await
+        .unwrap();
+        let token = auth::create_session(&state.pool, &admin.id, 30)
             .await
             .unwrap();
-        let token = auth::create_session(&state.pool, &admin.id, 30).await.unwrap();
         let app = router(state);
         let response = app
             .oneshot(
@@ -2881,14 +2968,24 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mm-reports-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&dir).unwrap();
         let state = test_state(&dir).await;
-        let admin = auth::create_user(&state.pool, "admin@example.com", "Admin", "secret123", "admin")
-            .await
-            .unwrap();
+        let admin = auth::create_user(
+            &state.pool,
+            "admin@example.com",
+            "Admin",
+            "secret123",
+            "admin",
+        )
+        .await
+        .unwrap();
         let reporter = auth::create_user(&state.pool, "u@example.com", "User", "secret123", "user")
             .await
             .unwrap();
-        let admin_token = auth::create_session(&state.pool, &admin.id, 30).await.unwrap();
-        let reporter_token = auth::create_session(&state.pool, &reporter.id, 30).await.unwrap();
+        let admin_token = auth::create_session(&state.pool, &admin.id, 30)
+            .await
+            .unwrap();
+        let reporter_token = auth::create_session(&state.pool, &reporter.id, 30)
+            .await
+            .unwrap();
         let admin_cookie = format!("mm_session={admin_token}");
         let reporter_cookie = format!("mm_session={reporter_token}");
         let pool = state.pool.clone();
@@ -3121,5 +3218,128 @@ mod tests {
         assert!(resolve_job_mode("video", Some("audio+thumb")).is_err());
         assert!(resolve_job_mode("music", Some("nonsense")).is_err());
         assert!(resolve_job_mode("podcast", None).is_err());
+    }
+
+    async fn sync_pull(app: &Router, cookie: &str, since: i64) -> serde_json::Value {
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/sync/changes?since={since}"),
+                Some(cookie),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
+    /// The sync log is append-only and owner-scoped: triggers log item and
+    /// playlist writes, the cursor is the highest seq returned, and another
+    /// user's rows never appear.
+    #[tokio::test]
+    async fn sync_changes_are_incremental_and_owner_scoped() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-sync-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+
+        let alice = auth::create_user(&state.pool, "a@example.com", "Alice", "secret123", "user")
+            .await
+            .unwrap();
+        let bob = auth::create_user(&state.pool, "b@example.com", "Bob", "secret123", "user")
+            .await
+            .unwrap();
+        let now = db::now_ms();
+        sqlx::query(
+            "INSERT INTO items
+               (id, owner_id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('alice-track', ?, 'music', 'Old title', 'music/aa/track.mp3',
+                     'audio/mpeg', 1, ?, ?)",
+        )
+        .bind(&alice.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO playlists (id, owner_id, name, kind, created_at, updated_at)
+             VALUES ('alice-mix', ?, 'Mix', 'playlist', ?, ?)",
+        )
+        .bind(&alice.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let alice_token = auth::create_session(&state.pool, &alice.id, 30)
+            .await
+            .unwrap();
+        let bob_token = auth::create_session(&state.pool, &bob.id, 30)
+            .await
+            .unwrap();
+        let alice_cookie = format!("mm_session={alice_token}");
+        let bob_cookie = format!("mm_session={bob_token}");
+        let app = router(state.clone());
+
+        let first = sync_pull(&app, &alice_cookie, 0).await;
+        let changes = first["changes"].as_array().unwrap();
+        let entities: Vec<&str> = changes
+            .iter()
+            .map(|c| c["entity"].as_str().unwrap())
+            .collect();
+        assert!(entities.contains(&"item"), "item insert was not logged");
+        assert!(
+            entities.contains(&"playlist"),
+            "playlist insert was not logged"
+        );
+        let cursor = first["cursor"].as_i64().unwrap();
+        assert!(cursor > 0);
+
+        let second = sync_pull(&app, &alice_cookie, cursor).await;
+        assert!(second["changes"].as_array().unwrap().is_empty());
+        assert_eq!(second["cursor"].as_i64().unwrap(), cursor);
+
+        sqlx::query("UPDATE items SET title = 'New title' WHERE id = 'alice-track'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        let after_update = sync_pull(&app, &alice_cookie, cursor).await;
+        let upsert = after_update["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["entity"] == "item" && c["entityId"] == "alice-track")
+            .expect("item update was not logged");
+        assert_eq!(upsert["op"], "upsert");
+        assert_eq!(upsert["payload"]["title"], "New title");
+        let cursor = after_update["cursor"].as_i64().unwrap();
+
+        sqlx::query("DELETE FROM items WHERE id = 'alice-track'")
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        let after_delete = sync_pull(&app, &alice_cookie, cursor).await;
+        let deleted = after_delete["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["entity"] == "item" && c["entityId"] == "alice-track")
+            .expect("item delete was not logged");
+        assert_eq!(deleted["op"], "delete");
+        assert_eq!(deleted["payload"]["id"], "alice-track");
+
+        let bobs = sync_pull(&app, &bob_cookie, 0).await;
+        assert!(
+            bobs["changes"].as_array().unwrap().is_empty(),
+            "Bob saw Alice's changes"
+        );
+        assert_eq!(bobs["cursor"].as_i64().unwrap(), 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

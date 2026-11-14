@@ -155,6 +155,13 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   clients pull `GET /api/sync/changes?since=<seq>`, and media bytes stream on
   demand instead of syncing. Never make a client-local DB the source of truth.
 
+## Sync foundation
+
+- `sync_changes` is append-only and owner-scoped; the cursor is `seq`. Triggers log
+  `items`, `playlists`, and `playlist_items` writes, so new handlers do not need to
+  write to it. Clients pull `GET /api/sync/changes?since=<seq>&limit=<n>`.
+  Media bytes are not synced; they stream on demand.
+
 ## Books
 
 - `POST /api/items/:id/open` spawns `MM_OPENER` (default `xdg-open`) detached.
