@@ -269,6 +269,44 @@ pub async fn finalize(
     Ok(item)
 }
 
+/// Existing book rows added before cover support get a cover on the next start.
+pub async fn backfill_book_covers(pool: &sqlx::SqlitePool, cfg: &Config) -> Result<usize> {
+    let rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, path FROM items
+          WHERE kind = 'book' AND (thumb_path IS NULL OR thumb_path = '')",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut done = 0;
+    for (id, path) in rows {
+        let Some(src) = safe_join(&cfg.library_dir, &path) else {
+            continue;
+        };
+        if !src.exists() || id.len() < 2 {
+            continue;
+        }
+        let rel = format!(".thumbs/{}/{id}.jpg", &id[..2]);
+        let dest = cfg.library_dir.join(&rel);
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        match book_cover(cfg, &src, &dest).await {
+            Ok(()) => {
+                sqlx::query("UPDATE items SET thumb_path = ?, updated_at = ? WHERE id = ?")
+                    .bind(&rel)
+                    .bind(db::now_ms())
+                    .bind(&id)
+                    .execute(pool)
+                    .await?;
+                done += 1;
+            }
+            Err(err) => tracing::warn!(item = %id, %err, "book cover backfill skipped"),
+        }
+    }
+    Ok(done)
+}
+
 /// Remove an item's files (best effort) and its row. FTS triggers handle search.
 pub async fn remove_item(pool: &sqlx::SqlitePool, cfg: &Config, item: &Item, delete_file: bool) -> Result<()> {
     if delete_file {

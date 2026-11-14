@@ -42,6 +42,12 @@ async fn main() -> anyhow::Result<()> {
     };
     db::recover(&pool, &cfg).await?;
 
+    match media::backfill_book_covers(&pool, &cfg).await {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(count, "generated missing book covers"),
+        Err(err) => tracing::warn!(%err, "book cover backfill failed"),
+    }
+
     let state = AppState {
         pool,
         cfg: cfg.clone(),

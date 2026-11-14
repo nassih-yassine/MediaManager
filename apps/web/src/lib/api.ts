@@ -17,6 +17,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
+    // A hung backend must surface as an error, not a permanent "Loading…".
+    signal: init?.signal ?? AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) {

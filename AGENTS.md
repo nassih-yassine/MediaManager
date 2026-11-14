@@ -83,6 +83,13 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 
 ## Gotchas that have already cost time
 
+- **Never run `next build` while `next dev` is running.** Both write `.next`; the
+  build replaces dev chunks, the open tab 404s `main-app.js` /
+  `app-pages-internals.js`, hydration never runs, and the UI sits on "Loading…"
+  forever. Stop dev, build, then start dev again. This has already bitten once.
+- If a page is stuck on "Loading…", first check the Network tab for 404 chunks and
+  restart the dev server; the API being down renders an error banner instead.
+
 - **yt-dlp JS runtime:** only `deno` is enabled by default and deno is not
   installed here. Every invocation passes `--no-js-runtimes --js-runtimes node`
   or YouTube extraction fails.
