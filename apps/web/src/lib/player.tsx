@@ -235,9 +235,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     lastSaveWall.current = 0;
     setProgress(0);
     setDuration(0);
+
+    // The metadata event can fire before this effect runs (fast local/proxy
+    // loads). Apply the resume point now when the element is already ready.
+    const applyResume = () => {
+      const target = pendingResume.current;
+      if (target == null) return;
+      if (Number.isFinite(el.duration) && target < el.duration - 1) {
+        el.currentTime = target;
+      }
+      pendingResume.current = null;
+    };
+    if (el.readyState >= 1) {
+      applyResume();
+    } else {
+      el.addEventListener("loadedmetadata", applyResume, { once: true });
+    }
+
     if (wantPlayRef.current) {
       void el.play().catch(() => setPlaying(false));
     }
+    return () => el.removeEventListener("loadedmetadata", applyResume);
   }, [current?.id, current, mediaVersion]);
 
   // Clearing the queue must actually stop the element; removing the src prop
