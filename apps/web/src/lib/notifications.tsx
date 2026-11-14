@@ -60,6 +60,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   });
 
   const markRead = useCallback(async (id: string) => {
+    const target = items.find((item) => item.id === id);
     setItems((current) =>
       current.map((item) =>
         item.id === id && item.readAt === null
@@ -67,13 +68,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           : item,
       ),
     );
-    setUnread((current) => Math.max(0, current - 1));
+    if (target?.readAt === null) {
+      setUnread((current) => Math.max(0, current - 1));
+    }
     try {
       await api(`/api/notifications/${id}/read`, { method: "POST" });
     } catch {
       void refresh();
     }
-  }, [refresh]);
+  }, [items, refresh]);
 
   const markAllRead = useCallback(async () => {
     const now = Date.now();

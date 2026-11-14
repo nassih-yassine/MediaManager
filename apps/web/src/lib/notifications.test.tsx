@@ -17,13 +17,16 @@ vi.mock("@/lib/realtime", () => ({
 }));
 
 function Probe() {
-  const { unread, items, markAllRead } = useNotifications();
+  const { unread, items, markAllRead, markRead } = useNotifications();
   return (
     <div>
       <span data-testid="unread">{unread}</span>
       <span data-testid="count">{items.length}</span>
       <button type="button" onClick={() => void markAllRead()}>
         read all
+      </button>
+      <button type="button" onClick={() => void markRead(items[0]?.id ?? "")}>
+        read first
       </button>
     </div>
   );
@@ -61,6 +64,21 @@ describe("NotificationProvider", () => {
     await waitFor(() =>
       expect(mocks.api.mock.calls.filter(([path]) => path === "/api/notifications?limit=50")).toHaveLength(2),
     );
+  });
+
+  it("does not decrement for an already-read notification", async () => {
+    mocks.api.mockResolvedValue({
+      notifications: [{ ...ITEM, readAt: 5 }],
+      unread: 0,
+    });
+    render(
+      <NotificationProvider>
+        <Probe />
+      </NotificationProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("unread")).toHaveTextContent("0"));
+    await userEvent.click(screen.getByRole("button", { name: "read first" }));
+    expect(screen.getByTestId("unread")).toHaveTextContent("0");
   });
 
   it("clears the badge optimistically on read-all", async () => {
