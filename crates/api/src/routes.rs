@@ -132,6 +132,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/me", get(auth_me))
         .route("/api/auth/password", post(change_password))
         .route("/api/profile", get(get_profile).patch(update_profile))
+        .route("/api/reports", get(list_my_reports).post(create_report))
+        .route("/api/admin/reports", get(admin_list_reports))
+        .route("/api/admin/announcements", post(admin_announce))
+        .route(
+            "/api/admin/reports/{id}",
+            axum::routing::patch(admin_update_report),
+        )
         .route(
             "/api/admin/users",
             get(admin_list_users).post(admin_create_user),
@@ -1493,6 +1500,256 @@ async fn remove_cover(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct NewAnnouncement {
+    title: String,
+    body: String,
+}
+
+async fn admin_announce(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+    Json(input): Json<NewAnnouncement>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let title = input.title.trim();
+    let body = input.body.trim();
+    if title.chars().count() < 3 || title.chars().count() > 120 {
+        return Err(ApiError::bad_request(
+            "invalid_announcement",
+            "title must be 3 to 120 characters",
+        ));
+    }
+    if body.chars().count() < 3 || body.chars().count() > 2000 {
+        return Err(ApiError::bad_request(
+            "invalid_announcement",
+            "body must be 3 to 2000 characters",
+        ));
+    }
+    let notified =
+        crate::notifications::notify_all_users(&state.pool, "announcement", title, Some(body), Some("/notifications"))
+            .await?;
+    let created = notified.len();
+    for (notification_id, owner_id) in notified {
+        state.emit(
+            "notification.created",
+            &notification_id,
+            None,
+            Some(&owner_id),
+        );
+    }
+    Ok((StatusCode::CREATED, Json(json!({ "created": created }))))
+}
+
+#[derive(Deserialize)]
+struct NewReport {
+    kind: String,
+    title: String,
+    body: String,
+}
+
+#[derive(Clone, serde::Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+struct ReportDto {
+    id: String,
+    #[serde(skip_serializing)]
+    user_id: String,
+    kind: String,
+    title: String,
+    body: String,
+    status: String,
+    created_at: i64,
+    updated_at: i64,
+    resolved_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_email: Option<String>,
+}
+
+async fn create_report(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<NewReport>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    if body.kind != "bug" && body.kind != "feature" {
+        return Err(ApiError::bad_request(
+            "invalid_report",
+            "kind must be bug or feature",
+        ));
+    }
+    let title = body.title.trim();
+    let text = body.body.trim();
+    if title.chars().count() < 3 || title.chars().count() > 120 {
+        return Err(ApiError::bad_request(
+            "invalid_report",
+            "title must be 3 to 120 characters",
+        ));
+    }
+    if text.chars().count() < 10 || text.chars().count() > 4000 {
+        return Err(ApiError::bad_request(
+            "invalid_report",
+            "body must be 10 to 4000 characters",
+        ));
+    }
+    let id = uuid::Uuid::now_v7().to_string();
+    let now = db::now_ms();
+    sqlx::query(
+        "INSERT INTO reports (id, user_id, kind, title, body, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'open', ?, ?)",
+    )
+    .bind(&id)
+    .bind(&user.id)
+    .bind(&body.kind)
+    .bind(title)
+    .bind(text)
+    .bind(now)
+    .bind(now)
+    .execute(&state.pool)
+    .await?;
+
+    let summary = if body.kind == "bug" {
+        format!("Bug: {title}")
+    } else {
+        format!("Feature: {title}")
+    };
+    let notified = crate::notifications::notify_admins(
+        &state.pool,
+        "report_new",
+        &summary,
+        Some(&format!("From {} ({})", user.name, user.email)),
+        Some("/admin?tab=reports"),
+    )
+    .await?;
+    for (notification_id, owner_id) in notified {
+        state.emit(
+            "notification.created",
+            &notification_id,
+            None,
+            Some(&owner_id),
+        );
+    }
+
+    let report = sqlx::query_as::<_, ReportDto>(
+        "SELECT id, user_id, kind, title, body, status, created_at, updated_at, resolved_at,
+                NULL AS user_name, NULL AS user_email
+           FROM reports WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.pool)
+    .await?;
+    Ok((StatusCode::CREATED, Json(json!({ "report": report }))))
+}
+
+async fn list_my_reports(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let reports = sqlx::query_as::<_, ReportDto>(
+        "SELECT id, user_id, kind, title, body, status, created_at, updated_at, resolved_at,
+                NULL AS user_name, NULL AS user_email
+           FROM reports WHERE user_id = ?
+          ORDER BY created_at DESC, rowid DESC",
+    )
+    .bind(&user.id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(json!({ "reports": reports })))
+}
+
+#[derive(Deserialize)]
+struct ReportListParams {
+    status: Option<String>,
+}
+
+async fn admin_list_reports(
+    State(state): State<AppState>,
+    AdminUser(_admin): AdminUser,
+    Query(params): Query<ReportListParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+        "SELECT r.id, r.user_id, r.kind, r.title, r.body, r.status,
+                r.created_at, r.updated_at, r.resolved_at,
+                u.name AS user_name, u.email AS user_email
+           FROM reports r JOIN users u ON u.id = r.user_id WHERE 1 = 1",
+    );
+    if let Some(status) = params.status.as_deref() {
+        if status != "open" && status != "resolved" {
+            return Err(ApiError::bad_request(
+                "invalid_status",
+                "status must be open or resolved",
+            ));
+        }
+        qb.push(" AND r.status = ").push_bind(status.to_string());
+    }
+    qb.push(" ORDER BY r.created_at DESC, r.rowid DESC");
+    let reports = qb
+        .build_query_as::<ReportDto>()
+        .fetch_all(&state.pool)
+        .await?;
+    Ok(Json(json!({ "reports": reports })))
+}
+
+#[derive(Deserialize)]
+struct ReportStatusBody {
+    status: String,
+}
+
+async fn admin_update_report(
+    State(state): State<AppState>,
+    AdminUser(admin): AdminUser,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<ReportStatusBody>,
+) -> Result<StatusCode, ApiError> {
+    if body.status != "open" && body.status != "resolved" {
+        return Err(ApiError::bad_request(
+            "invalid_status",
+            "status must be open or resolved",
+        ));
+    }
+    let report = sqlx::query_as::<_, ReportDto>(
+        "SELECT id, user_id, kind, title, body, status, created_at, updated_at, resolved_at,
+                NULL AS user_name, NULL AS user_email
+           FROM reports WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("report not found"))?;
+
+    if body.status == "resolved" && report.status == "open" {
+        let result = sqlx::query(
+            "UPDATE reports
+                SET status = 'resolved', resolved_at = ?, resolved_by = ?, updated_at = ?
+              WHERE id = ? AND status = 'open'",
+        )
+        .bind(db::now_ms())
+        .bind(&admin.id)
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+        // Second resolve is a no-op, so the reporter is notified exactly once.
+        if result.rows_affected() == 1 {
+            let notification_id = crate::notifications::create(
+                &state.pool,
+                &report.user_id,
+                "report_resolved",
+                &format!("Resolved: {}", report.title),
+                Some("Your report was marked resolved by an admin."),
+                Some("/profile"),
+            )
+            .await?;
+            state.emit(
+                "notification.created",
+                &notification_id,
+                None,
+                Some(&report.user_id),
+            );
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn admin_list_users(
     State(state): State<AppState>,
     AdminUser(_admin): AdminUser,
@@ -2297,6 +2554,203 @@ mod tests {
             .unwrap();
         assert_eq!(alices_file.status(), StatusCode::OK);
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn announcements_reach_every_enabled_user() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-announce-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let admin = auth::create_user(&state.pool, "admin@example.com", "Admin", "secret123", "admin")
+            .await
+            .unwrap();
+        let member = auth::create_user(&state.pool, "u@example.com", "User", "secret123", "user")
+            .await
+            .unwrap();
+        let off = auth::create_user(&state.pool, "off@example.com", "Off", "secret123", "user")
+            .await
+            .unwrap();
+        sqlx::query("UPDATE users SET disabled = 1 WHERE id = ?")
+            .bind(&off.id)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &admin.id, 30).await.unwrap();
+        let cookie = format!("mm_session={token}");
+        let pool = state.pool.clone();
+        let app = router(state);
+
+        let created = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/admin/announcements")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"title":"New release","body":"Galleries are here."}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(created.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("\"created\":2"));
+
+        for id in [&admin.id, &member.id] {
+            let count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND kind = 'announcement'",
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(count, 1);
+        }
+        let off_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND kind = 'announcement'",
+        )
+        .bind(&off.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(off_count, 0);
+
+        let forbidden = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/admin/announcements")
+                    .header(
+                        axum::http::header::COOKIE,
+                        format!(
+                            "mm_session={}",
+                            auth::create_session(&pool, &member.id, 30).await.unwrap()
+                        ),
+                    )
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"title":"Nope","body":"Nope nope."}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn reports_notify_admins_and_resolve_once() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-reports-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let admin = auth::create_user(&state.pool, "admin@example.com", "Admin", "secret123", "admin")
+            .await
+            .unwrap();
+        let reporter = auth::create_user(&state.pool, "u@example.com", "User", "secret123", "user")
+            .await
+            .unwrap();
+        let admin_token = auth::create_session(&state.pool, &admin.id, 30).await.unwrap();
+        let reporter_token = auth::create_session(&state.pool, &reporter.id, 30).await.unwrap();
+        let admin_cookie = format!("mm_session={admin_token}");
+        let reporter_cookie = format!("mm_session={reporter_token}");
+        let pool = state.pool.clone();
+        let app = router(state);
+
+        let invalid = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/reports")
+                    .header(axum::http::header::COOKIE, &reporter_cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"kind":"bug","title":"x","body":"short"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+        let created = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/reports")
+                    .header(axum::http::header::COOKIE, &reporter_cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"kind":"feature","title":"Add playlists","body":"It would help a lot."}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = created.status();
+        let body = axum::body::to_bytes(created.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            status,
+            StatusCode::CREATED,
+            "body: {}",
+            String::from_utf8_lossy(&body)
+        );
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let report_id = parsed["report"]["id"].as_str().unwrap().to_string();
+
+        let admin_notifications: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND kind = 'report_new'",
+        )
+        .bind(&admin.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(admin_notifications, 1);
+
+        let forbidden = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/admin/reports")
+                    .header(axum::http::header::COOKIE, &reporter_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+
+        for _ in 0..2 {
+            let resolved = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method(axum::http::Method::PATCH)
+                        .uri(format!("/api/admin/reports/{report_id}"))
+                        .header(axum::http::header::COOKIE, &admin_cookie)
+                        .header("content-type", "application/json")
+                        .body(Body::from(r#"{"status":"resolved"}"#))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resolved.status(), StatusCode::NO_CONTENT);
+        }
+
+        let resolved_notifications: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND kind = 'report_resolved'",
+        )
+        .bind(&reporter.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(resolved_notifications, 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

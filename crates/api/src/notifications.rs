@@ -58,7 +58,7 @@ async fn fan_out(
     title: &str,
     body: Option<&str>,
     href: Option<&str>,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Vec<(String, String)>> {
     let now = db::now_ms();
     let mut ids = Vec::with_capacity(user_ids.len());
     let mut tx = pool.begin().await?;
@@ -77,7 +77,7 @@ async fn fan_out(
         .bind(now)
         .execute(&mut *tx)
         .await?;
-        ids.push(id);
+        ids.push((id, user_id));
     }
     tx.commit().await?;
     Ok(ids)
@@ -89,7 +89,7 @@ pub async fn notify_admins(
     title: &str,
     body: Option<&str>,
     href: Option<&str>,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Vec<(String, String)>> {
     let admins = recipients(pool, true).await?;
     fan_out(pool, admins, kind, title, body, href).await
 }
@@ -100,7 +100,7 @@ pub async fn notify_all_users(
     title: &str,
     body: Option<&str>,
     href: Option<&str>,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Vec<(String, String)>> {
     let users = recipients(pool, false).await?;
     fan_out(pool, users, kind, title, body, href).await
 }
