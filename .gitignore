@@ -1,18 +1,28 @@
 # deps / build output
 node_modules/
+**/node_modules/
 .next/
+**/.next/
 target/
+**/target/
 *.tsbuildinfo
+coverage/
+apps/desktop/src-tauri/gen/
 
-# local state
+# local state — never commit credentials or the library
 .env
-.env.local
+.env.*
+!.env.example
+!**/.env.example
+.envrc
 library/
 *.db
 *.db-wal
 *.db-shm
+*.log
 
 # editor / os
 .DS_Store
 .idea/
 .vscode/
+.superpowers/

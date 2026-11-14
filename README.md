@@ -1,57 +1,65 @@
-# MediaManager
+<p align="center">
+  <img src="apps/web/public/logo.svg" width="88" alt="MediaManager logo" />
+</p>
 
-Local library for media you download: music, video, pictures, books. Paste a
-link, choose what to keep — audio with its cover art, or the full video — and it
-lands in a plain folder tree on disk.
+<h1 align="center">MediaManager</h1>
 
-- Local accounts: email + password, private libraries per user, and an admin panel
-  for creating users and resetting passwords.
-- Profile page: display name, password, account-level theme, and bug/feature reports
-  that land in an admin inbox.
-- Notification bell: report updates, admin announcements, and finished or failed
-  downloads; unread badge plus a full `/notifications` list.
-- Persistent player bar: play/pause, next/prev, seek, volume, shuffle, repeat,
-  and a drag-to-reorder queue that survives navigation.
-- Resume where you stopped: positions are saved per item (even across reloads).
-- Playlists that hold any mix of items, with drag reordering.
-- Galleries tab: galleries on top, loose pictures below; create a gallery inline.
-- Full-screen gallery viewer: keyboard arrows, thumbnail strip, swipe on touch.
-- Select mode inside a gallery: move pictures to another gallery, remove them
-  from it, or delete the files.
-- Upload pictures directly from a gallery, or drop them onto its grid.
-- Add to a collection from its own page, or pick a target while adding media.
-- Live updates: new items, deletes and playlist changes appear without a reload.
-- `All pictures` default gallery (cannot be deleted); upload several pictures at once.
-- Deleting a gallery asks whether its pictures move to `All pictures` or are
-  deleted from disk.
-- The Library `All` tab lists collections and hides individual pictures so the
-  grid stays gallery-first.
-- Custom playlist/gallery covers from an item or an upload.
-- Clear the play queue and the download activity explicitly.
-- Idle audio/video files are removed after `MM_EVICT_AFTER_DAYS` (default 30) while
-  metadata and thumbnails stay; playing them again downloads them automatically.
-- `make setup` creates the first admin interactively.
-- Four themes (Slate, Paper, Ocean, Moss) in light and dark.
-- Books open in your native reader; the cover is the file's first page.
-- Multi-select in the library for bulk queue / playlist / delete.
+<p align="center">
+  A private, self-hosted library for downloaded audio, video, pictures, galleries and books.
+  Rust API + SQLite on the server, one shared UI on the web and desktop.
+</p>
 
-- **Rust API** (`crates/api`): axum + SQLite (WAL), durable download queue,
-  yt-dlp/ffmpeg for media, streaming file serving with byte ranges.
-- **Next.js web** (`apps/web`): App Router, TypeScript, Tailwind v4. Proxies
-  `/api`, `/files` and `/thumbs` to the API, so one origin in the browser.
+![Library](docs/screenshots/library.jpg)
 
-The spec lives in `docs/superpowers/specs/2026-11-14-media-manager-spec.md`.
+## What it does
 
-## Requirements
+- **Downloads that become a library.** Paste a link; yt-dlp/ffmpeg fetch audio with
+  its cover or the full video, and the app files it into a plain folder tree.
+- **Persistent player and queue.** One media element survives navigation, with
+  resume points, shuffle, repeat and a drag-to-reorder queue.
+- **Galleries and playlists.** Pictures live in galleries (the classic
+  `All pictures` default gallery is protected); playlists hold any mix of kinds.
+- **Profile per account.** Display name, password, account-level theme, and bug
+  or feature reports that land in an admin inbox.
+- **Notifications.** Reports, report resolutions, admin announcements and
+  finished/failed downloads arrive in a bell with an unread badge.
+- **Idle media eviction.** Old untouched audio/video files are removed to save
+  space while metadata stays; playing one downloads it again automatically.
+- **Local accounts.** Email + password, private libraries per user, admin panel
+  for user management. Another user's rows and files are `404`, not `403`.
+- **Live updates.** SSE refreshes lists and badges without reloading.
+- **Four themes** (Slate, Paper, Ocean, Moss) in light and dark, stored per account.
 
-- Node 20+ and npm
-- Rust 1.85+
-- `yt-dlp` and `ffmpeg` on `PATH` (for downloads and thumbnails)
+## Screenshots
 
-## Install on this computer (Linux)
+| Galleries | Gallery + lightbox |
+|---|---|
+| ![Galleries](docs/screenshots/galleries.jpg) | ![Gallery](docs/screenshots/gallery.jpg) |
+| **Profile** | **Admin** |
+| ![Profile](docs/screenshots/profile.jpg) | ![Admin](docs/screenshots/admin.jpg) |
 
-Build once, then install the API + production web as systemd user services and
-the desktop binary with a launcher entry:
+| Full-screen viewer | Notifications |
+|---|---|
+| ![Lightbox](docs/screenshots/lightbox.jpg) | ![Notifications](docs/screenshots/notifications.jpg) |
+
+## Quick start
+
+Requirements: Node 20+, Rust 1.85+, `yt-dlp`, `ffmpeg`; `pdftoppm` and `unzip`
+for book covers.
+
+```sh
+make install     # npm install + cargo fetch
+make dev         # API :8787 + web :3000 (or :3001 if 3000 is taken)
+```
+
+Open the printed URL. First run shows **Create the admin account** (or run
+`make setup` in another terminal). Existing media from earlier versions is
+adopted by the first admin.
+
+### Install on this computer (Linux)
+
+Build once and install the API + production web as systemd user services plus
+the desktop binary and launcher entry:
 
 ```sh
 cargo build --release --manifest-path crates/api/Cargo.toml
@@ -60,89 +68,137 @@ cargo build --release --manifest-path crates/api/Cargo.toml
 ./scripts/install-local.sh
 ```
 
-Open **MediaManager** from the app launcher, or <http://localhost:3001>.
-Manage with `systemctl --user status mm-api mm-web` (stop them before `make dev`).
-Uninstall: `systemctl --user disable --now mm-api mm-web`, remove
-`~/.local/bin/mm*`, the unit files, the `.desktop` file and the icon.
+Then launch **MediaManager** from the app menu, or open <http://localhost:3001>.
+Manage with `systemctl --user status mm-api mm-web`; stop them before `make dev`
+(they share ports 8787/3001).
 
-## Run
+## Desktop (Tauri)
 
-```sh
-make install     # npm install + cargo fetch
-make dev         # API on :8787, web on :3000
-```
-
-Desktop (native window, same UI):
+`apps/desktop` is a Tauri 2 window (Rust + WebKitGTK) that loads the same UI.
+It is not a second frontend.
 
 ```sh
-make dev                    # keep the web + API running
-cd apps/desktop && npm install
-npm run dev
+make dev                 # keep the server running
+cd apps/desktop
+npm install
+npm run dev              # native window
+npm run build            # AppImage / deb / rpm in src-tauri/target/release/bundle
 ```
 
-The window points at `http://localhost:3001` (override with `MM_DESKTOP_URL`).
+`MM_DESKTOP_URL` overrides the target (default `http://localhost:3001`). The
+window resizes down to 360×560 and the layout adapts like the web app.
 
-Open <http://localhost:3000>. First run shows **Create the admin account** (or run
-`make setup`); existing
-media is adopted by that account. Set `MM_ADMIN_EMAIL`/`MM_ADMIN_PASSWORD` to create
-it at startup instead. Additional users are created in **Admin**. To run E2E against
-an account: `MM_E2E_EMAIL=you@example.com MM_E2E_PASSWORD=... make e2e`.
+## Accounts and privacy
 
-Run only the API: `make api`. Run a separate worker: `make worker`.
+- The first admin is created at `/setup`, by `MM_ADMIN_EMAIL`/`MM_ADMIN_PASSWORD`,
+  or interactively with `make setup`.
+- Admins create users, change roles, disable accounts, reset passwords (which
+  revokes that user's sessions) and delete users with their content.
+- Every query is owner-scoped; `/files` and `/thumbs` authorize by row lookup and
+  still support HTTP Range for video seeking.
+- Cookies are `HttpOnly`, `SameSite=Lax`, 30 days by default. Set
+  `MM_COOKIE_SECURE=1` behind HTTPS.
+- Reports are filed by non-admins on `/profile`; admins resolve them in
+  **Admin → Reports** and the reporter gets a notification.
+- Admins broadcast one announcement per enabled user from **Admin → Announce**.
 
-## Checks
+## Idle media eviction
 
-```sh
-make test        # cargo test + vitest
-make check       # cargo check + tsc --noEmit
-make lint        # eslint
-```
-
-## CI/CD
-
-Full VM walkthrough: [`docs/deploy-vm.md`](docs/deploy-vm.md) (Oracle Free Tier / any VPS).
-
-GitHub Actions:
-
-- **CI** (`.github/workflows/ci.yml`) on pushes and PRs: Rust fmt + tests; web
-  typecheck, lint, Vitest and production build; a browser smoke test with a
-  seeded track; and a Docker build of both images.
-- **Release** (`.github/workflows/release.yml`) on `v*` tags: desktop
-  AppImage/deb/rpm via Tauri attached to a draft GitHub release, plus
-  `ghcr.io/<repo>/api` and `/web` images tagged with the release and `latest`.
-- **Deploy** (`.github/workflows/deploy.yml`): after a successful release, or
-  manually with a tag, SSHes to the server and runs
-  `docker compose -f compose.yaml pull && up -d`.
-
-Server bootstrap (once):
-
-```sh
-git clone <repo> /opt/mediamanager && cd /opt/mediamanager
-cp deploy/.env.example .env && chmod 600 .env   # set IMAGE_PREFIX, origin, admin
-mkdir -p library && sudo chown -R 1000:1000 library
-docker login ghcr.io                          # read:packages token
-```
-
-Optional TLS: point a hostname at the server, set `PUBLIC_HOST` and
-`MM_WEB_ORIGIN=https://...`, then
-`docker compose --profile tls up -d`.
-
-Repository secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
-`DEPLOY_PATH` (optional, default `/opt/mediamanager`). The deploy script uses
-`docker compose` when Docker is present, otherwise `podman compose`.
-
-Run the container stack locally with Podman:
-
-```sh
-make images
-cp deploy/.env.example .env    # set IMAGE_PREFIX=localhost, MM_WEB_ORIGIN=http://localhost:3001, MM_COOKIE_SECURE=0
-podman compose -f compose.yaml -f compose.podman.yaml up -d
-```
-
-Then open <http://localhost:3001>. The Podman override maps the library volume
-with `userns_mode: keep-id`, so files stay owned by your user.
+`MM_EVICT_AFTER_DAYS` (default 30, `0` disables) removes only the media files of
+audio/video that have not been played for that long, keeping the item, thumbnail,
+playlists and resume position. Uploads are never evicted (no source URL).
+Playing an evicted item queues a restore, shows “Restoring media…”, and resumes
+when the download finishes.
 
 ## Configuration
 
-All settings are environment variables; see `.env.example`. Defaults put the
-library at `~/MediaManager/library`.
+All settings are environment variables; see `.env.example`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MM_LIBRARY_DIR` | `~/MediaManager/library` | media, thumbnails and SQLite |
+| `MM_BIND` | `127.0.0.1:8787` | API bind address |
+| `MM_WEB_ORIGIN` | `http://localhost:3000` | CORS/CSRF origin |
+| `MM_MAX_DOWNLOAD_MB` | `2048` | upload/download cap |
+| `MM_MAX_CONCURRENT` | `8` | worker concurrency |
+| `MM_EVICT_AFTER_DAYS` | `30` | idle eviction (0 = off) |
+| `MM_EVICT_CHECK_HOURS` | `24` | scheduler interval |
+| `MM_ADMIN_EMAIL` / `MM_ADMIN_PASSWORD` | — | first admin bootstrap |
+| `MM_SESSION_DAYS` | `30` | session lifetime |
+| `MM_COOKIE_SECURE` | `0` | set `1` behind TLS |
+| `MM_OPENER` | `xdg-open` | native book opener |
+
+## Architecture
+
+- **Rust API** (`crates/api`): axum, SQLite in WAL, durable job queue, worker,
+  yt-dlp/ffmpeg, owner-scoped files.
+- **Next.js web** (`apps/web`): App Router, client pages, Tailwind v4, custom
+  design-system controls. Proxies `/api`, `/files`, `/thumbs` to the API.
+- **Tauri desktop** (`apps/desktop`): native window around the same UI.
+- **Sync foundation**: append-only `sync_changes`, owner-scoped pull endpoint,
+  per-owner change log; media streams on demand. See `docs/architecture.md`.
+- Storage is sharded (`<kind>/<prefix>/<id>.<ext>`), thumbnails in `.thumbs/`.
+  The DB is never written by the web client.
+
+## CI/CD and deployment
+
+- **CI** (`.github/workflows/ci.yml`): Rust fmt + tests, web typecheck/lint/tests/
+  build, a real Chromium smoke test, and Docker image builds.
+- **Release** (`.github/workflows/release.yml`): on `v*` tags, desktop bundles
+  (AppImage/deb/rpm) and multi-arch (`amd64`/`arm64`) images on GHCR.
+- **Deploy** (`.github/workflows/deploy.yml`): on a published release or manual
+  dispatch, SSH → checkout tag → `compose pull && up -d`.
+- `compose.yaml` runs `api` + `web` with an optional Caddy TLS profile; both
+  Docker and Podman are supported (`compose.podman.yaml`).
+
+Step-by-step VM setup (Oracle Free Tier, generic VPS, TLS, backups):
+[`docs/deploy-vm.md`](docs/deploy-vm.md). Design decisions:
+[`docs/superpowers/specs/2026-11-15-vm-deployment.md`](docs/superpowers/specs/2026-11-15-vm-deployment.md).
+
+## Development
+
+```sh
+make test        # cargo test + vitest
+make test-web    # vitest only
+make check       # cargo check + tsc --noEmit
+make lint        # eslint
+make e2e         # Chromium smoke; needs the app running + MM_E2E_EMAIL/PASSWORD
+```
+
+Single tests:
+
+```sh
+cargo test --manifest-path crates/api/Cargo.toml <name>
+cd apps/web && npx vitest run src/lib/player-utils.test.ts
+```
+
+Do not run `next build` while `next dev` is running — they share `.next`.
+`next build` must work with the API down.
+
+## Project layout
+
+```
+crates/api/        Rust API, worker, migrations, SQLite
+apps/web/          Next.js UI
+apps/desktop/      Tauri 2 shell + icons
+scripts/           first-run and local installer
+deploy/            server env example + Caddyfile
+compose.yaml       container stack
+docs/              architecture, deployment, specs, plans, screenshots
+```
+
+## Security
+
+- No telemetry. The server is loopback-only by default; expose it through a
+  reverse proxy or Tailscale, not directly.
+- Never commit `.env`, the library, the SQLite files, or logs — `.gitignore`
+  covers them. Set `MM_COOKIE_SECURE=1` when served over HTTPS.
+- For media at rest, use full-disk encryption (LUKS); the app does not encrypt
+  individual files.
+
+## More docs
+
+- [`docs/architecture.md`](docs/architecture.md) — structure and sync model
+- [`docs/deploy-vm.md`](docs/deploy-vm.md) — VM deployment walkthrough
+- [`AGENTS.md`](AGENTS.md) — rules for working in this repo
+- [`docs/superpowers/specs/`](docs/superpowers/specs) — specs and designs
