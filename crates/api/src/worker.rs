@@ -176,11 +176,12 @@ fn spawn_heartbeat(state: AppState, job_id: String) -> tokio::task::JoinHandle<(
         let mut tick = tokio::time::interval(every);
         loop {
             tick.tick().await;
-            let _ = sqlx::query("UPDATE jobs SET heartbeat_at = ? WHERE id = ? AND status = 'running'")
-                .bind(db::now_ms())
-                .bind(&job_id)
-                .execute(&state.pool)
-                .await;
+            let _ =
+                sqlx::query("UPDATE jobs SET heartbeat_at = ? WHERE id = ? AND status = 'running'")
+                    .bind(db::now_ms())
+                    .bind(&job_id)
+                    .execute(&state.pool)
+                    .await;
         }
     })
 }
@@ -234,9 +235,7 @@ async fn download_ytdlp(state: &AppState, job: &Job) -> Result<Item> {
             .map(String::from),
         );
     } else {
-        args.extend(
-            ["-f", "bv*+ba/b", "--merge-output-format", "mp4"].map(String::from),
-        );
+        args.extend(["-f", "bv*+ba/b", "--merge-output-format", "mp4"].map(String::from));
     }
     args.extend(
         [
@@ -399,9 +398,7 @@ fn collect_download(dir: &Path, kind: &str) -> Result<(PathBuf, Option<PathBuf>,
             let preferred = if kind == "music" { "mp3" } else { "mp4" };
             let replace = match &best_media {
                 None => true,
-                Some(existing) => {
-                    media::extension_of(existing) != preferred && ext == preferred
-                }
+                Some(existing) => media::extension_of(existing) != preferred && ext == preferred,
             };
             if replace {
                 best_media = Some(path);
@@ -414,7 +411,10 @@ fn collect_download(dir: &Path, kind: &str) -> Result<(PathBuf, Option<PathBuf>,
     Ok((media_path, thumb, info_path))
 }
 
-async fn read_info(path: &Path, fallback_url: &str) -> (String, Option<i64>, Option<i64>, Option<i64>) {
+async fn read_info(
+    path: &Path,
+    fallback_url: &str,
+) -> (String, Option<i64>, Option<i64>, Option<i64>) {
     let parsed = tokio::fs::read(path)
         .await
         .ok()
@@ -524,7 +524,10 @@ async fn download_direct(state: &AppState, job: &Job) -> Result<Item> {
         written += chunk.len() as u64;
         if written > max {
             let _ = tokio::fs::remove_file(&dest).await;
-            anyhow::bail!("download exceeded the {} MB limit", state.cfg.max_download_mb);
+            anyhow::bail!(
+                "download exceeded the {} MB limit",
+                state.cfg.max_download_mb
+            );
         }
         file.write_all(&chunk).await?;
         if header_len > 0 {

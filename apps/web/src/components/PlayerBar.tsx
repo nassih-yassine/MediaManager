@@ -184,6 +184,7 @@ export function PlayerBar() {
 
   const nextTrack = player.queue[player.index + 1] ?? null;
   const progress = Math.min(player.progress, player.duration || 0);
+  const pct = player.duration > 0 ? (progress / player.duration) * 100 : 0;
 
   return (
     <>
@@ -249,16 +250,27 @@ export function PlayerBar() {
             <span className="w-10 shrink-0 text-right font-mono text-[10px] text-muted tabular-nums">
               {clock(progress)}
             </span>
-            <input
-              type="range"
-              min={0}
-              max={player.duration || 0}
-              step={0.1}
-              value={progress}
-              onChange={(event) => player.seek(Number(event.target.value))}
-              aria-label="Seek"
-              className="block h-1.5 w-full cursor-pointer"
-            />
+            <div className="group relative flex h-4 flex-1 items-center">
+              <div className="absolute inset-x-0 h-1 rounded-full bg-line" />
+              <div
+                className="absolute left-0 h-1 rounded-full bg-accent"
+                style={{ width: `${pct}%` }}
+              />
+              <span
+                className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-accent opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                style={{ left: `${pct}%` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={player.duration || 0}
+                step={0.1}
+                value={progress}
+                onChange={(event) => player.seek(Number(event.target.value))}
+                aria-label="Seek"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </div>
             <span className="w-10 shrink-0 font-mono text-[10px] text-muted tabular-nums">
               {clock(player.duration)}
             </span>

@@ -115,17 +115,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/metrics", get(metrics))
         .route("/api/items", get(list_items))
-        .route("/api/items/{id}", get(get_item).patch(patch_item).delete(delete_item))
+        .route(
+            "/api/items/{id}",
+            get(get_item).patch(patch_item).delete(delete_item),
+        )
         .route("/api/items/{id}/open", post(open_item))
+        .route("/api/items/{id}/progress", post(update_item_progress))
         .route("/api/jobs", get(list_jobs).post(create_job))
         .route("/api/jobs/{id}", get(get_job).delete(cancel_job))
-        .route(
-            "/api/playlists",
-            get(list_playlists).post(create_playlist),
-        )
+        .route("/api/playlists", get(list_playlists).post(create_playlist))
         .route(
             "/api/playlists/{id}",
-            get(get_playlist).patch(rename_playlist).delete(delete_playlist),
+            get(get_playlist)
+                .patch(rename_playlist)
+                .delete(delete_playlist),
         )
         .route("/api/playlists/{id}/items", post(add_playlist_items))
         .route(
@@ -136,7 +139,7 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(
-                state.cfg.max_download_bytes() as usize,
+                state.cfg.max_download_bytes() as usize
             )),
         )
         .nest("/files", files)
@@ -162,7 +165,7 @@ fn fts_terms(q: &str) -> Vec<String> {
     q.split_whitespace()
         .map(|t| {
             t.chars()
-                .filter(|c| c.is_alphanumeric() || *c == '\'' )
+                .filter(|c| c.is_alphanumeric() || *c == '\'')
                 .collect::<String>()
         })
         .filter(|t| !t.is_empty())
@@ -180,6 +183,14 @@ async fn list_items(
     State(state): State<AppState>,
     Query(params): Query<ListParams>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    if let Some(kind) = params.kind.as_deref() {
+        if !models::valid_kind(kind) {
+            return Err(ApiError::bad_request(
+                "invalid_kind",
+                "kind must be music, video, picture or book",
+            ));
+        }
+    }
     let limit = params.limit.unwrap_or(60).clamp(1, 200);
     let cursor = parse_cursor(&params.cursor);
     let terms = params.q.as_deref().map(fts_terms).unwrap_or_default();
@@ -207,8 +218,7 @@ async fn list_items(
     }
     let total: i64 = count.build_query_scalar().fetch_one(&state.pool).await?;
 
-    let mut rows: QueryBuilder<Sqlite> =
-        QueryBuilder::new("SELECT i.* FROM items i");
+    let mut rows: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT i.* FROM items i");
     if use_fts {
         rows.push(" JOIN items_fts ON items_fts.rowid = i.rowid");
     }
@@ -292,7 +302,10 @@ async fn patch_item(
 ) -> Result<Json<ItemDto>, ApiError> {
     let title = body.title.trim();
     if title.is_empty() {
-        return Err(ApiError::bad_request("invalid_title", "title cannot be empty"));
+        return Err(ApiError::bad_request(
+            "invalid_title",
+            "title cannot be empty",
+        ));
     }
     let result = sqlx::query("UPDATE items SET title = ?, updated_at = ? WHERE id = ?")
         .bind(title)
@@ -319,7 +332,8 @@ async fn delete_item(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     Query(params): Query<DeleteParams>,
-) -> Result<StatusCode, ApiError> {    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+) -> Result<StatusCode, ApiError> {
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
         .bind(&id)
         .fetch_optional(&state.pool)
         .await?
@@ -331,6 +345,31 @@ async fn delete_item(
         params.delete_file.unwrap_or(false),
     )
     .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProgressBody {
+    position_ms: i64,
+}
+
+async fn update_item_progress(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<ProgressBody>,
+) -> Result<StatusCode, ApiError> {
+    // Guard against a bogus client writing nonsense; 24h is a sane ceiling.
+    let position = body.position_ms.clamp(0, 86_400_000);
+    let result = sqlx::query("UPDATE items SET position_ms = ?, last_played_at = ? WHERE id = ?")
+        .bind(position)
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("item not found"));
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -380,31 +419,41 @@ fn dedupe_key(url: &str, kind: &str, mode: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Music is always audio+thumb; full video is its own kind. Rejecting the
+/// mismatch here keeps the API honest even though the UI no longer offers it.
+fn resolve_job_mode(
+    kind: &str,
+    requested: Option<&str>,
+) -> Result<String, (&'static str, &'static str)> {
+    if !models::valid_kind(kind) {
+        return Err(("invalid_kind", "kind must be music, video, picture or book"));
+    }
+    let mode = requested.unwrap_or_else(|| models::default_mode(kind));
+    match (kind, mode) {
+        ("music", "audio+thumb") => Ok(mode.to_string()),
+        ("music", _) => Err((
+            "invalid_mode",
+            "music is downloaded as audio; choose the video kind for the full file",
+        )),
+        (_, "full") => Ok(mode.to_string()),
+        (_, "audio+thumb") => Err(("invalid_mode", "audio+thumb only applies to music")),
+        _ => Err(("invalid_mode", "mode must be audio+thumb or full")),
+    }
+}
+
 async fn create_job(
     State(state): State<AppState>,
     Json(body): Json<NewJob>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let url = body.url.trim();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return Err(ApiError::bad_request("invalid_url", "url must start with http:// or https://"));
-    }
-    if !models::valid_kind(&body.kind) {
         return Err(ApiError::bad_request(
-            "invalid_kind",
-            "kind must be music, video, picture or book",
+            "invalid_url",
+            "url must start with http:// or https://",
         ));
     }
-    let mode = body
-        .mode
-        .clone()
-        .filter(|m| m == "audio+thumb" || m == "full")
-        .unwrap_or_else(|| models::default_mode(&body.kind).to_string());
-    if mode == "audio+thumb" && body.kind != "music" {
-        return Err(ApiError::bad_request(
-            "invalid_mode",
-            "audio+thumb only applies to music",
-        ));
-    }
+    let mode = resolve_job_mode(&body.kind, body.mode.as_deref())
+        .map_err(|(code, message)| ApiError::bad_request(code, message))?;
 
     let key = dedupe_key(url, &body.kind, &mode);
     if let Some(existing) = sqlx::query_as::<_, Job>(
@@ -531,7 +580,10 @@ async fn upload(
         return Err(ApiError::bad_request("invalid_kind", "unknown kind"));
     }
 
-    let dir = state.cfg.incoming_dir().join(format!("upload-{}", uuid::Uuid::now_v7()));
+    let dir = state
+        .cfg
+        .incoming_dir()
+        .join(format!("upload-{}", uuid::Uuid::now_v7()));
     tokio::fs::create_dir_all(&dir)
         .await
         .map_err(ApiError::internal)?;
@@ -667,15 +719,13 @@ async fn create_playlist(
     let name = clean_playlist_name(&body.name)?;
     let id = uuid::Uuid::now_v7().to_string();
     let now = db::now_ms();
-    sqlx::query(
-        "INSERT INTO playlists (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(&name)
-    .bind(now)
-    .bind(now)
-    .execute(&state.pool)
-    .await?;
+    sqlx::query("INSERT INTO playlists (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+        .bind(&id)
+        .bind(&name)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await?;
 
     Ok((
         StatusCode::CREATED,
@@ -832,14 +882,12 @@ async fn reorder_playlist(
     let now = db::now_ms();
     let mut tx = state.pool.begin().await?;
     for (position, item_id) in body.item_ids.iter().enumerate() {
-        sqlx::query(
-            "UPDATE playlist_items SET position = ? WHERE playlist_id = ? AND item_id = ?",
-        )
-        .bind(position as i64)
-        .bind(&id)
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("UPDATE playlist_items SET position = ? WHERE playlist_id = ? AND item_id = ?")
+            .bind(position as i64)
+            .bind(&id)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await?;
     }
     sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
         .bind(now)
@@ -850,7 +898,8 @@ async fn reorder_playlist(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {    let db_ok = sqlx::query_scalar::<_, i64>("SELECT 1")
+async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let db_ok = sqlx::query_scalar::<_, i64>("SELECT 1")
         .fetch_one(&state.pool)
         .await
         .is_ok();
@@ -899,13 +948,33 @@ mod tests {
         assert_eq!(fts_terms("dark side"), vec!["\"dark\"*", "\"side\"*"]);
         assert!(fts_terms("   ").is_empty());
         let injected = fts_terms("\"; DROP TABLE items; --");
-        assert!(injected.iter().all(|t| t.starts_with('"') && t.ends_with('*')));
+        assert!(injected
+            .iter()
+            .all(|t| t.starts_with('"') && t.ends_with('*')));
         assert!(injected.iter().all(|t| !t.contains(';')));
     }
 
     #[test]
     fn dedupe_key_is_stable_and_input_sensitive() {
-        assert_eq!(dedupe_key("u", "music", "full"), dedupe_key("u", "music", "full"));
-        assert_ne!(dedupe_key("u", "music", "full"), dedupe_key("u", "music", "audio+thumb"));
+        assert_eq!(
+            dedupe_key("u", "music", "full"),
+            dedupe_key("u", "music", "full")
+        );
+        assert_ne!(
+            dedupe_key("u", "music", "full"),
+            dedupe_key("u", "music", "audio+thumb")
+        );
+    }
+
+    #[test]
+    fn job_mode_matches_the_kind() {
+        assert_eq!(resolve_job_mode("music", None).unwrap(), "audio+thumb");
+        assert_eq!(resolve_job_mode("video", None).unwrap(), "full");
+        assert_eq!(resolve_job_mode("book", Some("full")).unwrap(), "full");
+
+        assert!(resolve_job_mode("music", Some("full")).is_err());
+        assert!(resolve_job_mode("video", Some("audio+thumb")).is_err());
+        assert!(resolve_job_mode("music", Some("nonsense")).is_err());
+        assert!(resolve_job_mode("podcast", None).is_err());
     }
 }

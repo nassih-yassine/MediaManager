@@ -12,6 +12,8 @@ function item(partial: Partial<Item> & { id: string; title: string }): Item {
     durationMs: null,
     width: null,
     height: null,
+    positionMs: 0,
+    lastPlayedAt: null,
     createdAt: 0,
     fileUrl: `/files/${partial.id}`,
     thumbUrl: null,

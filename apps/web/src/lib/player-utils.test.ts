@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   clamp01,
   indexAfterRemoval,
+  indexAfterRemovingAll,
   moveItem,
   nextIndex,
   prevIndex,
   removeAt,
+  resumeTarget,
 } from "./player-utils";
 
 describe("nextIndex", () => {
@@ -88,11 +90,52 @@ describe("indexAfterRemoval", () => {
   });
 });
 
+describe("indexAfterRemovingAll", () => {
+  const items = [{ id: "a" }, { id: "b" }, { id: "a" }, { id: "c" }];
+
+  it("accounts for duplicates removed before the current index", () => {
+    expect(indexAfterRemovingAll(items, 3, "a")).toBe(1);
+  });
+
+  it("keeps the current item when earlier duplicates are removed", () => {
+    expect(indexAfterRemovingAll(items, 1, "a")).toBe(0);
+  });
+
+  it("clamps to the end when the tail is removed", () => {
+    expect(indexAfterRemovingAll([{ id: "a" }, { id: "b" }], 1, "b")).toBe(0);
+  });
+
+  it("resets when everything is removed", () => {
+    expect(indexAfterRemovingAll([{ id: "a" }, { id: "a" }], 1, "a")).toBe(0);
+  });
+});
+
 describe("clamp01", () => {
   it("clamps and guards NaN", () => {
     expect(clamp01(-1)).toBe(0);
     expect(clamp01(2)).toBe(1);
     expect(clamp01(0.4)).toBe(0.4);
     expect(clamp01(Number.NaN)).toBe(0);
+  });
+});
+
+describe("resumeTarget", () => {
+  it("resumes from a stored position", () => {
+    expect(resumeTarget(30_000, 600_000)).toBe(30);
+  });
+
+  it("ignores a position that barely started", () => {
+    expect(resumeTarget(2_000, 600_000)).toBeNull();
+    expect(resumeTarget(0, 600_000)).toBeNull();
+    expect(resumeTarget(null, 600_000)).toBeNull();
+  });
+
+  it("ignores a finished item", () => {
+    expect(resumeTarget(598_000, 600_000)).toBeNull();
+  });
+
+  it("ignores unknown durations", () => {
+    expect(resumeTarget(30_000, null)).toBeNull();
+    expect(resumeTarget(30_000, 0)).toBeNull();
   });
 });

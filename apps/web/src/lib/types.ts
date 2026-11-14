@@ -12,6 +12,8 @@ export interface Item {
   durationMs: number | null;
   width: number | null;
   height: number | null;
+  positionMs: number;
+  lastPlayedAt: number | null;
   createdAt: number;
   fileUrl: string;
   thumbUrl: string | null;

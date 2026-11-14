@@ -118,6 +118,11 @@ export function WatchView() {
                   {duration}
                 </span>
               ) : null}
+              {item.positionMs > 3_000 ? (
+                <span className="rounded-full border border-accent/40 px-2.5 py-1 font-mono text-[11px] text-accent">
+                  Resume {formatDuration(item.positionMs)}
+                </span>
+              ) : null}
               <span className="rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-muted">
                 {formatDate(item.createdAt)}
               </span>

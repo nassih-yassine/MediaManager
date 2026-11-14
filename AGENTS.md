@@ -12,8 +12,9 @@ make dev        # API :8787 + web :3000
 make api        # API only
 make worker     # worker only (MM_ROLE=worker)
 make web        # Next dev server only
-make test       # cargo test (9) + vitest (26)
+make test       # cargo test (11) + vitest (48)
 make test-web   # vitest only
+make e2e        # real Chromium smoke test; needs `make dev` running
 make check      # cargo check + tsc --noEmit
 make lint       # eslint
 cd apps/web && npm run build   # works with the backend down
@@ -49,7 +50,8 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - SQLite runs in WAL with one writer. Keep write transactions short and never
   hold one across a download.
 - FTS5 is created at runtime (`db::ensure_fts`). If it is unavailable, search
-  falls back to `LIKE`. Don't assume `MATCH` exists.
+  falls back to `LIKE`. Don't assume `MATCH` exists. Its update trigger is scoped to
+  `UPDATE OF title`, so progress writes must not reindex the library.
 - Storage is sharded: `<kind>/<id[0:2]>/<id>.<ext>`, thumbs in
   `.thumbs/<prefix>/<id>.jpg`. Build paths only through `media::safe_join`.
 - Finalize order matters: write `.incoming/<job-id>/` → rename into the library
@@ -73,6 +75,11 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   container when the current item is music.
 - Playback state lives in the browser (`localStorage` key `mm.player.v1`), not in
   SQLite. The download queue (`jobs`) and the play queue are different things.
+- **Resume points live in SQLite** (`items.position_ms`): saved every ~8s, on pause,
+  on end (reset to 0) and on `beforeunload`. `resumeTarget()` decides whether to seek
+  (3s minimum, 5s from the end). Don't remove the keepalive save.
+- Startup recovery must only requeue **expired leases**. A blanket
+  `running -> queued` steals jobs from live workers; there is a regression test.
 - The queue drawer reorders via native HTML5 drag events. Playlist reorder persists
   by sending the full ordered `itemIds` to `PUT /api/playlists/:id/order`.
 - Playlist positions are integers; duplicates are prevented by the composite PK.
@@ -126,6 +133,14 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - Bug fixes go test-first: backend tests live in the module (`#[cfg(test)]`), frontend
   tests are Vitest files next to the code (`*.test.ts`). A fix without a reproducing
   test is incomplete.
+- **E2E** (`apps/web/e2e/smoke.mjs`, `make e2e`) drives real Chromium over CDP: item
+  render, no horizontal overflow, playback, queue removal, theme persistence, and
+  delete. It uploads a temporary `E2E DELETE ME` picture to the real library and
+  removes it again. Requires web on :3001 and API on :8787.
+- The E2E Chromium is launched with `--password-store=basic` / `--use-mock-keychain`.
+  Without those, headless runs trigger the desktop keyring unlock prompt.
+- Component tests use Testing Library + jsdom. `src/test/setup.ts` polyfills
+  `localStorage` because Node 26's global one is unavailable by default.
 - The Add form has **no audio/video mode toggle**: music is always `audio+thumb`;
   choosing Video is how you get the full file. Don't re-add the toggle.
 - Port 3000 is sometimes already held by another local dev server; Next falls

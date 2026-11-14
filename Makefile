@@ -17,6 +17,7 @@ help:
 	@echo "make web       run Next dev server"
 	@echo "make test      cargo test + vitest"
 	@echo "make test-web  vitest only"
+	@echo "make e2e       browser smoke test (needs make dev running)"
 	@echo "make check     cargo check + tsc --noEmit"
 	@echo "make lint      eslint"
 
@@ -49,6 +50,9 @@ test:
 
 test-web:
 	cd $(WEB_DIR) && npm test
+
+e2e:
+	cd $(WEB_DIR) && npm run e2e
 
 check:
 	cargo check --manifest-path $(API_DIR)/Cargo.toml

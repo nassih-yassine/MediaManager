@@ -176,6 +176,17 @@ function Card({
             </span>
           ) : null}
         </div>
+
+        {item.positionMs > 3_000 && item.durationMs ? (
+          <div className="absolute inset-x-0 bottom-0 h-0.5 bg-black/40">
+            <div
+              className="h-full bg-accent"
+              style={{
+                width: `${Math.min(100, (item.positionMs / item.durationMs) * 100)}%`,
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-2.5 px-0.5">

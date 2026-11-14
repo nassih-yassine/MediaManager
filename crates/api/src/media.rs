@@ -45,7 +45,16 @@ pub async fn make_jpeg_thumb(cfg: &Config, src: &Path, dest: &Path) -> Result<()
         .arg("-y")
         .arg("-i")
         .arg(src)
-        .args(["-vf", "scale='min(640,iw)':-2", "-frames:v", "1", "-update", "1", "-q:v", "3"])
+        .args([
+            "-vf",
+            "scale='max(2,min(640,iw))':-2",
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+            "-q:v",
+            "3",
+        ])
         .arg(dest)
         .status()
         .await
@@ -74,7 +83,14 @@ async fn pdf_cover(src: &Path, dest: &Path) -> Result<()> {
     let stem = dest.with_extension("");
     let status = Command::new("pdftoppm")
         .args([
-            "-jpeg", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "800",
+            "-jpeg",
+            "-f",
+            "1",
+            "-l",
+            "1",
+            "-singlefile",
+            "-scale-to",
+            "800",
         ])
         .arg(src)
         .arg(&stem)
@@ -133,10 +149,7 @@ async fn epub_cover(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
         .copied()
         .context("epub contains no images")?;
 
-    let tmp = std::env::temp_dir().join(format!(
-        "mm-epub-{}",
-        uuid::Uuid::now_v7()
-    ));
+    let tmp = std::env::temp_dir().join(format!("mm-epub-{}", uuid::Uuid::now_v7()));
     tokio::fs::create_dir_all(&tmp).await?;
     let status = Command::new("unzip")
         .arg("-o")
@@ -308,7 +321,12 @@ pub async fn backfill_book_covers(pool: &sqlx::SqlitePool, cfg: &Config) -> Resu
 }
 
 /// Remove an item's files (best effort) and its row. FTS triggers handle search.
-pub async fn remove_item(pool: &sqlx::SqlitePool, cfg: &Config, item: &Item, delete_file: bool) -> Result<()> {
+pub async fn remove_item(
+    pool: &sqlx::SqlitePool,
+    cfg: &Config,
+    item: &Item,
+    delete_file: bool,
+) -> Result<()> {
     if delete_file {
         if let Some(path) = safe_join(&cfg.library_dir, &item.path) {
             let _ = tokio::fs::remove_file(path).await;
@@ -439,10 +457,11 @@ mod tests {
         assert_eq!(items, 0);
         assert!(!file.exists(), "file should be gone from disk");
 
-        let job_item: Option<String> = sqlx::query_scalar("SELECT item_id FROM jobs WHERE id = 'job-1'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let job_item: Option<String> =
+            sqlx::query_scalar("SELECT item_id FROM jobs WHERE id = 'job-1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(job_item, None, "the job should survive with no item link");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -472,12 +491,14 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        sqlx::query("INSERT INTO playlists (id, name, created_at, updated_at) VALUES ('p1','Mix',?,?)")
-            .bind(now)
-            .bind(now)
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO playlists (id, name, created_at, updated_at) VALUES ('p1','Mix',?,?)",
+        )
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
         sqlx::query(
             "INSERT INTO playlist_items (playlist_id, item_id, position, added_at)
              VALUES ('p1','item-2',0,?)",

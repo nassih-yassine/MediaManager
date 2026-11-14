@@ -109,6 +109,8 @@ CREATE TABLE items (
   width       INTEGER,
   height      INTEGER,
   sha256      TEXT,                           -- set on demand, not at import
+  position_ms INTEGER NOT NULL DEFAULT 0,     -- resume point
+  last_played_at INTEGER,
   created_at  INTEGER NOT NULL,               -- unix ms
   updated_at  INTEGER NOT NULL
 );
@@ -256,9 +258,9 @@ as a separate best-effort pass so a missing mutagen/ffmpeg never fails the job.
 - **Graceful shutdown:** SIGTERM → stop accepting new jobs, cancel in-flight yt-dlp
   children, flush `jobs` state, close pool. Aborted work stays in `.incoming` and is
   re-queued by the reaper on next start.
-- **Startup sweep:** reconcile `.incoming` (re-queue or discard) and orphan library
-  files (file without an `items` row → move to `.incoming/orphan-<ts>`), then apply
-  migrations (`sqlx::migrate!`).
+- **Startup sweep:** requeue only jobs whose lease expired (`heartbeat_at` older than
+  `MM_LEASE_S`) so starting a second worker never steals a live worker's job; clear
+  `.incoming` for terminal jobs. Migrations run via `sqlx::migrate!`.
 - **Connection strategy:** a single dedicated writer path for job claims/finalize, a
   small reader pool for listing/search. WAL means reads proceed during writes; the
   `busy_timeout` absorbs the single-writer queue.
@@ -276,6 +278,7 @@ GET    /api/items/:id
 PATCH  /api/items/:id         {title}
 DELETE /api/items/:id?delete_file=true
 POST   /api/items/:id/open    launch the OS default app (books)
+POST   /api/items/:id/progress {positionMs}                     resume point
 GET    /api/playlists         summaries with count + cover
 POST   /api/playlists         {name}
 GET    /api/playlists/:id     playlist + ordered items
@@ -292,6 +295,9 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
 - **Playback is client-side.** The web app owns one `<video>` element mounted in the
   root layout, queue and volume in `localStorage`, and a Media Session handler for OS
   keys. No server "now playing" row: two tabs would fight over it.
+- **Resume:** `items.position_ms` is written every ~8s while playing, on pause, and on
+  tab close (`keepalive`); it resets to 0 on completion. Starting an item seeks there
+  when the stored point is 3s+ and at least 5s from the end.
 - **Names vs values:** the stored kind is `music`; the UI labels it **Audio**
   (`lib/kind.ts`). Music is always downloaded as `audio+thumb`; full video is the
   separate Video kind, not a mode toggle.

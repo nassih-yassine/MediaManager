@@ -58,7 +58,36 @@ export function indexAfterRemoval(
   return Math.min(index, Math.max(0, previousLength - 1));
 }
 
+/** Index after removing every occurrence of an id (queues allow duplicates). */
+export function indexAfterRemovingAll<T extends { id: string }>(
+  items: T[],
+  index: number,
+  id: string,
+): number {
+  const remaining = items.filter((item) => item.id !== id).length;
+  if (remaining === 0) return 0;
+  const removedBefore = items
+    .slice(0, index)
+    .filter((item) => item.id === id).length;
+  return Math.min(index - removedBefore, remaining - 1);
+}
+
 export function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Where playback should start for an item with a stored position.
+ * Returns null for: no position, a barely-started item, a finished item, or an
+ * item whose duration is unknown.
+ */
+export function resumeTarget(
+  positionMs: number | null | undefined,
+  durationMs: number | null | undefined,
+): number | null {
+  if (!positionMs || positionMs < 3_000) return null;
+  if (!durationMs || durationMs <= 0) return null;
+  if (positionMs >= durationMs - 5_000) return null;
+  return positionMs / 1000;
 }

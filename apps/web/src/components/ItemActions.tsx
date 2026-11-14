@@ -39,6 +39,8 @@ export function ItemActions({ item }: { item: Item }) {
     }
   }
 
+  const resume = item.positionMs > 3_000;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
@@ -50,7 +52,11 @@ export function ItemActions({ item }: { item: Item }) {
         className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90"
       >
         <PlayIcon className="h-3.5 w-3.5" />
-        {player.current?.id === item.id && player.playing ? "Pause" : "Play"}
+        {player.current?.id === item.id && player.playing
+          ? "Pause"
+          : resume
+            ? "Resume"
+            : "Play"}
       </button>
       <button
         type="button"

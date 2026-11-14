@@ -26,16 +26,25 @@ const KIND_STYLES: Record<ToastKind, string> = {
   info: "border-line",
 };
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({
+  children,
+  durationMs = 3800,
+}: {
+  children: React.ReactNode;
+  durationMs?: number;
+}) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const push = useCallback<PushToast>((message, kind = "info") => {
-    const id = Date.now() + Math.random();
-    setToasts((current) => [...current.slice(-2), { id, message, kind }]);
-    setTimeout(() => {
-      setToasts((current) => current.filter((toast) => toast.id !== id));
-    }, 3800);
-  }, []);
+  const push = useCallback<PushToast>(
+    (message, kind = "info") => {
+      const id = Date.now() + Math.random();
+      setToasts((current) => [...current.slice(-2), { id, message, kind }]);
+      setTimeout(() => {
+        setToasts((current) => current.filter((toast) => toast.id !== id));
+      }, durationMs);
+    },
+    [durationMs],
+  );
 
   const value = useMemo(() => push, [push]);
 

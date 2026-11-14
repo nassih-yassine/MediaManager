@@ -13,11 +13,14 @@ import {
 import type { Item } from "@/lib/types";
 import {
   indexAfterRemoval,
+  indexAfterRemovingAll,
   moveItem,
   nextIndex,
   prevIndex,
   removeAt as removeAtUtil,
+  resumeTarget,
 } from "@/lib/player-utils";
+import { api as apiRequest } from "@/lib/api";
 
 export type RepeatMode = "off" | "all" | "one";
 
@@ -73,6 +76,10 @@ export function usePlayer(): PlayerApi {
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const wantPlayRef = useRef(false);
+  const positionsRef = useRef(new Map<string, number>());
+  const pendingResume = useRef<number | null>(null);
+  const lastSaveWall = useRef(0);
+  const currentRef = useRef<Item | null>(null);
 
   const [queue, setQueue] = useState<Item[]>([]);
   const [index, setIndex] = useState(0);
@@ -85,6 +92,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
 
   const current = queue[index] ?? null;
+
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
+
+  const savePosition = useCallback((id: string, positionMs: number) => {
+    positionsRef.current.set(id, positionMs);
+    void apiRequest(`/api/items/${id}/progress`, {
+      method: "POST",
+      body: JSON.stringify({ positionMs: Math.round(positionMs) }),
+    }).catch(() => {});
+  }, []);
+
+  // Best-effort save when the tab closes; keepalive lets the request finish.
+  useEffect(() => {
+    function onHide() {
+      const el = videoRef.current;
+      const item = currentRef.current;
+      if (!el || !item || el.currentTime <= 1) return;
+      void fetch(`/api/items/${item.id}/progress`, {
+        method: "POST",
+        keepalive: true,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ positionMs: Math.round(el.currentTime * 1000) }),
+      }).catch(() => {});
+    }
+    window.addEventListener("beforeunload", onHide);
+    return () => window.removeEventListener("beforeunload", onHide);
+  }, []);
 
   // Restore the last session (paused: browsers block autoplay on load).
   useEffect(() => {
@@ -130,9 +166,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const pause = useCallback(() => {
     wantPlayRef.current = false;
-    videoRef.current?.pause();
+    const el = videoRef.current;
+    if (el) {
+      el.pause();
+      if (current && el.currentTime > 0) {
+        savePosition(current.id, el.currentTime * 1000);
+      }
+    }
     setPlaying(false);
-  }, []);
+  }, [current, savePosition]);
 
   const next = useCallback(() => {
     const target = nextIndex(index, queue.length, repeat);
@@ -159,6 +201,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [index, queue.length, repeat]);
 
   const handleEnded = useCallback(() => {
+    if (current) savePosition(current.id, 0);
     if (repeat === "one") {
       const el = videoRef.current;
       if (el) {
@@ -168,12 +211,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     next();
-  }, [next, repeat]);
+  }, [next, repeat, current, savePosition]);
 
   // Load a new source and play it if the change came from a play action.
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !current) return;
+    const known =
+      positionsRef.current.get(current.id) ?? current.positionMs ?? 0;
+    pendingResume.current = resumeTarget(known, current.durationMs);
+    lastSaveWall.current = 0;
     setProgress(0);
     setDuration(0);
     if (wantPlayRef.current) {
@@ -307,19 +354,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const removeItem = useCallback(
     (id: string) => {
-      const at = queue.findIndex((item) => item.id === id);
-      if (at === -1) return;
-      const nextQueue = removeAtUtil(queue, at);
-      const nextIndexValue = indexAfterRemoval(
-        index,
-        at,
-        queue.length,
-        nextQueue.length,
-      );
+      if (!queue.some((item) => item.id === id)) return;
+      const nextQueue = queue.filter((item) => item.id !== id);
       if (nextQueue.length === 0) {
         wantPlayRef.current = false;
         setPlaying(false);
+        setQueue([]);
+        setIndex(0);
+        return;
       }
+      const nextIndexValue = indexAfterRemovingAll(queue, index, id);
       setQueue(nextQueue);
       setIndex(nextIndexValue);
     },
@@ -461,7 +505,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           playsInline
           preload="metadata"
           className="aspect-video w-full bg-black"
-          onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
+          onTimeUpdate={(event) => {
+            const el = event.currentTarget;
+            setProgress(el.currentTime);
+            if (!current) return;
+            const now = Date.now();
+            if (now - lastSaveWall.current > 8000 && el.currentTime > 1) {
+              lastSaveWall.current = now;
+              savePosition(current.id, el.currentTime * 1000);
+            }
+          }}
+          onLoadedMetadata={(event) => {
+            const target = pendingResume.current;
+            if (target == null) return;
+            const el = event.currentTarget;
+            if (target < el.duration - 1) el.currentTime = target;
+            pendingResume.current = null;
+          }}
           onDurationChange={(event) =>
             setDuration(
               Number.isFinite(event.currentTarget.duration)
