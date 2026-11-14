@@ -9,7 +9,16 @@ import {
 } from "react";
 
 import { api } from "@/lib/api";
+import { resetRealtime } from "@/lib/realtime";
 import type { AuthUser } from "@/lib/types";
+
+/** Everything tied to the signed-in account, not the browser. */
+function clearUserState() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("mm.player.v1");
+  }
+  resetRealtime();
+}
 
 interface AuthState {
   user: AuthUser | null;
@@ -56,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     function unauthorized() {
       setUser(null);
+      clearUserState();
     }
     window.addEventListener("mm:unauthorized", unauthorized);
     return () => window.removeEventListener("mm:unauthorized", unauthorized);
@@ -82,9 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("mm.player.v1");
-    }
+    clearUserState();
   }, []);
 
   return (

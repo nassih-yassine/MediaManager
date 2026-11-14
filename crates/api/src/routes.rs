@@ -517,6 +517,15 @@ async fn open_item(
         .await?
         .ok_or_else(|| ApiError::not_found("item not found"))?;
 
+    // Handing an arbitrary upload to the OS opener is code execution; only
+    // books (PDF/EPUB) have a native reader.
+    if item.kind != "book" {
+        return Err(ApiError::bad_request(
+            "open_unsupported",
+            "only books can be opened in a native app",
+        ));
+    }
+
     let path = media::safe_join(&state.cfg.library_dir, &item.path)
         .ok_or_else(|| ApiError::not_found("file path is invalid"))?;
     if !path.exists() {
@@ -1571,6 +1580,14 @@ async fn admin_update_user(
     let target = auth::find_user(&state.pool, &id)
         .await?
         .ok_or_else(|| ApiError::not_found("user not found"))?;
+    if let Some(role) = body.role.as_deref() {
+        if role != "admin" && role != "user" {
+            return Err(ApiError::bad_request(
+                "invalid_role",
+                "role must be admin or user",
+            ));
+        }
+    }
     if body.role.is_some() || body.disabled.is_some() {
         if target.id == admin.id {
             return Err(ApiError::bad_request(
@@ -1609,12 +1626,6 @@ async fn admin_update_user(
             .await?;
     }
     if let Some(role) = body.role.as_deref() {
-        if role != "admin" && role != "user" {
-            return Err(ApiError::bad_request(
-                "invalid_role",
-                "role must be admin or user",
-            ));
-        }
         sqlx::query("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
             .bind(role)
             .bind(db::now_ms())
@@ -1630,10 +1641,7 @@ async fn admin_update_user(
             .execute(&state.pool)
             .await?;
         if disabled {
-            let _ = sqlx::query("DELETE FROM sessions WHERE user_id = ?")
-                .bind(&target.id)
-                .execute(&state.pool)
-                .await;
+            auth::delete_user_sessions(&state.pool, &target.id, None).await?;
         }
     }
     let updated = auth::find_user(&state.pool, &target.id)
@@ -1660,6 +1668,8 @@ async fn admin_reset_password(
     auth::set_password(&state.pool, &id, &body.password)
         .await
         .map_err(|err| ApiError::bad_request("weak_password", err.to_string()))?;
+    // A reset is also a compromise response: evict every existing session.
+    auth::delete_user_sessions(&state.pool, &id, None).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1790,9 +1800,15 @@ async fn auth_setup(
         .map(str::trim)
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| body.email.split('@').next().unwrap_or("Admin"));
-    let user = auth::create_user(&state.pool, &body.email, name, &body.password, "admin")
+    let Some(user) = auth::create_first_admin(&state.pool, &body.email, name, &body.password)
         .await
-        .map_err(|err| ApiError::bad_request("invalid_account", err.to_string()))?;
+        .map_err(|err| ApiError::bad_request("invalid_account", err.to_string()))?
+    else {
+        return Err(ApiError::bad_request(
+            "setup_complete",
+            "an account already exists",
+        ));
+    };
     auth::adopt_legacy(&state.pool).await?;
     media::ensure_default_gallery(&state.pool, &user.id).await?;
     let token = auth::create_session(&state.pool, &user.id, state.cfg.session_days).await?;
@@ -1861,6 +1877,7 @@ struct PasswordBody {
 async fn change_password(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
     Json(body): Json<PasswordBody>,
 ) -> Result<StatusCode, ApiError> {
     if !auth::check_password(&state.pool, &user.id, &body.current_password).await? {
@@ -1872,6 +1889,8 @@ async fn change_password(
     auth::set_password(&state.pool, &user.id, &body.new_password)
         .await
         .map_err(|err| ApiError::bad_request("weak_password", err.to_string()))?;
+    let keep = auth::session_token(&headers);
+    auth::delete_user_sessions(&state.pool, &user.id, keep.as_deref()).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2206,6 +2225,48 @@ mod tests {
             .unwrap();
         assert_eq!(alices_file.status(), StatusCode::OK);
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn only_books_can_reach_the_native_opener() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-open-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let user = auth::create_user(&state.pool, "a@example.com", "Ann", "secret123", "user")
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &user.id, 30).await.unwrap();
+        let now = db::now_ms();
+        sqlx::query(
+            "INSERT INTO items
+               (id, owner_id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('track', ?, 'music', 'Track', 'music/aa/track.mp3', 'audio/mpeg', 1, ?, ?)",
+        )
+        .bind(&user.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/items/track/open")
+                    .header(axum::http::header::COOKIE, format!("mm_session={token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bad = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&bad).contains("open_unsupported"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -133,6 +133,42 @@ pub async fn create_user(
         .ok_or_else(|| anyhow::anyhow!("created user missing"))
 }
 
+/// Create the first admin only if the users table is still empty. One
+/// `INSERT ... WHERE NOT EXISTS` makes concurrent setup attempts safe.
+pub async fn create_first_admin(
+    pool: &SqlitePool,
+    email: &str,
+    name: &str,
+    password: &str,
+) -> anyhow::Result<Option<User>> {
+    let email = validate_email(email).map_err(anyhow::Error::msg)?;
+    validate_password(password).map_err(anyhow::Error::msg)?;
+    let name = name.trim();
+    if name.is_empty() {
+        anyhow::bail!("name is required");
+    }
+    let hash = hash_password(password)?;
+    let now = now_ms();
+    let id = uuid::Uuid::now_v7().to_string();
+    let result = sqlx::query(
+        "INSERT INTO users (id, email, name, password_hash, role, disabled, created_at, updated_at)
+         SELECT ?, ?, ?, ?, 'admin', 0, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM users)",
+    )
+    .bind(&id)
+    .bind(&email)
+    .bind(name)
+    .bind(&hash)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Ok(None);
+    }
+    find_user(pool, &id).await
+}
+
 pub async fn find_user(pool: &SqlitePool, id: &str) -> anyhow::Result<Option<User>> {
     Ok(sqlx::query_as::<_, User>(
         "SELECT id, email, name, role, disabled, created_at, updated_at FROM users WHERE id = ?",
@@ -227,6 +263,30 @@ pub async fn delete_session(pool: &SqlitePool, token: &str) -> anyhow::Result<()
     Ok(())
 }
 
+/// Revoke all sessions for a user, optionally sparing the current one.
+pub async fn delete_user_sessions(
+    pool: &SqlitePool,
+    user_id: &str,
+    keep_token: Option<&str>,
+) -> anyhow::Result<()> {
+    match keep_token {
+        Some(token) => {
+            sqlx::query("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?")
+                .bind(user_id)
+                .bind(hash_token(token))
+                .execute(pool)
+                .await?;
+        }
+        None => {
+            sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+                .bind(user_id)
+                .execute(pool)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn user_for_token(pool: &SqlitePool, token: &str) -> anyhow::Result<Option<User>> {
     let token_hash = hash_token(token);
     let now = now_ms();
@@ -290,20 +350,31 @@ pub async fn bootstrap_admin(pool: &SqlitePool, cfg: &Config) -> anyhow::Result<
         return Ok(None);
     };
     let name = email.split('@').next().unwrap_or("Admin");
-    let user = create_user(pool, email, name, password, "admin").await?;
-    tracing::info!(email = %user.email, "created bootstrap admin");
-    Ok(Some(user))
+    match create_first_admin(pool, email, name, password).await {
+        Ok(Some(user)) => {
+            tracing::info!(email = %user.email, "created bootstrap admin");
+            Ok(Some(user))
+        }
+        Ok(None) => Ok(None),
+        // Another process won the race; treat it as already bootstrapped.
+        Err(err) if err.to_string().contains("UNIQUE") => Ok(None),
+        Err(err) => Err(err),
+    }
 }
 
 /// Adopt rows written before auth existed into the only admin account.
 pub async fn adopt_legacy(pool: &SqlitePool) -> anyhow::Result<u64> {
-    let admins: Vec<String> = sqlx::query_scalar("SELECT id FROM users WHERE role = 'admin'")
-        .fetch_all(pool)
-        .await?;
-    if admins.len() != 1 {
+    // The oldest admin owns the pre-auth library even if a second admin was
+    // created concurrently; otherwise those rows would stay invisible forever.
+    let owner: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE role = 'admin' ORDER BY created_at, rowid LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+    let Some(owner) = owner else {
         return Ok(0);
-    }
-    let owner = &admins[0];
+    };
+    let owner = &owner;
     let mut adopted = 0;
     for table in ["items", "playlists", "jobs"] {
         let result = sqlx::query(&format!(
@@ -507,6 +578,61 @@ mod tests {
         assert!(cookie.contains("Max-Age=2592000"));
         assert!(!cookie.contains("Secure"));
         assert!(session_cookie("abc", 30, true).contains("; Secure"));
+    }
+
+    /// Only one setup request may create the first admin, and adoption must
+    /// still find an owner even if a second admin raced in.
+    #[tokio::test]
+    async fn first_admin_creation_is_atomic() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let now = now_ms();
+        sqlx::query(
+            "INSERT INTO items (id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('orphan', 'music', 'Old', 'music/aa/orphan.mp3', 'audio/mpeg', 1, ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let first = create_first_admin(&pool, "one@example.com", "One", "secret123")
+            .await
+            .unwrap();
+        let second = create_first_admin(&pool, "two@example.com", "Two", "secret123")
+            .await
+            .unwrap();
+        assert!(first.is_some());
+        assert!(second.is_none(), "a second setup must not create an admin");
+
+        // A second admin can only exist by later promotion; adoption still
+        // assigns orphan rows to the oldest admin rather than nobody.
+        create_user(&pool, "later@example.com", "Later", "secret123", "admin")
+            .await
+            .unwrap();
+        adopt_legacy(&pool).await.unwrap();
+        let owner: String = sqlx::query_scalar("SELECT owner_id FROM items WHERE id = 'orphan'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(owner, first.unwrap().id);
+    }
+
+    #[tokio::test]
+    async fn session_cleanup_removes_every_session_for_a_user() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let user = create_user(&pool, "a@example.com", "Ann", "secret123", "user")
+            .await
+            .unwrap();
+        let keep = create_session(&pool, &user.id, 30).await.unwrap();
+        let drop = create_session(&pool, &user.id, 30).await.unwrap();
+        delete_user_sessions(&pool, &user.id, Some(&keep))
+            .await
+            .unwrap();
+        assert!(user_for_token(&pool, &keep).await.unwrap().is_some());
+        assert!(user_for_token(&pool, &drop).await.unwrap().is_none());
     }
 
     #[tokio::test]

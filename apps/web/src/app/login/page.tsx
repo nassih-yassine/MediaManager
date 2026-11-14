@@ -10,7 +10,12 @@ function LoginForm() {
   const { login, user, needsSetup, loading } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  const requested = params.get("next");
+  // Only same-site paths; "//evil" and absolute URLs are open redirects.
+  const next =
+    requested && requested.startsWith("/") && !requested.startsWith("//")
+      ? requested
+      : "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

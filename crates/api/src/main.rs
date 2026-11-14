@@ -73,6 +73,16 @@ async fn main() -> anyhow::Result<()> {
         client: reqwest::Client::builder()
             .user_agent(concat!("MediaManager/", env!("CARGO_PKG_VERSION")))
             .timeout(std::time::Duration::from_secs(60 * 60))
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                // Keep a public URL from bouncing the worker to a private one.
+                if attempt.previous().len() >= 5 {
+                    attempt.stop()
+                } else if worker::host_is_forbidden(attempt.url().host_str().unwrap_or_default()) {
+                    attempt.error("blocked redirect target")
+                } else {
+                    attempt.follow()
+                }
+            }))
             .build()?,
         events: {
             let (events, _) = tokio::sync::broadcast::channel(256);

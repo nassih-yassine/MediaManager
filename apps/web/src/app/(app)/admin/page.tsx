@@ -49,8 +49,8 @@ export default function AdminPage() {
   }, [user, router]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (user?.role === "admin") void load();
+  }, [user, load]);
 
   async function createUser(event: React.FormEvent) {
     event.preventDefault();

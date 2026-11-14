@@ -246,6 +246,7 @@ async fn cleanup_incoming(state: &AppState, job_id: &str) {
 }
 
 async fn download_ytdlp(state: &AppState, job: &Job) -> Result<Item> {
+    ensure_public_url(&job.url).await?;
     let dir = state.cfg.incoming_dir().join(&job.id);
     tokio::fs::create_dir_all(&dir).await?;
     let out_tpl = dir.join("%(title).180B.%(ext)s");
@@ -507,6 +508,7 @@ async fn embed_cover(cfg: &Config, audio: &Path, cover: &Path) -> Result<()> {
 }
 
 async fn download_direct(state: &AppState, job: &Job) -> Result<Item> {
+    ensure_public_url(&job.url).await?;
     let dir = state.cfg.incoming_dir().join(&job.id);
     tokio::fs::create_dir_all(&dir).await?;
 
@@ -605,6 +607,60 @@ async fn download_direct(state: &AppState, job: &Job) -> Result<Item> {
     Ok(item)
 }
 
+/// Reject loopback, private, link-local and other non-public targets so a
+/// non-admin account cannot use the worker as a network proxy.
+pub(crate) fn host_is_forbidden(host: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty()
+        || host == "localhost"
+        || host.ends_with(".localhost")
+        || host == "metadata.google.internal"
+    {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .map(ip_is_forbidden)
+        .unwrap_or(false)
+}
+
+fn ip_is_forbidden(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.octets()[0] == 100 && (64..128).contains(&v4.octets()[1])
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_unique_local()
+                || v6.is_unicast_link_local()
+        }
+    }
+}
+
+async fn ensure_public_url(raw: &str) -> Result<()> {
+    let url = reqwest::Url::parse(raw).with_context(|| format!("invalid url {raw}"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        anyhow::bail!("only http and https urls are supported");
+    }
+    let host = url.host_str().context("url has no host")?;
+    if host_is_forbidden(host) {
+        anyhow::bail!("url target is not allowed");
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    if let Ok(addrs) = tokio::net::lookup_host((host, port)).await {
+        if addrs.into_iter().any(|addr| ip_is_forbidden(addr.ip())) {
+            anyhow::bail!("url resolves to a private address");
+        }
+    }
+    Ok(())
+}
+
 fn title_from_url(url: &str) -> String {
     let trimmed = url.split('?').next().unwrap_or(url).trim_end_matches('/');
     let last = trimmed.rsplit('/').next().unwrap_or(trimmed);
@@ -649,6 +705,42 @@ fn is_permanent_error(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn private_targets_are_blocked() {
+        for host in [
+            "localhost",
+            "app.localhost",
+            "127.0.0.1",
+            "10.0.0.5",
+            "192.168.1.1",
+            "172.16.0.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "metadata.google.internal",
+        ] {
+            assert!(host_is_forbidden(host), "{host} should be blocked");
+        }
+        for host in ["example.com", "youtube.com", "8.8.8.8"] {
+            assert!(!host_is_forbidden(host), "{host} should be allowed");
+        }
+    }
+
+    #[tokio::test]
+    async fn ensure_public_url_rejects_loopback_and_other_schemes() {
+        assert!(ensure_public_url("http://127.0.0.1/x").await.is_err());
+        assert!(ensure_public_url("http://localhost:8787/api/health")
+            .await
+            .is_err());
+        assert!(ensure_public_url("file:///etc/passwd").await.is_err());
+        assert!(ensure_public_url("http://169.254.169.254/latest")
+            .await
+            .is_err());
+    }
 
     #[test]
     fn permanent_errors_are_detected() {

@@ -26,6 +26,15 @@ function ensureSource() {
 }
 
 /**
+ * Close the shared stream. Called on logout/session loss so the next account
+ * does not keep reading the previous account's events.
+ */
+export function resetRealtime() {
+  source?.close();
+  source = null;
+}
+
+/**
  * One shared SSE connection for the whole app. The handler is kept in a ref so
  * a changing callback never reconnects the stream.
  */

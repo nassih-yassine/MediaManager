@@ -67,6 +67,20 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anon"));
   });
 
+  it("clears the previous account's queue when the session expires", async () => {
+    localStorage.setItem("mm.player.v1", "{\"queue\":[\"someone-else\"]}");
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: false });
+      if (path === "/api/auth/me") return Promise.resolve({ user: ADMIN });
+      return Promise.reject(new Error("unexpected"));
+    });
+    renderProvider();
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("Ann"));
+    window.dispatchEvent(new Event("mm:unauthorized"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anon"));
+    expect(localStorage.getItem("mm.player.v1")).toBeNull();
+  });
+
   it("drops the stored play queue on logout", async () => {
     localStorage.setItem("mm.player.v1", "{\"queue\":[]}");
     mocks.api.mockImplementation((path: string) => {
