@@ -174,12 +174,9 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
             .execute(&state.pool)
             .await?;
             match notify_job_done(&state.pool, &job, &item).await {
-                Ok(Some(id)) => state.emit(
-                    "notification.created",
-                    &id,
-                    None,
-                    job.owner_id.as_deref(),
-                ),
+                Ok(Some(id)) => {
+                    state.emit("notification.created", &id, None, job.owner_id.as_deref())
+                }
                 Ok(None) => {}
                 Err(err) => tracing::warn!(%err, "could not notify finished download"),
             }
@@ -204,12 +201,9 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
             .execute(&state.pool)
             .await?;
             match notify_job_failed(&state.pool, &job, retry, &message).await {
-                Ok(Some(id)) => state.emit(
-                    "notification.created",
-                    &id,
-                    None,
-                    job.owner_id.as_deref(),
-                ),
+                Ok(Some(id)) => {
+                    state.emit("notification.created", &id, None, job.owner_id.as_deref())
+                }
                 Ok(None) => {}
                 Err(err) => tracing::warn!(%err, "could not notify failed download"),
             }
@@ -845,21 +839,24 @@ mod tests {
             .unwrap();
         assert!(!done.is_empty());
 
-        assert!(notify_job_failed(&pool, &job(Some("owner-1")), true, "timeout")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            notify_job_failed(&pool, &job(Some("owner-1")), true, "timeout")
+                .await
+                .unwrap()
+                .is_none()
+        );
         let failed = notify_job_failed(&pool, &job(Some("owner-1")), false, "permanent")
             .await
             .unwrap()
             .unwrap();
         assert!(!failed.is_empty());
 
-        let kinds: Vec<String> =
-            sqlx::query_scalar("SELECT kind FROM notifications WHERE user_id = 'owner-1' ORDER BY rowid")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
+        let kinds: Vec<String> = sqlx::query_scalar(
+            "SELECT kind FROM notifications WHERE user_id = 'owner-1' ORDER BY rowid",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
         assert_eq!(kinds, vec!["job_done", "job_failed"]);
         assert!(notify_job_done(&pool, &job(None), &item())
             .await

@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  MM_API_URL: http://127.0.0.1:8787
+
+jobs:
+  rust:
+    name: Rust tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/api
+      - name: Format
+        run: cargo fmt --manifest-path crates/api/Cargo.toml --check
+      - name: Test
+        run: cargo test --manifest-path crates/api/Cargo.toml
+
+  web:
+    name: Web checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: apps/web
+      - name: Lint
+        run: npm run lint
+        working-directory: apps/web
+      - name: Unit tests
+        run: npx vitest run
+        working-directory: apps/web
+      - name: Production build
+        run: npm run build
+        working-directory: apps/web
+
+  e2e:
+    name: Browser smoke
+    runs-on: ubuntu-24.04
+    needs: [rust, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/api
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg poppler-utils unzip
+      - uses: browser-actions/setup-chrome@v1
+      - name: Make Chrome discoverable by the smoke test
+        run: |
+          CHROME=$(command -v google-chrome-stable || command -v google-chrome)
+          sudo ln -sf "$CHROME" /usr/bin/chromium
+      - name: Build API
+        run: cargo build --manifest-path crates/api/Cargo.toml
+      - run: npm ci
+        working-directory: apps/web
+      - name: Start API with a bootstrap admin
+        env:
+          MM_LIBRARY_DIR: ${{ runner.temp }}/library
+          MM_BIND: 127.0.0.1:8787
+          MM_WEB_ORIGIN: http://127.0.0.1:3001
+          MM_ADMIN_EMAIL: ci@example.com
+          MM_ADMIN_PASSWORD: ci-password
+        run: |
+          mkdir -p "$MM_LIBRARY_DIR"
+          nohup ./crates/api/target/debug/mm > api.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8787/api/health && break
+            sleep 1
+          done
+      - name: Seed a playable item
+        run: |
+          ffmpeg -nostdin -f lavfi -i "sine=frequency=440:duration=60" -q:a 9 "$RUNNER_TEMP/seed.mp3"
+          curl -sf -c "$RUNNER_TEMP/cookies" -X POST http://127.0.0.1:8787/api/auth/login \
+            -H 'content-type: application/json' \
+            -d '{"email":"ci@example.com","password":"ci-password"}'
+          curl -sf -b "$RUNNER_TEMP/cookies" \
+            -F "file=@$RUNNER_TEMP/seed.mp3;type=audio/mpeg" \
+            "http://127.0.0.1:8787/api/uploads?kind=music&title=CI%20Track"
+      - name: Start web
+        working-directory: apps/web
+        run: |
+          nohup npx next dev -p 3001 > web.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3001/login && break
+            sleep 1
+          done
+      - name: Smoke test
+        working-directory: apps/web
+        env:
+          MM_E2E_EMAIL: ci@example.com
+          MM_E2E_PASSWORD: ci-password
+        run: node e2e/smoke.mjs
+      - name: Logs on failure
+        if: failure()
+        run: |
+          tail -200 api.log || true
+          tail -200 apps/web/web.log || true
+
+  containers:
+    name: Container images build
+    runs-on: ubuntu-24.04
+    needs: [web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: crates/api/Dockerfile
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          file: apps/web/Dockerfile
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web

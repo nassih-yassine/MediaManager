@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+**/node_modules
+target
+**/target
+library
+.next
+**/.next
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/icons
+*.db
+*.db-wal
+*.db-shm

@@ -77,6 +77,36 @@ make check       # cargo check + tsc --noEmit
 make lint        # eslint
 ```
 
+## CI/CD
+
+GitHub Actions:
+
+- **CI** (`.github/workflows/ci.yml`) on pushes and PRs: Rust fmt + tests; web
+  typecheck, lint, Vitest and production build; a browser smoke test with a
+  seeded track; and a Docker build of both images.
+- **Release** (`.github/workflows/release.yml`) on `v*` tags: desktop
+  AppImage/deb/rpm via Tauri attached to a draft GitHub release, plus
+  `ghcr.io/<repo>/api` and `/web` images tagged with the release and `latest`.
+- **Deploy** (`.github/workflows/deploy.yml`): after a successful release, or
+  manually with a tag, SSHes to the server and runs
+  `docker compose -f compose.yaml pull && up -d`.
+
+Server bootstrap (once):
+
+```sh
+git clone <repo> /opt/mediamanager && cd /opt/mediamanager
+cp deploy/.env.example .env && chmod 600 .env   # set IMAGE_PREFIX, origin, admin
+mkdir -p library && sudo chown -R 1000:1000 library
+docker login ghcr.io                          # read:packages token
+```
+
+Optional TLS: point a hostname at the server, set `PUBLIC_HOST` and
+`MM_WEB_ORIGIN=https://...`, then
+`docker compose --profile tls up -d`.
+
+Repository secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
+`DEPLOY_PATH` (optional, default `/opt/mediamanager`).
+
 ## Configuration
 
 All settings are environment variables; see `.env.example`. Defaults put the

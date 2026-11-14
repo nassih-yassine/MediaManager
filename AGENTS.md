@@ -283,6 +283,26 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - Frontend: `NotificationProvider` feeds the sidebar `NotificationBell` (portaled)
   and `/notifications`; `notification.created` refreshes the list and badge.
 
+## CI/CD
+
+- `.github/workflows/ci.yml`: Rust fmt/tests, web tsc/lint/Vitest/build, a real
+  Chromium smoke test (bootstraps `MM_ADMIN_*`, seeds a 60s MP3, runs the web on
+  :3001), and Docker builds of both images.
+- `.github/workflows/release.yml`: on `v*` tags, Tauri desktop bundles plus
+  `ghcr.io/<repo>/api` and `/web` images. The web image bakes `MM_API_URL` at
+  build time because `next.config.ts` resolves rewrites during `next build`.
+- `.github/workflows/deploy.yml`: SSH to the host and run
+  `docker compose -f compose.yaml pull && up -d`. Secrets: `DEPLOY_HOST`,
+  `DEPLOY_USER`, `DEPLOY_SSH_KEY`, optional `DEPLOY_PATH`.
+- `compose.yaml` runs `api` (uid 1000, `/library` volume, ffmpeg/yt-dlp/node in
+  the image) and `web`. Server `.env` supplies `IMAGE_PREFIX`, admin bootstrap,
+  `MM_WEB_ORIGIN` and `MM_COOKIE_SECURE=1`; TLS is the optional Caddy profile.
+- E2E requires a seeded playable item in CI; a fresh DB alone fails the resume
+  test. Do not remove the seed step without replacing it.
+- Docker is not installed on this development machine; validate workflows with
+  `python3 -c "import yaml; yaml.safe_load(open(...))"` and keep the Dockerfiles
+  in sync with real build paths.
+
 ## Smoke test after changes
 
 1. `make dev`, open `http://localhost:3000` (or the port Next reports), sign in (or

@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy (for example v0.2.0)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: TAG,DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "${DEPLOY_PATH:-/opt/mediamanager}"
+            git fetch --tags --force
+            git checkout "$TAG"
+            IMAGE_TAG="$TAG" docker compose -f compose.yaml pull
+            IMAGE_TAG="$TAG" docker compose -f compose.yaml up -d --remove-orphans
+            docker image prune -f
+            curl -fsS http://127.0.0.1:3001/login >/dev/null
