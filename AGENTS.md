@@ -142,6 +142,15 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`. Escape
   leaves library/gallery selection mode (both bars also have an explicit Cancel).
 
+## Local install (systemd user services)
+
+- `scripts/install-local.sh` installs `~/.local/bin/mm`, `mm-desktop`, a
+  `mediamanager.desktop` launcher and `mm-api.service` / `mm-web.service`
+  (production `next start -p 3001`). It requires release binaries and a built web.
+- These services hold ports 8787/3001. Stop them (`systemctl --user stop mm-api
+  mm-web`) before running `make dev`, and stop dev before the installer.
+- Desktop and web both target `http://localhost:3001`; the API keeps cookies.
+
 ## Desktop and structure
 
 - Target shape is documented in `docs/architecture.md`: Rust server is the source

@@ -48,6 +48,23 @@ The spec lives in `docs/superpowers/specs/2026-11-14-media-manager-spec.md`.
 - Rust 1.85+
 - `yt-dlp` and `ffmpeg` on `PATH` (for downloads and thumbnails)
 
+## Install on this computer (Linux)
+
+Build once, then install the API + production web as systemd user services and
+the desktop binary with a launcher entry:
+
+```sh
+cargo build --release --manifest-path crates/api/Cargo.toml
+(cd apps/desktop && npm run build)
+(cd apps/web && npm run build)
+./scripts/install-local.sh
+```
+
+Open **MediaManager** from the app launcher, or <http://localhost:3001>.
+Manage with `systemctl --user status mm-api mm-web` (stop them before `make dev`).
+Uninstall: `systemctl --user disable --now mm-api mm-web`, remove
+`~/.local/bin/mm*`, the unit files, the `.desktop` file and the icon.
+
 ## Run
 
 ```sh
