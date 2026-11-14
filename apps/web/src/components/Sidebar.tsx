@@ -59,9 +59,12 @@ export function Sidebar() {
     <aside className="w-full border-b border-line bg-panel/50 md:sticky md:top-0 md:h-dvh md:w-[252px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
       <div className="flex items-center justify-between gap-3 px-4 py-3 md:h-full md:flex-col md:items-stretch md:justify-start md:gap-7 md:px-5 md:pt-6 md:pb-28">
         <Link href="/" className="group flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent text-[15px] font-bold text-accent-ink transition-transform group-hover:-rotate-3">
-            M
-          </span>
+          <img
+            src="/logo.svg"
+            alt=""
+            className="h-8 w-8 rounded-[10px] transition-transform group-hover:-rotate-3"
+          />
+
           <span className="text-[15px] leading-none font-semibold tracking-tight">
             MediaManager
           </span>

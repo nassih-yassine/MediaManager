@@ -142,6 +142,19 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`. Escape
   leaves library/gallery selection mode (both bars also have an explicit Cancel).
 
+## Desktop and structure
+
+- Target shape is documented in `docs/architecture.md`: Rust server is the source
+  of truth; `apps/web` and `apps/desktop` are clients.
+- `apps/desktop` is a Tauri 2 window that loads the running web UI at
+  `MM_DESKTOP_URL` (default `http://localhost:3001`). It is a client, not a second
+  backend; run `make dev` first. Icons come from `apps/web/public/logo.png`.
+- The app mark is `apps/web/public/logo.svg` (also the favicon); keep the PNG in
+  sync when the SVG changes (`rsvg-convert -w 512 -h 512`).
+- Sync is server-authoritative: `sync_changes` is append-only and owner-scoped,
+  clients pull `GET /api/sync/changes?since=<seq>`, and media bytes stream on
+  demand instead of syncing. Never make a client-local DB the source of truth.
+
 ## Books
 
 - `POST /api/items/:id/open` spawns `MM_OPENER` (default `xdg-open`) detached.

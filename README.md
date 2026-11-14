@@ -52,6 +52,16 @@ make install     # npm install + cargo fetch
 make dev         # API on :8787, web on :3000
 ```
 
+Desktop (native window, same UI):
+
+```sh
+make dev                    # keep the web + API running
+cd apps/desktop && npm install
+npm run dev
+```
+
+The window points at `http://localhost:3001` (override with `MM_DESKTOP_URL`).
+
 Open <http://localhost:3000>. First run shows **Create the admin account**; existing
 media is adopted by that account. Set `MM_ADMIN_EMAIL`/`MM_ADMIN_PASSWORD` to create
 it at startup instead. Additional users are created in **Admin**. To run E2E against
