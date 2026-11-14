@@ -4,8 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { NotificationBell } from "@/components/NotificationBell";
 import { ThemePicker } from "@/components/ThemePicker";
-import { AddMediaIcon, DiscIcon, LibraryIcon, PlusIcon } from "@/components/icons";
+import {
+  AddMediaIcon,
+  DiscIcon,
+  LibraryIcon,
+  PlusIcon,
+  UserIcon,
+} from "@/components/icons";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useRealtime } from "@/lib/realtime";
@@ -15,6 +22,7 @@ const NAV = [
   { href: "/", label: "Library", icon: LibraryIcon, mobileOnly: false },
   { href: "/add", label: "Add media", icon: AddMediaIcon, mobileOnly: false },
   { href: "/playlists", label: "Playlists", icon: DiscIcon, mobileOnly: true },
+  { href: "/profile", label: "Profile", icon: UserIcon, mobileOnly: false },
 ];
 
 export function Sidebar() {
@@ -161,6 +169,9 @@ export function Sidebar() {
         </div>
 
         <div className="hidden md:mt-auto md:block md:w-full">
+          <div className="mb-2 flex justify-end">
+            <NotificationBell />
+          </div>
           <ThemePicker />
           {user ? (
             <div className="mt-3 rounded-xl border border-line bg-panel-2/60 px-2.5 py-2">
@@ -192,7 +203,8 @@ export function Sidebar() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 md:hidden">
+        <div className="flex items-center gap-2 md:hidden">
+          <NotificationBell />
           <ThemePicker />
           {user ? (
             <button

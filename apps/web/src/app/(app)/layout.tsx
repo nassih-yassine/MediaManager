@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/auth";
+import { NotificationProvider } from "@/lib/notifications";
 import { PlayerProvider } from "@/lib/player";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -32,13 +33,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGate>
       <PlayerProvider>
-        <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col md:flex-row">
-          <Sidebar />
-          <main className="min-w-0 flex-1 px-4 pt-5 pb-40 sm:px-6 md:px-10 md:pt-9">
-            {children}
-          </main>
-        </div>
-        <PlayerBar />
+        <NotificationProvider>
+          <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col md:flex-row">
+            <Sidebar />
+            <main className="min-w-0 flex-1 px-4 pt-5 pb-40 sm:px-6 md:px-10 md:pt-9">
+              {children}
+            </main>
+          </div>
+          <PlayerBar />
+        </NotificationProvider>
       </PlayerProvider>
     </AuthGate>
   );

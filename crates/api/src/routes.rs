@@ -135,6 +135,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports", get(list_my_reports).post(create_report))
         .route("/api/admin/reports", get(admin_list_reports))
         .route("/api/admin/announcements", post(admin_announce))
+        .route("/api/notifications", get(list_notifications))
+        .route("/api/notifications/unread", get(notification_unread))
+        .route("/api/notifications/read-all", post(read_all_notifications))
+        .route(
+            "/api/notifications/{id}/read",
+            post(read_notification),
+        )
         .route(
             "/api/admin/reports/{id}",
             axum::routing::patch(admin_update_report),
@@ -1501,6 +1508,88 @@ async fn remove_cover(
 }
 
 #[derive(Deserialize)]
+struct NotificationParams {
+    limit: Option<i64>,
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+struct NotificationDto {
+    id: String,
+    kind: String,
+    title: String,
+    body: Option<String>,
+    href: Option<String>,
+    read_at: Option<i64>,
+    created_at: i64,
+}
+
+async fn list_notifications(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    Query(params): Query<NotificationParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let limit = params.limit.unwrap_or(30).clamp(1, 100);
+    let notifications = sqlx::query_as::<_, NotificationDto>(
+        "SELECT id, kind, title, body, href, read_at, created_at
+           FROM notifications WHERE user_id = ?
+          ORDER BY created_at DESC, rowid DESC LIMIT ?",
+    )
+    .bind(&user.id)
+    .bind(limit)
+    .fetch_all(&state.pool)
+    .await?;
+    let unread = crate::notifications::unread_count(&state.pool, &user.id).await?;
+    Ok(Json(json!({ "notifications": notifications, "unread": unread })))
+}
+
+async fn notification_unread(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let unread = crate::notifications::unread_count(&state.pool, &user.id).await?;
+    Ok(Json(json!({ "unread": unread })))
+}
+
+async fn read_notification(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+    AxumPath(id): AxumPath<String>,
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query(
+        "UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ? AND read_at IS NULL",
+    )
+    .bind(db::now_ms())
+    .bind(&id)
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?;
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM notifications WHERE id = ? AND user_id = ?")
+        .bind(&id)
+        .bind(&user.id)
+        .fetch_optional(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 && exists.is_none() {
+        return Err(ApiError::not_found("notification not found"));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn read_all_notifications(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let result = sqlx::query(
+        "UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL",
+    )
+    .bind(db::now_ms())
+    .bind(&user.id)
+    .execute(&state.pool)
+    .await?;
+    Ok(Json(json!({ "updated": result.rows_affected() })))
+}
+
+#[derive(Deserialize)]
 struct NewAnnouncement {
     title: String,
     body: String,
@@ -2554,6 +2643,108 @@ mod tests {
             .unwrap();
         assert_eq!(alices_file.status(), StatusCode::OK);
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn notifications_are_owner_scoped() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-notifs-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let alice = auth::create_user(&state.pool, "a@example.com", "Alice", "secret123", "user")
+            .await
+            .unwrap();
+        let bob = auth::create_user(&state.pool, "b@example.com", "Bob", "secret123", "user")
+            .await
+            .unwrap();
+        let a_token = auth::create_session(&state.pool, &alice.id, 30).await.unwrap();
+        let b_token = auth::create_session(&state.pool, &bob.id, 30).await.unwrap();
+        let a_cookie = format!("mm_session={a_token}");
+        let b_cookie = format!("mm_session={b_token}");
+
+        let a_id = crate::notifications::create(&state.pool, &alice.id, "job_done", "A done", None, None)
+            .await
+            .unwrap();
+        crate::notifications::create(&state.pool, &bob.id, "job_done", "B done", None, None)
+            .await
+            .unwrap();
+        let pool = state.pool.clone();
+        let app = router(state);
+
+        let list = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/notifications")
+                    .header(axum::http::header::COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(list.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("A done"));
+        assert!(!body.contains("B done"));
+        assert!(body.contains("\"unread\":1"));
+
+        let foreign = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/notifications/00000000-0000-0000-0000-000000000000/read")
+                    .header(axum::http::header::COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
+
+        let read_all = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/notifications/read-all")
+                    .header(axum::http::header::COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(read_all.status(), StatusCode::OK);
+        let a_unread: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
+        )
+        .bind(&alice.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let b_unread: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
+        )
+        .bind(&bob.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(a_unread, 0);
+        assert_eq!(b_unread, 1);
+
+        let own = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri(format!("/api/notifications/{a_id}/read"))
+                    .header(axum::http::header::COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(own.status(), StatusCode::NO_CONTENT);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
