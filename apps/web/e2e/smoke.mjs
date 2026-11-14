@@ -416,18 +416,36 @@ async function main() {
       "library after progress reload",
     );
 
-    // Play, queue, and remove a queue row.
-    await clickCenter(byLabel(`Play ${resumeItem.title}`));
-    await sleep(2500);
-    let playback = await evaluate(
-      "(() => { const v = document.querySelector('video'); return v ? { paused: v.paused, t: v.currentTime, src: v.currentSrc } : null; })()",
+    // Play, queue, and remove a queue row. On a fast CI runner the first
+    // click can land before React hydrates, so retry once the source appears.
+    const playButton = byLabel(`Play ${resumeItem.title}`);
+    await clickCenter(playButton);
+    let hasSource = await waitFor(
+      "(() => { const v = document.querySelector('video'); return !!v && v.currentSrc !== ''; })()",
+      8000,
+      "video source",
     );
-    if (!playback || playback.paused || !playback.src) {
-      await sleep(2500);
-      playback = await evaluate(
-        "(() => { const v = document.querySelector('video'); return v ? { paused: v.paused, t: v.currentTime, src: v.currentSrc } : null; })()",
+    if (!hasSource) {
+      await clickCenter(playButton);
+      hasSource = await waitFor(
+        "(() => { const v = document.querySelector('video'); return !!v && v.currentSrc !== ''; })()",
+        8000,
+        "video source after retry",
       );
     }
+    if (!hasSource) fail("video never received a source after clicking Play");
+    if (await evaluate("document.querySelector('video').paused")) {
+      await clickCenter(playButton);
+    }
+    await waitFor(
+      "(() => { const v = document.querySelector('video'); return !!v && !v.paused; })()",
+      8000,
+      "playback to start",
+    );
+    await sleep(2200);
+    const playback = await evaluate(
+      "(() => { const v = document.querySelector('video'); return v ? { paused: v.paused, t: v.currentTime, src: v.currentSrc } : null; })()",
+    );
     if (!playback || playback.paused || !playback.src) {
       fail(`playback did not start (${JSON.stringify(playback)})`);
     }
