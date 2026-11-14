@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type ToastKind = "success" | "error" | "info";
 
@@ -34,14 +42,24 @@ export function ToastProvider({
   durationMs?: number;
 }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach(clearTimeout);
+    };
+  }, []);
 
   const push = useCallback<PushToast>(
     (message, kind = "info") => {
       const id = Date.now() + Math.random();
       setToasts((current) => [...current.slice(-2), { id, message, kind }]);
-      setTimeout(() => {
-        setToasts((current) => current.filter((toast) => toast.id !== id));
-      }, durationMs);
+      timers.current.push(
+        setTimeout(() => {
+          setToasts((current) => current.filter((toast) => toast.id !== id));
+        }, durationMs),
+      );
     },
     [durationMs],
   );

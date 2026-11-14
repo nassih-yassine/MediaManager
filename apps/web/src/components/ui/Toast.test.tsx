@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ToastProvider, useToast } from "./Toast";
 
@@ -46,6 +46,23 @@ describe("ToastProvider", () => {
       () => expect(screen.queryByText("Could not delete")).not.toBeInTheDocument(),
       { timeout: 1500 },
     );
+  });
+
+  it("cancels pending dismiss timers on unmount", () => {
+    vi.useFakeTimers();
+    try {
+      const { unmount } = render(
+        <ToastProvider durationMs={5000}>
+          <Trigger />
+        </ToastProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "save" }));
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps at most three toasts visible", async () => {
