@@ -475,7 +475,14 @@ async function main() {
     });
     console.log("PASS playback position is saved on pause");
 
-    // Theme switch + persistence.
+    // Theme switch + persistence (the picker lives on the profile page).
+    await evaluate("location.href = '/profile'");
+    await waitFor(
+      "document.body.innerText.includes('Display name') && document.body.innerText.includes('Appearance')",
+      15000,
+      "profile page",
+    );
+    await sleep(500);
     await evaluate(`${byLabel("Appearance settings")}.click()`);
     await evaluate(
       `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Ocean').click()`,
