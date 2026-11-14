@@ -107,6 +107,7 @@ function launchBrowser(profileDir, logFile) {
       "--headless=new",
       "--no-sandbox",
       "--disable-gpu",
+      "--disable-dev-shm-usage",
       "--no-first-run",
       "--autoplay-policy=no-user-gesture-required",
       // Never talk to the desktop keyring from a throwaway test profile.

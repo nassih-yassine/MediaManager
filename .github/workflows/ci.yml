@@ -73,10 +73,7 @@ jobs:
       - name: Install media tools
         run: sudo apt-get update && sudo apt-get install -y ffmpeg poppler-utils unzip
       - uses: browser-actions/setup-chrome@v1
-      - name: Make Chrome discoverable by the smoke test
-        run: |
-          CHROME=$(command -v google-chrome-stable || command -v google-chrome)
-          sudo ln -sf "$CHROME" /usr/bin/chromium
+        id: chrome
       - name: Build API
         run: cargo build --manifest-path crates/api/Cargo.toml
       - run: npm ci
@@ -117,12 +114,14 @@ jobs:
         env:
           MM_E2E_EMAIL: ci@example.com
           MM_E2E_PASSWORD: ci-password
+          MM_CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: node e2e/smoke.mjs
       - name: Logs on failure
         if: failure()
         run: |
           tail -200 api.log || true
           tail -200 apps/web/web.log || true
+          cat /tmp/mm-e2e-chrome.log || true
 
   containers:
     name: Container images build
