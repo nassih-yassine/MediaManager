@@ -1,10 +1,11 @@
 use std::path::Path;
+use std::process::Stdio;
 
 use axum::{
     extract::{DefaultBodyLimit, Multipart, Path as AxumPath, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -15,7 +16,9 @@ use tower_http::cors::CorsLayer;
 
 use crate::db;
 use crate::media;
-use crate::models::{self, Item, ItemDto, Job};
+use crate::models::{
+    self, Item, ItemDto, Job, Playlist, PlaylistDetailDto, PlaylistSummaryDto, PlaylistSummaryRow,
+};
 use crate::state::AppState;
 
 pub struct ApiError {
@@ -113,8 +116,23 @@ pub fn router(state: AppState) -> Router {
         .route("/api/metrics", get(metrics))
         .route("/api/items", get(list_items))
         .route("/api/items/{id}", get(get_item).patch(patch_item).delete(delete_item))
+        .route("/api/items/{id}/open", post(open_item))
         .route("/api/jobs", get(list_jobs).post(create_job))
         .route("/api/jobs/{id}", get(get_job).delete(cancel_job))
+        .route(
+            "/api/playlists",
+            get(list_playlists).post(create_playlist),
+        )
+        .route(
+            "/api/playlists/{id}",
+            get(get_playlist).patch(rename_playlist).delete(delete_playlist),
+        )
+        .route("/api/playlists/{id}/items", post(add_playlist_items))
+        .route(
+            "/api/playlists/{id}/items/{item_id}",
+            axum::routing::delete(remove_playlist_item),
+        )
+        .route("/api/playlists/{id}/order", put(reorder_playlist))
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(
@@ -285,8 +303,7 @@ async fn delete_item(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     Query(params): Query<DeleteParams>,
-) -> Result<StatusCode, ApiError> {
-    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+) -> Result<StatusCode, ApiError> {    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
         .bind(&id)
         .fetch_optional(&state.pool)
         .await?
@@ -298,6 +315,35 @@ async fn delete_item(
         params.delete_file.unwrap_or(false),
     )
     .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn open_item(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<StatusCode, ApiError> {
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::not_found("item not found"))?;
+
+    let path = media::safe_join(&state.cfg.library_dir, &item.path)
+        .ok_or_else(|| ApiError::not_found("file path is invalid"))?;
+    if !path.exists() {
+        return Err(ApiError::not_found("file is missing on disk"));
+    }
+
+    // The API is loopback-only; launching the user's default handler here is
+    // what makes "open in native app" possible from the browser.
+    std::process::Command::new(&state.cfg.opener)
+        .arg(&path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(ApiError::internal)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -549,8 +595,239 @@ async fn upload(
     Ok(Json(item.to_dto()))
 }
 
-async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
-    let db_ok = sqlx::query_scalar::<_, i64>("SELECT 1")
+fn clean_playlist_name(raw: &str) -> Result<String, ApiError> {
+    let name = raw.trim();
+    if name.is_empty() {
+        return Err(ApiError::bad_request(
+            "invalid_name",
+            "playlist name cannot be empty",
+        ));
+    }
+    if name.chars().count() > 80 {
+        return Err(ApiError::bad_request(
+            "invalid_name",
+            "playlist name is longer than 80 characters",
+        ));
+    }
+    Ok(name.to_string())
+}
+
+async fn list_playlists(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let rows = sqlx::query_as::<_, PlaylistSummaryRow>(
+        "SELECT p.id, p.name, p.created_at, p.updated_at,
+                COUNT(pi.item_id) AS item_count,
+                (SELECT i.thumb_path
+                   FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
+                  WHERE pi2.playlist_id = p.id
+                  ORDER BY pi2.position LIMIT 1) AS thumb_path
+           FROM playlists p
+           LEFT JOIN playlist_items pi ON pi.playlist_id = p.id
+          GROUP BY p.id
+          ORDER BY p.name COLLATE NOCASE",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
+    Ok(Json(json!({ "playlists": playlists })))
+}
+
+#[derive(Deserialize)]
+struct NewPlaylist {
+    name: String,
+}
+
+async fn create_playlist(
+    State(state): State<AppState>,
+    Json(body): Json<NewPlaylist>,
+) -> Result<(StatusCode, Json<PlaylistSummaryDto>), ApiError> {
+    let name = clean_playlist_name(&body.name)?;
+    let id = uuid::Uuid::now_v7().to_string();
+    let now = db::now_ms();
+    sqlx::query(
+        "INSERT INTO playlists (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&name)
+    .bind(now)
+    .bind(now)
+    .execute(&state.pool)
+    .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(PlaylistSummaryDto {
+            id,
+            name,
+            item_count: 0,
+            thumb_url: None,
+            created_at: now,
+            updated_at: now,
+        }),
+    ))
+}
+
+async fn get_playlist(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<PlaylistDetailDto>, ApiError> {
+    let playlist = sqlx::query_as::<_, Playlist>("SELECT * FROM playlists WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::not_found("playlist not found"))?;
+
+    let items = sqlx::query_as::<_, Item>(
+        "SELECT i.* FROM playlist_items pi
+           JOIN items i ON i.id = pi.item_id
+          WHERE pi.playlist_id = ?
+          ORDER BY pi.position, pi.added_at",
+    )
+    .bind(&id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(PlaylistDetailDto {
+        id: playlist.id,
+        name: playlist.name,
+        created_at: playlist.created_at,
+        updated_at: playlist.updated_at,
+        items: items.iter().map(|i| i.to_dto()).collect(),
+    }))
+}
+
+async fn rename_playlist(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<NewPlaylist>,
+) -> Result<StatusCode, ApiError> {
+    let name = clean_playlist_name(&body.name)?;
+    let result = sqlx::query("UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?")
+        .bind(&name)
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("playlist not found"));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_playlist(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("DELETE FROM playlists WHERE id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("playlist not found"));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistItemsBody {
+    item_ids: Vec<String>,
+}
+
+async fn add_playlist_items(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<PlaylistItemsBody>,
+) -> Result<StatusCode, ApiError> {
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .is_some();
+    if !exists {
+        return Err(ApiError::not_found("playlist not found"));
+    }
+
+    let now = db::now_ms();
+    let mut tx = state.pool.begin().await?;
+    let start: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(position), -1) FROM playlist_items WHERE playlist_id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    for (offset, item_id) in body.item_ids.iter().enumerate() {
+        // SELECT ... FROM items ignores ids that no longer exist instead of
+        // tripping the foreign key.
+        sqlx::query(
+            "INSERT OR IGNORE INTO playlist_items
+               (playlist_id, item_id, position, added_at)
+             SELECT ?, i.id, ?, ? FROM items i WHERE i.id = ?",
+        )
+        .bind(&id)
+        .bind(start + 1 + offset as i64)
+        .bind(now)
+        .bind(item_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn remove_playlist_item(
+    State(state): State<AppState>,
+    AxumPath((id, item_id)): AxumPath<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    sqlx::query("DELETE FROM playlist_items WHERE playlist_id = ? AND item_id = ?")
+        .bind(&id)
+        .bind(&item_id)
+        .execute(&state.pool)
+        .await?;
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn reorder_playlist(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<PlaylistItemsBody>,
+) -> Result<StatusCode, ApiError> {
+    let now = db::now_ms();
+    let mut tx = state.pool.begin().await?;
+    for (position, item_id) in body.item_ids.iter().enumerate() {
+        sqlx::query(
+            "UPDATE playlist_items SET position = ? WHERE playlist_id = ? AND item_id = ?",
+        )
+        .bind(position as i64)
+        .bind(&id)
+        .bind(item_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+        .bind(now)
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {    let db_ok = sqlx::query_scalar::<_, i64>("SELECT 1")
         .fetch_one(&state.pool)
         .await
         .is_ok();

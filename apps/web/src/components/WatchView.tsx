@@ -6,11 +6,15 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DeleteButton } from "@/components/DeleteButton";
+import { ItemActions } from "@/components/ItemActions";
+import { PauseIcon, PlayIcon } from "@/components/icons";
 import { api, formatBytes, formatDate, formatDuration } from "@/lib/api";
+import { usePlayer } from "@/lib/player";
 import type { Item } from "@/lib/types";
 
 export function WatchView() {
   const { id } = useParams<{ id: string }>();
+  const player = usePlayer();
   const [item, setItem] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +49,7 @@ export function WatchView() {
   }
 
   const isMusic = item.kind === "music";
+  const isCurrent = player.current?.id === item.id;
   const duration = formatDuration(item.durationMs);
 
   return (
@@ -61,56 +66,66 @@ export function WatchView() {
         {duration ? ` · ${duration}` : ""} · {formatDate(item.createdAt)}
       </p>
 
-      {isMusic ? (
-        <div className="mt-6 flex flex-col gap-6 rounded-2xl border border-line bg-panel p-5 sm:flex-row sm:items-center sm:p-6">
-          <div className="h-44 w-44 shrink-0 overflow-hidden rounded-xl border border-line bg-panel-2">
-            {item.thumbUrl ? (
-              <img
-                src={item.thumbUrl}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+      <div
+        className={`relative mt-6 overflow-hidden rounded-2xl border border-line bg-black ${
+          isMusic ? "mx-auto aspect-square w-full max-w-sm" : "aspect-video w-full"
+        }`}
+      >
+        {item.thumbUrl ? (
+          <img
+            src={item.thumbUrl}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-5xl text-line-strong">
+            {isMusic ? "♪" : "▶"}
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/25" />
+        <button
+          type="button"
+          onClick={() => {
+            if (isCurrent) player.toggle();
+            else player.playItem(item);
+          }}
+          aria-label={isCurrent && player.playing ? "Pause" : "Play"}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-accent-ink shadow-xl transition-transform hover:scale-105">
+            {isCurrent && player.playing ? (
+              <PauseIcon className="h-6 w-6" />
             ) : (
-              <div className="flex h-full items-center justify-center text-4xl text-line-strong">
-                ♪
-              </div>
+              <PlayIcon className="ml-1 h-6 w-6" />
             )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <audio src={item.fileUrl} controls className="w-full" />
-            <p className="mt-3 text-xs leading-relaxed text-muted">
-              The cover is embedded in the file too, so it shows up in other
-              players.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <video
-          src={item.fileUrl}
-          poster={item.thumbUrl ?? undefined}
-          controls
-          className="mt-6 aspect-video w-full rounded-2xl border border-line bg-black"
-        />
-      )}
+          </span>
+        </button>
+      </div>
+      <p className="mt-2 text-center text-xs text-muted">
+        Plays in the bottom bar. Double-click the floating video for fullscreen.
+      </p>
 
-      <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-5">
-        <DeleteButton id={item.id} />
-        {item.sourceUrl ? (
+      <div className="mt-6 border-t border-line pt-5">
+        <ItemActions item={item} />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <DeleteButton id={item.id} />
+          {item.sourceUrl ? (
+            <a
+              href={item.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
+            >
+              Source
+            </a>
+          ) : null}
           <a
-            href={item.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
+            href={item.fileUrl}
             className="rounded-lg border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
           >
-            Source
+            Open file
           </a>
-        ) : null}
-        <a
-          href={item.fileUrl}
-          className="rounded-lg border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
-        >
-          Open file
-        </a>
+        </div>
       </div>
     </div>
   );

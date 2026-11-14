@@ -21,6 +21,7 @@ pub struct Config {
     pub role: Role,
     pub ytdlp: String,
     pub ffmpeg: String,
+    pub opener: String,
 }
 
 fn env_or(name: &str, default: &str) -> String {
@@ -70,6 +71,7 @@ impl Config {
             role,
             ytdlp: env_or("MM_YTDLP", "yt-dlp"),
             ffmpeg: env_or("MM_FFMPEG", "ffmpeg"),
+            opener: env_or("MM_OPENER", "xdg-open"),
         })
     }
 

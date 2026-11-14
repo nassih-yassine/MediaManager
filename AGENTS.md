@@ -53,6 +53,34 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - No sqlx compile-time macros: queries are runtime strings, so there is no
   `DATABASE_URL` / `cargo sqlx prepare` step.
 
+## Player, queue, playlists, themes
+
+- **One media element only.** `PlayerProvider` (`src/lib/player.tsx`) mounts a single
+  `<video>` in the root layout and keeps it alive across navigation. Rendering a
+  second element for audio causes double playback; the existing one is hidden by its
+  container when the current item is music.
+- Playback state lives in the browser (`localStorage` key `mm.player.v1`), not in
+  SQLite. The download queue (`jobs`) and the play queue are different things.
+- The queue drawer reorders via native HTML5 drag events. Playlist reorder persists
+  by sending the full ordered `itemIds` to `PUT /api/playlists/:id/order`.
+- Playlist positions are integers; duplicates are prevented by the composite PK.
+  Deleting an item cascades it out of playlists (FK), and the client also calls
+  `player.removeItem(id)` so the queue does not keep a dead entry.
+- **Themes are tokens, not per-component colors.** `src/app/globals.css` defines
+  `--canvas`, `--panel`, `--panel-2`, `--line`, `--line-strong`, `--ink`, `--muted`,
+  `--accent`, `--accent-ink`, `--danger` for four families × light/dark. To add a
+  theme: two CSS blocks plus a swatch in `ThemePicker.tsx`. `data-theme`/`data-mode`
+  are set by the inline script in `layout.tsx` before paint.
+
+## Books
+
+- `POST /api/items/:id/open` spawns `MM_OPENER` (default `xdg-open`) detached.
+  `/read/:id` auto-opens a book once; pictures stay in the browser.
+- Covers: PDF page 1 via `pdftoppm` (fallback `magick`), EPUB via `unzip` picking a
+  cover-named image. Missing tools or a coverless EPUB leave the item without a
+  thumbnail — that is not an error.
+- EPUB preview is intentionally absent; the native reader is the feature.
+
 ## Gotchas that have already cost time
 
 - **yt-dlp JS runtime:** only `deno` is enabled by default and deno is not
@@ -74,6 +102,10 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   server-side. Check the port in the Next banner before assuming 3000.
 - Deleting an item without `?delete_file=true` leaves the file on disk. The UI
   always passes `true`; think before changing that default.
+- `pdftoppm` and `unzip` are runtime dependencies for book covers. They are present
+  here; absent ones degrade to "no cover", not a failed upload.
+- Opening `/read/:id` for a book launches the native reader on purpose. Do not
+  "fix" that by removing the effect; it is the requested behavior.
 
 ## API contract
 
@@ -85,9 +117,15 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 
 ## Smoke test after changes
 
-1. `make dev`, open `http://localhost:3000`.
+1. `make dev`, open `http://localhost:3000` (or the port Next reports).
 2. Upload a picture on `/add` → thumbnail appears in the grid.
 3. Request the file with `Range: bytes=0-99` → expect `206`.
 4. Add a YouTube URL as music → `.mp3` + JPG appear in the library, cover is
    embedded (`ffprobe` shows an `mjpeg` stream).
 5. Delete with `delete_file=true` → both DB row and file are gone.
+6. Upload a PDF as a book → cover is page 1; `Open in app` launches the reader.
+   Re-upload it at `/read/:id` to check the auto-open path.
+7. Click a card's play button, navigate to `/playlists` → audio keeps playing in
+   the bar; open the queue drawer and reorder.
+8. Create a playlist, select items in the library, add them, drag to reorder.
+9. Switch theme in the sidebar, reload → theme and mode persist.

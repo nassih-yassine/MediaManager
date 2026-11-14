@@ -52,12 +52,14 @@ fn encode_path(path: &str) -> String {
         .join("/")
 }
 
+pub fn thumb_url(path: &str) -> String {
+    let rel = path.strip_prefix(".thumbs/").unwrap_or(path);
+    format!("/thumbs/{}", encode_path(rel))
+}
+
 impl Item {
     pub fn to_dto(&self) -> ItemDto {
-        let thumb_url = self.thumb_path.as_ref().map(|p| {
-            let rel = p.strip_prefix(".thumbs/").unwrap_or(p);
-            format!("/thumbs/{}", encode_path(rel))
-        });
+        let thumb_url = self.thumb_path.as_deref().map(thumb_url);
         ItemDto {
             id: self.id.clone(),
             kind: self.kind.clone(),
@@ -203,4 +205,58 @@ pub fn default_mode(kind: &str) -> &'static str {
         "music" => "audio+thumb",
         _ => "full",
     }
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+#[allow(dead_code)]
+pub struct Playlist {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+#[allow(dead_code)]
+pub struct PlaylistSummaryRow {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub item_count: i64,
+    pub thumb_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistSummaryDto {
+    pub id: String,
+    pub name: String,
+    pub item_count: i64,
+    pub thumb_url: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl PlaylistSummaryRow {
+    pub fn to_dto(&self) -> PlaylistSummaryDto {
+        PlaylistSummaryDto {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            item_count: self.item_count,
+            thumb_url: self.thumb_path.as_deref().map(thumb_url),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistDetailDto {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub items: Vec<ItemDto>,
 }

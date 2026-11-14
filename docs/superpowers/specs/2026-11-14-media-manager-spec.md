@@ -16,7 +16,11 @@ no cloud. **Built to survive heavy use**: many concurrent downloads, large files
 - One paste-a-URL flow; audio-only vs full video is an explicit choice at submit time.
 - Music keeps its thumbnail: sidecar JPG for the UI, embedded cover art as best-effort.
 - Browse, search, play, open-in-file-manager, delete.
-- Clean UI: quiet surfaces, one accent, keyboard-first, dark and light.
+- Persistent playback: a player bar that survives navigation, a playback queue, and
+  OS media keys.
+- Organize with ordered playlists that can hold any kind.
+- Books open in the native reader; the first PDF page (or EPUB cover) is the thumbnail.
+- Clean UI: quiet surfaces, semantic tokens, four themes × light/dark.
 - Durable: a crashed process or power cut loses no job and no finished file.
 - Throughput: bounded but configurable concurrency, streaming end-to-end, no
   whole-file buffering.
@@ -25,9 +29,10 @@ no cloud. **Built to survive heavy use**: many concurrent downloads, large files
 
 - Indexing media already on disk (explicitly deferred).
 - Multi-user, accounts, internet exposure, TLS.
-- Playlists, channels, subscriptions, scheduled downloads.
+- Subscriptions, channel following, scheduled downloads.
 - Subtitles, transcoding, book format conversion, OCR.
 - Metadata editing beyond title; no tagging system yet.
+- Server-synced "now playing": playback state is per-browser, not per-account.
 - **Multi-machine / distributed scale.** Single host, one SQLite file, N worker
   processes on that host. Clustering (Postgres/Redis queue, sharded storage) is a
   deliberate future boundary, not v1.
@@ -135,6 +140,20 @@ CREATE TABLE jobs (
 CREATE INDEX idx_jobs_dequeue ON jobs(status, priority DESC, scheduled_at, created_at);
 CREATE INDEX idx_jobs_dedupe  ON jobs(dedupe_key);
 CREATE INDEX idx_jobs_item    ON jobs(item_id);
+
+-- Playlists (migration 0002). Items are removed with the playlist or the item.
+CREATE TABLE playlists (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE TABLE playlist_items (
+  playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  item_id     TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL,
+  added_at    INTEGER NOT NULL,
+  PRIMARY KEY (playlist_id, item_id)
+);
+CREATE INDEX idx_playlist_items_order ON playlist_items(playlist_id, position);
 
 CREATE VIRTUAL TABLE items_fts USING fts5(
   title, content='items', content_rowid='rowid'
@@ -256,10 +275,29 @@ GET    /api/items             ?kind=&q=&limit=&cursor=            keyset paginat
 GET    /api/items/:id
 PATCH  /api/items/:id         {title}
 DELETE /api/items/:id?delete_file=true
+POST   /api/items/:id/open    launch the OS default app (books)
+GET    /api/playlists         summaries with count + cover
+POST   /api/playlists         {name}
+GET    /api/playlists/:id     playlist + ordered items
+PATCH  /api/playlists/:id     {name}
+DELETE /api/playlists/:id
+POST   /api/playlists/:id/items            {itemIds}
+DELETE /api/playlists/:id/items/:itemId
+PUT    /api/playlists/:id/order            {itemIds}
 GET    /api/health            {status, db:"ok|degraded", queue_depth, active}
 GET    /api/metrics           Prometheus text
 GET    /files/:id/:filename   Range-capable, streamed from disk
 ```
+
+- **Playback is client-side.** The web app owns one `<video>` element mounted in the
+  root layout, queue and volume in `localStorage`, and a Media Session handler for OS
+  keys. No server "now playing" row: two tabs would fight over it.
+- **Playlists are ordered and server-side.** Positions are integers; reorder writes
+  the client's full ordered id list in one transaction. Duplicates are prevented by
+  the composite primary key.
+- **Native open** — `POST /api/items/:id/open` resolves the stored path under the
+  library root and spawns `MM_OPENER` (default `xdg-open`) detached. Loopback-only,
+  so this is the user's own machine launching their own file.
 
 - **Keyset pagination** — `?cursor=<opaque>` encodes `(created_at, rowid)` of the last
   row; the server does `WHERE (created_at,rowid) < (:ts,:id) ORDER BY created_at
@@ -270,6 +308,26 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
   reads. Returns `429` with `Retry-After`.
 - Errors are `{"error":"...","code":"..."}`; stack traces go to tracing, never to the
   client.
+
+## 12.1 Playback, queue and organization (UI)
+
+- **Player bar** (fixed, root layout): thumb, title, prev/play/next, seek, time,
+  volume/mute, shuffle, repeat off/all/one, queue drawer. One media element for the
+  whole app; video shows in a floating panel above the bar and can go fullscreen.
+- **Queue** is the play order, not the download queue. Actions everywhere: Play,
+  Play next, Add to queue. The drawer reorders by drag and removes rows. State is
+  persisted; a reload restores it paused (autoplay policy).
+- **Playlists** (`/playlists`, `/playlists/:id`): create, rename, delete, play all,
+  drag to reorder, remove entries. Adding is done from the library's multi-select bar
+  or an item page. Deleting an item cascades out of playlists.
+- **Themes**: every component uses semantic tokens (`--canvas`, `--panel`, `--line`,
+  `--ink`, `--muted`, `--accent`, `--accent-ink`, `--danger`) defined in
+  `apps/web/src/app/globals.css`. Four families (Slate, Paper, Ocean, Moss) × dark
+  and light, chosen in the sidebar and persisted in `localStorage`; the inline
+  bootstrap script applies the attributes before paint.
+- **Books**: `POST /open` launches the native reader; `/read/:id` auto-opens once and
+  shows the cover. PDF covers come from page 1 (`pdftoppm`, `magick` fallback); EPUB
+  covers are extracted from the archive (`unzip`, cover-named image preferred).
 
 ## 13. Observability
 
@@ -299,6 +357,7 @@ canonicalised `starts_with` under the library root. CORS locked to `MM_WEB_ORIGI
 | `MM_MAX_DOWNLOAD_MB` | `2048` |
 | `MM_HEARTBEAT_S` / `MM_LEASE_S` | `30` / `60` |
 | `MM_ROLE` | `combined` \| `api` \| `worker` |
+| `MM_OPENER` | `xdg-open` (books "open in app") |
 
 ## 16. Testing & verification
 

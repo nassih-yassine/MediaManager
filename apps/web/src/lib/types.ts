@@ -39,6 +39,23 @@ export interface ItemsPage {
   nextCursor: string | null;
 }
 
+export interface PlaylistSummary {
+  id: string;
+  name: string;
+  itemCount: number;
+  thumbUrl: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PlaylistDetail {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  items: Item[];
+}
+
 export const KINDS: { value: Kind | "all"; label: string }[] = [
   { value: "all", label: "All" },
   { value: "music", label: "Music" },

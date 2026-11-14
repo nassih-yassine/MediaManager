@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
+import { usePlayer } from "@/lib/player";
 
 export function DeleteButton({ id }: { id: string }) {
   const router = useRouter();
+  const player = usePlayer();
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,7 @@ export function DeleteButton({ id }: { id: string }) {
     setError(null);
     try {
       await api(`/api/items/${id}?delete_file=true`, { method: "DELETE" });
+      player.removeItem(id);
       router.push("/");
       router.refresh();
     } catch (err) {

@@ -56,6 +56,110 @@ pub async fn make_jpeg_thumb(cfg: &Config, src: &Path, dest: &Path) -> Result<()
     Ok(())
 }
 
+/// First page of a PDF (or an EPUB's cover image) as a JPEG. Best effort: a
+/// book with no cover is still a valid item.
+pub async fn book_cover(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
+    match extension_of(src).as_str() {
+        "pdf" => pdf_cover(src, dest).await,
+        "epub" => epub_cover(cfg, src, dest).await,
+        other => anyhow::bail!("no cover extractor for .{other}"),
+    }
+}
+
+async fn pdf_cover(src: &Path, dest: &Path) -> Result<()> {
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    // pdftoppm writes "<stem>.jpg" with -singlefile.
+    let stem = dest.with_extension("");
+    let status = Command::new("pdftoppm")
+        .args([
+            "-jpeg", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "800",
+        ])
+        .arg(src)
+        .arg(&stem)
+        .status()
+        .await;
+
+    if let Ok(status) = status {
+        if status.success() {
+            let produced = stem.with_extension("jpg");
+            if produced != dest && produced.exists() {
+                tokio::fs::rename(produced, dest).await?;
+            }
+            return Ok(());
+        }
+    }
+
+    // Fallback for machines without poppler.
+    let status = Command::new("magick")
+        .arg("-density")
+        .arg("150")
+        .arg(format!("{}[0]", src.display()))
+        .args(["-resize", "800x", "-quality", "85"])
+        .arg(dest)
+        .status()
+        .await
+        .context("spawning magick for pdf cover")?;
+    if !status.success() {
+        anyhow::bail!("could not render a PDF cover");
+    }
+    Ok(())
+}
+
+fn is_image_entry(name: &str) -> bool {
+    matches!(
+        extension_of(Path::new(name)).as_str(),
+        "jpg" | "jpeg" | "png" | "webp" | "gif" | "avif"
+    )
+}
+
+async fn epub_cover(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
+    let listing = Command::new("unzip")
+        .arg("-Z1")
+        .arg(src)
+        .output()
+        .await
+        .context("spawning unzip (is it installed?)")?;
+    if !listing.status.success() {
+        anyhow::bail!("could not list the epub archive");
+    }
+    let names = String::from_utf8_lossy(&listing.stdout);
+    let images: Vec<&str> = names.lines().filter(|n| is_image_entry(n)).collect();
+    let entry = images
+        .iter()
+        .find(|n| n.to_ascii_lowercase().contains("cover"))
+        .or_else(|| images.first())
+        .copied()
+        .context("epub contains no images")?;
+
+    let tmp = std::env::temp_dir().join(format!(
+        "mm-epub-{}",
+        uuid::Uuid::now_v7()
+    ));
+    tokio::fs::create_dir_all(&tmp).await?;
+    let status = Command::new("unzip")
+        .arg("-o")
+        .arg("-j")
+        .arg(src)
+        .arg(entry)
+        .arg("-d")
+        .arg(&tmp)
+        .status()
+        .await?;
+    if !status.success() {
+        let _ = tokio::fs::remove_dir_all(&tmp).await;
+        anyhow::bail!("could not extract the epub cover");
+    }
+    let file_name = Path::new(entry)
+        .file_name()
+        .context("epub entry has no file name")?;
+    let extracted = tmp.join(file_name);
+    let result = make_jpeg_thumb(cfg, &extracted, dest).await;
+    let _ = tokio::fs::remove_dir_all(&tmp).await;
+    result
+}
+
 /// Move a finished file into the sharded library layout, generate its thumbnail
 /// if one was produced, and insert the item row.
 #[allow(clippy::too_many_arguments)]
@@ -111,6 +215,17 @@ pub async fn finalize(
             Ok(()) => Some(rel),
             Err(err) => {
                 tracing::warn!(%err, "picture thumbnail failed");
+                None
+            }
+        }
+    } else if kind == "book" {
+        let rel = format!(".thumbs/{prefix}/{id}.jpg");
+        let dest = cfg.library_dir.join(&rel);
+        tokio::fs::create_dir_all(dest.parent().unwrap()).await?;
+        match book_cover(cfg, &media_dest, &dest).await {
+            Ok(()) => Some(rel),
+            Err(err) => {
+                tracing::warn!(%err, "book cover extraction failed");
                 None
             }
         }

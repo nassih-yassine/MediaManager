@@ -4,6 +4,13 @@ Local library for media you download: music, video, pictures, books. Paste a
 link, choose what to keep — audio with its cover art, or the full video — and it
 lands in a plain folder tree on disk.
 
+- Persistent player bar: play/pause, next/prev, seek, volume, shuffle, repeat,
+  and a drag-to-reorder queue that survives navigation.
+- Playlists that hold any mix of items, with drag reordering.
+- Four themes (Slate, Paper, Ocean, Moss) in light and dark.
+- Books open in your native reader; the cover is the file's first page.
+- Multi-select in the library for bulk queue / playlist / delete.
+
 - **Rust API** (`crates/api`): axum + SQLite (WAL), durable download queue,
   yt-dlp/ffmpeg for media, streaming file serving with byte ranges.
 - **Next.js web** (`apps/web`): App Router, TypeScript, Tailwind v4. Proxies

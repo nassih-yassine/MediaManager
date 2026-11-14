@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
-:root {
+/*
+ * Themes are palettes, not new layouts. Every theme defines the same semantic
+ * tokens; components only ever reference tokens. Add a theme by adding two
+ * blocks (dark + light) and a swatch in ThemePicker.tsx.
+ */
+
+:root,
+[data-theme="slate"][data-mode="dark"] {
   color-scheme: dark;
   --canvas: #0a0a0b;
   --panel: #111113;
@@ -10,24 +17,106 @@
   --ink: #f1f1f3;
   --muted: #a0a0aa;
   --accent: #9ae6b4;
-  --accent-ink: #052e16;
+  --accent-ink: #06281a;
   --danger: #f87171;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --canvas: #fbfbf8;
-    --panel: #ffffff;
-    --panel-2: #f3f3ee;
-    --line: #e3e3dc;
-    --line-strong: #c9c9c0;
-    --ink: #16161a;
-    --muted: #6c6c74;
-    --accent: #0f7a4a;
-    --accent-ink: #f2fff8;
-    --danger: #b91c1c;
-  }
+[data-theme="slate"][data-mode="light"] {
+  color-scheme: light;
+  --canvas: #fbfbf8;
+  --panel: #ffffff;
+  --panel-2: #f1f1ee;
+  --line: #e2e2dc;
+  --line-strong: #c7c7be;
+  --ink: #16161a;
+  --muted: #6a6a72;
+  --accent: #0f7a4a;
+  --accent-ink: #f2fff8;
+  --danger: #b91c1c;
+}
+
+[data-theme="paper"][data-mode="dark"] {
+  color-scheme: dark;
+  --canvas: #12100e;
+  --panel: #1a1714;
+  --panel-2: #211d19;
+  --line: #2f2a24;
+  --line-strong: #453d34;
+  --ink: #f4efe7;
+  --muted: #a89e91;
+  --accent: #e8b06a;
+  --accent-ink: #241505;
+  --danger: #f08a7a;
+}
+
+[data-theme="paper"][data-mode="light"] {
+  color-scheme: light;
+  --canvas: #f7f3ea;
+  --panel: #fffdf8;
+  --panel-2: #efe9dc;
+  --line: #e0d8c8;
+  --line-strong: #c9bda7;
+  --ink: #211c15;
+  --muted: #6f6557;
+  --accent: #9a5b12;
+  --accent-ink: #fff8ea;
+  --danger: #a53125;
+}
+
+[data-theme="ocean"][data-mode="dark"] {
+  color-scheme: dark;
+  --canvas: #071018;
+  --panel: #0c1922;
+  --panel-2: #10222e;
+  --line: #1c3340;
+  --line-strong: #2b4a5c;
+  --ink: #e6f1f7;
+  --muted: #90a6b4;
+  --accent: #5cc8f5;
+  --accent-ink: #04222f;
+  --danger: #f07f7f;
+}
+
+[data-theme="ocean"][data-mode="light"] {
+  color-scheme: light;
+  --canvas: #f2f8fb;
+  --panel: #ffffff;
+  --panel-2: #e7f1f6;
+  --line: #d3e2ea;
+  --line-strong: #b3cbd7;
+  --ink: #0d1b24;
+  --muted: #5b7280;
+  --accent: #0b6f9c;
+  --accent-ink: #f0fbff;
+  --danger: #b3261e;
+}
+
+[data-theme="moss"][data-mode="dark"] {
+  color-scheme: dark;
+  --canvas: #080c09;
+  --panel: #0e1510;
+  --panel-2: #131d16;
+  --line: #203025;
+  --line-strong: #324a39;
+  --ink: #eaf3ec;
+  --muted: #94a89a;
+  --accent: #b8e986;
+  --accent-ink: #17260a;
+  --danger: #ef8b7e;
+}
+
+[data-theme="moss"][data-mode="light"] {
+  color-scheme: light;
+  --canvas: #f4f8f2;
+  --panel: #ffffff;
+  --panel-2: #e9f0e5;
+  --line: #d7e2d1;
+  --line-strong: #b9c9b1;
+  --ink: #131a14;
+  --muted: #5f6f62;
+  --accent: #3f6f1f;
+  --accent-ink: #f4ffe9;
+  --danger: #a83a2a;
 }
 
 @theme inline {
@@ -72,6 +161,29 @@ button,
 select,
 textarea {
   font: inherit;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+/* Native selects follow the theme instead of the OS default. */
+select {
+  background-color: var(--canvas);
+  color: var(--ink);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--canvas);
 }
 
 @media (prefers-reduced-motion: reduce) {
