@@ -24,10 +24,42 @@ const CHROME =
   );
 
 const TITLE = "E2E DELETE ME";
+const EMAIL = process.env.MM_E2E_EMAIL;
+const PASSWORD = process.env.MM_E2E_PASSWORD;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+let sessionCookie = "";
+let sessionToken = "";
 
 function fail(message) {
   throw new Error(message);
+}
+
+/** API fetch carrying the signed-in session cookie. */
+function apiFetch(path, init = {}) {
+  return fetch(`${API}${path}`, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      ...(sessionCookie ? { cookie: sessionCookie } : {}),
+    },
+  });
+}
+
+async function login() {
+  if (!EMAIL || !PASSWORD) {
+    fail("set MM_E2E_EMAIL and MM_E2E_PASSWORD to an existing local account");
+  }
+  const res = await apiFetch(`/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+  });
+  if (!res.ok) fail(`login failed: ${res.status}`);
+  const raw = res.headers.getSetCookie?.()[0] ?? res.headers.get("set-cookie") ?? "";
+  sessionToken = /mm_session=([^;]+)/.exec(raw)?.[1] ?? "";
+  sessionCookie = sessionToken ? `mm_session=${sessionToken}` : "";
+  if (!sessionCookie) fail("login did not return a session cookie");
 }
 
 async function preflight() {
@@ -53,8 +85,8 @@ async function uploadFixture(title = TITLE) {
   );
   const form = new FormData();
   form.append("file", new Blob([png], { type: "image/png" }), "e2e.png");
-  const res = await fetch(
-    `${API}/api/uploads?kind=picture&title=${encodeURIComponent(title)}`,
+  const res = await apiFetch(
+    `/api/uploads?kind=picture&title=${encodeURIComponent(title)}`,
     { method: "POST", body: form },
   );
   if (!res.ok) fail(`fixture upload failed: ${res.status} ${await res.text()}`);
@@ -62,7 +94,7 @@ async function uploadFixture(title = TITLE) {
 }
 
 async function deleteIfPresent(id) {
-  await fetch(`${API}/api/items/${id}?delete_file=true`, {
+  await apiFetch(`/api/items/${id}?delete_file=true`, {
     method: "DELETE",
   }).catch(() => {});
 }
@@ -167,6 +199,14 @@ function createClient(wsUrl) {
 async function main() {
   await preflight();
   console.log("PASS preflight: web and api reachable");
+  await login();
+  console.log("PASS signed in with MM_E2E_EMAIL");
+
+  const anonymous = await fetch(`${API}/api/items`);
+  if (anonymous.status !== 401) {
+    fail(`anonymous /api/items returned ${anonymous.status}, expected 401`);
+  }
+  console.log("PASS anonymous API access is rejected");
 
   let fixture = null;
   let live = null;
@@ -180,10 +220,10 @@ async function main() {
     // Uploads land in the default gallery; detach so the picture renders as a
     // loose card on the Galleries tab (the All tab hides standalone pictures).
     const defaultGallery = (
-      await (await fetch(`${API}/api/playlists?kind=gallery`)).json()
+      await (await apiFetch(`/api/playlists?kind=gallery`)).json()
     ).playlists.find((entry) => entry.isDefault);
     if (!defaultGallery) fail("default gallery is missing");
-    await fetch(`${API}/api/playlists/${defaultGallery.id}/items/${fixture.id}`, {
+    await apiFetch(`/api/playlists/${defaultGallery.id}/items/${fixture.id}`, {
       method: "DELETE",
     });
     console.log(`PASS fixture uploaded: ${fixture.id}`);
@@ -215,6 +255,13 @@ async function main() {
     console.log("PASS DevTools session attached");
     await cdp("Runtime.enable");
     await cdp("Network.enable");
+    await cdp("Network.setCookie", {
+      name: "mm_session",
+      value: sessionToken,
+      url: WEB,
+      httpOnly: true,
+      sameSite: "Lax",
+    });
     await cdp("Emulation.setDeviceMetricsOverride", {
       width: 1440,
       height: 900,
@@ -343,12 +390,12 @@ async function main() {
     // Resume: store a position, then play that item and confirm the player
     // seeks to it.
     const musicPage = await (
-      await fetch(`${API}/api/items?kind=music&limit=1`)
+      await apiFetch(`/api/items?kind=music&limit=1`)
     ).json();
     const resumeItem = musicPage.items[0];
     if (!resumeItem) fail("no playable music item to test resume");
     resumeId = resumeItem.id;
-    await fetch(`${API}/api/items/${resumeItem.id}/progress`, {
+    await apiFetch(`/api/items/${resumeItem.id}/progress`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ positionMs: 30_000 }),
@@ -416,12 +463,12 @@ async function main() {
     await clickCenter(byLabel("Pause"));
     await sleep(700);
     const saved = await (
-      await fetch(`${API}/api/items/${resumeItem.id}`)
+      await apiFetch(`/api/items/${resumeItem.id}`)
     ).json();
     if (!(saved.positionMs > 20_000)) {
       fail(`position was not saved on pause (${saved.positionMs})`);
     }
-    await fetch(`${API}/api/items/${resumeItem.id}/progress`, {
+    await apiFetch(`/api/items/${resumeItem.id}/progress`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ positionMs: 0 }),
@@ -466,7 +513,7 @@ async function main() {
     let remaining = { total: -1 };
     for (let attempt = 0; attempt < 20; attempt += 1) {
       remaining = await (
-        await fetch(`${API}/api/items?q=${encodeURIComponent(TITLE)}`)
+        await apiFetch(`/api/items?q=${encodeURIComponent(TITLE)}`)
       ).json();
       if (remaining.total === 0) break;
       await sleep(250);
@@ -484,7 +531,7 @@ async function main() {
 
     // Live updates: a change made outside the tab appears without a refresh.
     live = await uploadFixture("E2E LIVE ITEM");
-    await fetch(`${API}/api/playlists/${defaultGallery.id}/items/${live.id}`, {
+    await apiFetch(`/api/playlists/${defaultGallery.id}/items/${live.id}`, {
       method: "DELETE",
     });
     await waitFor(
@@ -492,7 +539,7 @@ async function main() {
       12000,
       "live item appears",
     );
-    await fetch(`${API}/api/items/${live.id}?delete_file=true`, { method: "DELETE" });
+    await apiFetch(`/api/items/${live.id}?delete_file=true`, { method: "DELETE" });
     await waitFor(
       `!document.body.innerText.includes('E2E LIVE ITEM')`,
       12000,
@@ -508,7 +555,7 @@ async function main() {
     console.log("\nE2E smoke passed.");
   } finally {
     if (resumeId) {
-      await fetch(`${API}/api/items/${resumeId}/progress`, {
+      await apiFetch(`/api/items/${resumeId}/progress`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ positionMs: 0 }),

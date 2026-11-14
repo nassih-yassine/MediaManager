@@ -1,13 +1,11 @@
 //! Local authentication: password hashing, sessions, extractors, bootstrap.
 
-use std::sync::Arc;
-
 use argon2::password_hash::{
     rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
 };
 use argon2::Argon2;
 use axum::extract::FromRequestParts;
-use axum::http::header::{COOKIE, SET_COOKIE};
+use axum::http::header::COOKIE;
 use axum::http::request::Parts;
 use axum::http::HeaderMap;
 use rand::RngCore;
@@ -159,8 +157,11 @@ pub async fn authenticate(
     password: &str,
 ) -> anyhow::Result<Option<User>> {
     let Some(user) = find_user_by_email(pool, email).await? else {
-        // Flatten timing for unknown emails.
-        let _ = verify_password("$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$0000000000000000000000000000000000000000000", password);
+        // Flatten timing for unknown emails by verifying against a real hash.
+        static DUMMY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let dummy = DUMMY
+            .get_or_init(|| hash_password("not-a-real-password").unwrap_or_else(|_| String::new()));
+        let _ = verify_password(dummy, password);
         return Ok(None);
     };
     let hash: Option<String> = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = ?")
@@ -392,8 +393,6 @@ impl FromRequestParts<AppState> for AdminUser {
 pub fn set_cookie_header(cfg: &Config, token: &str) -> String {
     session_cookie(token, cfg.session_days, cfg.cookie_secure)
 }
-
-pub type SharedLimiter = Arc<LoginLimiter>;
 
 #[cfg(test)]
 mod tests {

@@ -1944,7 +1944,15 @@ async fn csrf_guard(
         axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
     ) {
         if let Some(origin) = req.headers().get(ORIGIN) {
-            if origin.to_str().ok() != Some(state.cfg.web_origin.as_str()) {
+            let origin = origin.to_str().unwrap_or_default();
+            // SameSite=Lax already blocks cross-site cookie writes; this is a
+            // second lock. Any loopback port is allowed because the dev server
+            // falls back to 3001 when 3000 is taken.
+            let loopback = origin.starts_with("http://localhost:")
+                || origin.starts_with("http://127.0.0.1:")
+                || origin == "http://[::1]";
+            let allowed = origin == state.cfg.web_origin || loopback;
+            if !allowed {
                 return Err(ApiError::forbidden());
             }
         }

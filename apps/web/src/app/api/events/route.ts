@@ -8,12 +8,19 @@ const API = process.env.MM_API_URL ?? "http://127.0.0.1:8787";
  * until the first bytes arrive, which makes EventSource open late and drop the
  * first event; a route handler passes the stream through immediately.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const cookie = request.headers.get("cookie");
   const upstream = await fetch(`${API}/api/events`, {
-    headers: { accept: "text/event-stream" },
+    headers: {
+      accept: "text/event-stream",
+      ...(cookie ? { cookie } : {}),
+    },
     cache: "no-store",
   });
 
+  if (upstream.status === 401) {
+    return new Response("unauthorized", { status: 401 });
+  }
   if (!upstream.ok || !upstream.body) {
     return new Response("events unavailable", { status: 502 });
   }

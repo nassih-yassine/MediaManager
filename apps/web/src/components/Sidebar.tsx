@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ThemePicker } from "@/components/ThemePicker";
 import { AddMediaIcon, DiscIcon, LibraryIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useRealtime } from "@/lib/realtime";
 import type { PlaylistSummary } from "@/lib/types";
 
@@ -18,6 +19,8 @@ const NAV = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -85,6 +88,21 @@ export function Sidebar() {
               </Link>
             );
           })}
+          {user?.role === "admin" ? (
+            <Link
+              href="/admin"
+              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+                pathname.startsWith("/admin")
+                  ? "bg-panel-2 text-ink"
+                  : "text-muted hover:bg-panel-2/70 hover:text-ink"
+              }`}
+            >
+              <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-current text-[9px] font-bold">
+                A
+              </span>
+              <span className="font-medium">Admin</span>
+            </Link>
+          ) : null}
         </nav>
 
         <div className="hidden md:block md:w-full">
@@ -144,13 +162,50 @@ export function Sidebar() {
 
         <div className="hidden md:mt-auto md:block md:w-full">
           <ThemePicker />
+          {user ? (
+            <div className="mt-3 rounded-xl border border-line bg-panel-2/60 px-2.5 py-2">
+              <span className="block truncate text-[13px] font-medium">
+                {user.name}
+              </span>
+              <span className="block truncate text-[11px] text-muted">
+                {user.email}
+              </span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="rounded-full border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-muted">
+                  {user.role}
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout();
+                    router.replace("/login");
+                  }}
+                  className="text-[11px] text-muted transition-colors hover:text-ink"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          ) : null}
           <p className="mt-3 px-2.5 text-[11px] leading-relaxed text-muted">
-            Your files stay in one folder on disk. This app only indexes them.
+            Your library is private to your account.
           </p>
         </div>
 
-        <div className="md:hidden">
+        <div className="flex items-center gap-3 md:hidden">
           <ThemePicker />
+          {user ? (
+            <button
+              type="button"
+              onClick={async () => {
+                await logout();
+                router.replace("/login");
+              }}
+              className="text-[11px] text-muted"
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </div>
     </aside>

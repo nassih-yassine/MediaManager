@@ -4,6 +4,8 @@ Local library for media you download: music, video, pictures, books. Paste a
 link, choose what to keep — audio with its cover art, or the full video — and it
 lands in a plain folder tree on disk.
 
+- Local accounts: email + password, private libraries per user, and an admin panel
+  for creating users and resetting passwords.
 - Persistent player bar: play/pause, next/prev, seek, volume, shuffle, repeat,
   and a drag-to-reorder queue that survives navigation.
 - Resume where you stopped: positions are saved per item (even across reloads).
@@ -46,7 +48,10 @@ make install     # npm install + cargo fetch
 make dev         # API on :8787, web on :3000
 ```
 
-Open <http://localhost:3000>.
+Open <http://localhost:3000>. First run shows **Create the admin account**; existing
+media is adopted by that account. Set `MM_ADMIN_EMAIL`/`MM_ADMIN_PASSWORD` to create
+it at startup instead. Additional users are created in **Admin**. To run E2E against
+an account: `MM_E2E_EMAIL=you@example.com MM_E2E_PASSWORD=... make e2e`.
 
 Run only the API: `make api`. Run a separate worker: `make worker`.
 

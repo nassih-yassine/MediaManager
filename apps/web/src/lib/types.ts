@@ -1,3 +1,19 @@
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: "admin" | "user";
+}
+
+export interface AdminUserRow extends AuthUser {
+  disabled: boolean;
+  items: number;
+  bytes: number;
+  playlists: number;
+  activeJobs: number;
+  createdAt: number;
+}
+
 export type Kind = "music" | "video" | "picture" | "book";
 export type CollectionKind = "playlist" | "gallery";
 

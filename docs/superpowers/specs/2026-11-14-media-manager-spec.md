@@ -388,7 +388,11 @@ liveness (process up) from readiness (DB writable, reaper and worker loops alive
 
 ## 14. Security
 
-Localhost-only default (`127.0.0.1`), no auth. Uploads and downloads are size-capped
+Localhost-only default (`127.0.0.1`). Local accounts with email + password (Argon2id)
+and hashed session cookies; every row and file is owner-scoped, and another user's
+content is 404. The first admin is created at `/setup` or from `MM_ADMIN_EMAIL` /
+`MM_ADMIN_PASSWORD`; pre-auth rows are adopted by it. Admins manage users at `/admin`
+and never browse another user's library. Uploads and downloads are size-capped
 before the body is read. Content-type and extension are validated and the user's
 chosen `kind` wins regardless of sniffed type. No shell interpolation: yt-dlp/ffmpeg
 are spawned with an argv array, never a shell string. Path traversal rejected via

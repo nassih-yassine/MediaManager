@@ -205,11 +205,42 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - `GET /api/items?kind=&q=&limit=&cursor=` uses keyset pagination
   (`created_at,rowid`), no `OFFSET`.
 - Errors are `{ "error": "...", "code": "..." }`.
-- No auth, loopback only. CORS is locked to `MM_WEB_ORIGIN`.
+- Every content request needs the `mm_session` cookie; anonymous gets `401`, another
+  user's row/file gets `404` (never `403`). `/api/health`, `/api/auth/status`,
+  `/api/auth/setup`, `/api/auth/login` and `/api/auth/logout` are the only public
+  routes. CORS is locked to `MM_WEB_ORIGIN`; state changes also reject foreign Origins.
+
+## Auth and ownership
+
+- `auth.rs` owns Argon2id hashes, hashed session tokens, the `AuthUser`/`AdminUser`
+  extractors, the login limiter, and bootstrap/adoption. Cookie is
+  `HttpOnly; SameSite=Lax; Max-Age=MM_SESSION_DAYS`.
+- **Every query is owner-scoped.** `items`, `playlists` and `jobs` carry `owner_id`.
+  When adding a handler, take `AuthUser` and add `AND owner_id = ?` to both reads and
+  writes; the two-user regression test is `other_users_items_and_files_are_invisible`.
+- **No `ServeDir` for library or thumbs.** `/files/{*path}` and `/thumbs/{*path}` look
+  up the row, compare owners, then delegate to `ServeFile` so HTTP Range (seeking)
+  still works. Do not replace this with a buffered handler.
+- The first admin comes from `/setup` or `MM_ADMIN_EMAIL`/`MM_ADMIN_PASSWORD`.
+  `auth::adopt_legacy` assigns all pre-auth rows (`owner_id IS NULL`) to the only
+  admin and marks the old `All pictures` gallery as its default. Existing media must
+  never become invisible on upgrade.
+- Default galleries are **per owner** (`ensure_default_gallery(pool, owner_id)`), and
+  `AppState` no longer holds a global default gallery. Do not reintroduce one.
+- SSE payloads carry `ownerId`; `sse_events` forwards only that owner's events. The
+  Next proxy must forward the `cookie` header or live updates 401.
+- Admin invariants live in the handlers: no self role/disable/delete, always one
+  enabled admin, and user deletion requires `deleteContent=true` (cancels jobs, then
+  removes items/files/playlists).
+- Frontend: `AuthProvider` + `(app)/layout.tsx` `AuthGate`; `/login` and `/setup` are
+  outside the shell. A `401` from `api()` emits `mm:unauthorized`, and logout clears
+  `mm.player.v1` so the next account does not inherit the queue.
+- E2E needs an existing account: `MM_E2E_EMAIL=... MM_E2E_PASSWORD=... make e2e`.
 
 ## Smoke test after changes
 
-1. `make dev`, open `http://localhost:3000` (or the port Next reports).
+1. `make dev`, open `http://localhost:3000` (or the port Next reports), sign in (or
+   complete `/setup` on a fresh database).
 2. Upload a picture on `/add` → thumbnail appears in the grid.
 3. Request the file with `Range: bytes=0-99` → expect `206`.
 4. Add a YouTube URL as music → `.mp3` + JPG appear in the library, cover is

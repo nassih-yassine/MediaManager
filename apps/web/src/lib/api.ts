@@ -16,12 +16,16 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       "content-type": "application/json",
       ...(init?.headers ?? {}),
     },
+    credentials: "same-origin",
     cache: "no-store",
     // A hung backend must surface as an error, not a permanent "Loading…".
     signal: init?.signal ?? AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith("/api/auth/")) {
+      window.dispatchEvent(new Event("mm:unauthorized"));
+    }
     const body = (await res.json().catch(() => null)) as {
       error?: string;
       code?: string;
