@@ -35,11 +35,14 @@ export default function ProfilePage() {
     setName(user?.name ?? "");
   }, [user?.name]);
 
+  const isAdmin = user?.role === "admin";
+
   useEffect(() => {
+    if (isAdmin) return;
     api<{ reports: Report[] }>("/api/reports")
       .then((data) => setReports(data.reports))
       .catch(() => {});
-  }, []);
+  }, [isAdmin]);
 
   async function saveName(event: React.FormEvent) {
     event.preventDefault();
@@ -174,6 +177,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
+      {!isAdmin ? (
       <section className="mt-4 rounded-2xl border border-line bg-panel p-4">
         <h2 className="text-sm font-semibold">Report a bug or request a feature</h2>
         <form onSubmit={sendReport} className="mt-3 space-y-2">
@@ -216,7 +220,9 @@ export default function ProfilePage() {
           </button>
         </form>
       </section>
+      ) : null}
 
+      {!isAdmin ? (
       <section className="mt-4 rounded-2xl border border-line bg-panel p-4">
         <h2 className="text-sm font-semibold">My reports</h2>
         {reports.length === 0 ? (
@@ -254,6 +260,7 @@ export default function ProfilePage() {
           </ul>
         )}
       </section>
+      ) : null}
     </div>
   );
 }

@@ -12,7 +12,7 @@ make dev        # API :8787 + web :3000
 make api        # API only
 make worker     # worker only (MM_ROLE=worker)
 make web        # Next dev server only
-make test       # cargo test (36) + vitest (92)
+make test       # cargo test (38) + vitest (96)
 make test-web   # vitest only
 make e2e        # real Chromium smoke test; needs `make dev` running
 make check      # cargo check + tsc --noEmit
@@ -130,7 +130,8 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   keep new popovers out of scroll containers. Native `<select>`/search widgets are not
   used; `SelectMenu` and `BarSlider` carry the design. Buttons get a pointer cursor
   globally (Tailwind v4 no longer does this).
-- **Themes are tokens, not per-component colors.** `src/app/globals.css` defines
+- **Themes are account settings and tokens.** The picker lives on `/profile` (not the
+  sidebar). `src/app/globals.css` defines
   `--canvas`, `--panel`, `--panel-2`, `--line`, `--line-strong`, `--ink`, `--muted`,
   `--accent`, `--accent-ink`, `--danger` for four families × light/dark. To add a
   theme: two CSS blocks plus a swatch in `ThemePicker.tsx`. `data-theme`/`data-mode`
@@ -276,4 +277,4 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 7. Click a card's play button, navigate to `/playlists` → audio keeps playing in
    the bar; open the queue drawer and reorder.
 8. Create a playlist, select items in the library, add them, drag to reorder.
-9. Switch theme in the sidebar, reload → theme and mode persist.
+9. Switch theme on `/profile`, reload (or sign in on another browser) → theme and mode persist.

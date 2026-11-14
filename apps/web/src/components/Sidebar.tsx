@@ -1,17 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { NotificationBell } from "@/components/NotificationBell";
-import { ThemePicker } from "@/components/ThemePicker";
 import {
   AddMediaIcon,
   DiscIcon,
   LibraryIcon,
   PlusIcon,
-  UserIcon,
 } from "@/components/icons";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -22,13 +19,11 @@ const NAV = [
   { href: "/", label: "Library", icon: LibraryIcon, mobileOnly: false },
   { href: "/add", label: "Add media", icon: AddMediaIcon, mobileOnly: false },
   { href: "/playlists", label: "Playlists", icon: DiscIcon, mobileOnly: true },
-  { href: "/profile", label: "Profile", icon: UserIcon, mobileOnly: false },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -168,57 +163,6 @@ export function Sidebar() {
           </div>
         </div>
 
-        <div className="hidden md:mt-auto md:block md:w-full">
-          <div className="mb-2 flex justify-end">
-            <NotificationBell />
-          </div>
-          <ThemePicker />
-          {user ? (
-            <div className="mt-3 rounded-xl border border-line bg-panel-2/60 px-2.5 py-2">
-              <span className="block truncate text-[13px] font-medium">
-                {user.name}
-              </span>
-              <span className="block truncate text-[11px] text-muted">
-                {user.email}
-              </span>
-              <div className="mt-1.5 flex items-center gap-2">
-                <span className="rounded-full border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-muted">
-                  {user.role}
-                </span>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await logout();
-                    router.replace("/login");
-                  }}
-                  className="text-[11px] text-muted transition-colors hover:text-ink"
-                >
-                  Sign out
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <p className="mt-3 px-2.5 text-[11px] leading-relaxed text-muted">
-            Your library is private to your account.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 md:hidden">
-          <NotificationBell />
-          <ThemePicker />
-          {user ? (
-            <button
-              type="button"
-              onClick={async () => {
-                await logout();
-                router.replace("/login");
-              }}
-              className="text-[11px] text-muted"
-            >
-              Sign out
-            </button>
-          ) : null}
-        </div>
       </div>
     </aside>
   );

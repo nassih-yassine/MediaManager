@@ -80,6 +80,16 @@ describe("ProfilePage", () => {
     expect(screen.getByText("open")).toBeVisible();
   });
 
+  it("hides the report form for admins", async () => {
+    mocks.user = { ...mocks.user, role: "admin" };
+    mocks.api.mockResolvedValue({ reports: [] });
+    renderPage();
+    await screen.findByRole("heading", { name: "Profile" });
+    expect(screen.queryByText("Report a bug or request a feature")).toBeNull();
+    expect(screen.queryByText("My reports")).toBeNull();
+    mocks.user = { ...mocks.user, role: "user" };
+  });
+
   it("saves the display name", async () => {
     mocks.api.mockImplementation((path: string) => {
       if (path === "/api/reports") return Promise.resolve({ reports: [] });

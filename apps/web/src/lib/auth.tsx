@@ -9,7 +9,13 @@ import {
 } from "react";
 
 import { api } from "@/lib/api";
-import { applyAppearance, type ThemeMode, type ThemeName } from "@/lib/appearance";
+import {
+  APPEARANCE_KEY,
+  applyAppearance,
+  currentAppearance,
+  type ThemeMode,
+  type ThemeName,
+} from "@/lib/appearance";
 import { resetRealtime } from "@/lib/realtime";
 import type { AuthUser } from "@/lib/types";
 
@@ -22,6 +28,8 @@ export interface Preferences {
 function clearUserState() {
   if (typeof window !== "undefined") {
     localStorage.removeItem("mm.player.v1");
+    // Never let the next account inherit this one's first-paint theme.
+    localStorage.removeItem(APPEARANCE_KEY);
   }
   resetRealtime();
 }
@@ -46,6 +54,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
 
+  const loadPreferences = useCallback(async () => {
+    const profile = await api<{ theme: ThemeName; themeMode: ThemeMode }>(
+      "/api/profile",
+    ).catch(() => null);
+    if (profile) {
+      setPreferences({ theme: profile.theme, themeMode: profile.themeMode });
+      applyAppearance(profile.theme, profile.themeMode);
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const status = await api<{ needsSetup: boolean }>("/api/auth/status");
@@ -56,25 +74,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const me = await api<{ user: AuthUser }>("/api/auth/me").catch(() => null);
       setUser(me?.user ?? null);
-      if (me?.user) {
-        const profile = await api<{ theme: ThemeName; themeMode: ThemeMode }>(
-          "/api/profile",
-        ).catch(() => null);
-        if (profile) {
-          setPreferences({ theme: profile.theme, themeMode: profile.themeMode });
-          applyAppearance(profile.theme, profile.themeMode);
-        }
-      }
+      if (me?.user) await loadPreferences();
     } catch {
       setUser(null);
     }
-  }, []);
+  }, [loadPreferences]);
 
   const savePreferences = useCallback(async (partial: Partial<Preferences>) => {
     setPreferences((current) => {
+      const fallback = currentAppearance();
       const next = {
-        theme: partial.theme ?? current?.theme ?? "slate",
-        themeMode: partial.themeMode ?? current?.themeMode ?? "dark",
+        theme: partial.theme ?? current?.theme ?? fallback.theme,
+        themeMode: partial.themeMode ?? current?.themeMode ?? fallback.mode,
       };
       applyAppearance(next.theme, next.themeMode);
       return next;
@@ -115,7 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setUser(data.user);
     setNeedsSetup(false);
-  }, []);
+    await loadPreferences();
+  }, [loadPreferences]);
 
   const setup = useCallback(async (email: string, name: string, password: string) => {
     const data = await api<{ user: AuthUser }>("/api/auth/setup", {
@@ -124,7 +136,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setUser(data.user);
     setNeedsSetup(false);
-  }, []);
+    await loadPreferences();
+  }, [loadPreferences]);
 
   const logout = useCallback(async () => {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});

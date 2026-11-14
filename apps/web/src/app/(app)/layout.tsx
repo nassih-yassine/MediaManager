@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { AppHeader } from "@/components/AppHeader";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/auth";
@@ -36,8 +37,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <NotificationProvider>
           <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col md:flex-row">
             <Sidebar />
-            <main className="min-w-0 flex-1 px-4 pt-5 pb-40 sm:px-6 md:px-10 md:pt-9">
-              {children}
+            <main className="min-w-0 flex-1 pb-40">
+              <AppHeader />
+              <div className="px-4 pt-2 sm:px-6 md:px-10 md:pt-4">{children}</div>
             </main>
           </div>
           <PlayerBar />

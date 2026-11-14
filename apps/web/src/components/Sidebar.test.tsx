@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
@@ -47,11 +46,4 @@ describe("Sidebar account menu", () => {
     expect(adminLinks).toHaveLength(1);
   });
 
-  it("signs out and returns to the login page", async () => {
-    mocks.logout.mockResolvedValue(undefined);
-    render(<Sidebar />);
-    await userEvent.click(screen.getAllByText("Sign out")[0]);
-    await waitFor(() => expect(mocks.logout).toHaveBeenCalled());
-    expect(mocks.replace).toHaveBeenCalledWith("/login");
-  });
 });

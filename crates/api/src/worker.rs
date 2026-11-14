@@ -173,20 +173,15 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
             .bind(&job.id)
             .execute(&state.pool)
             .await?;
-            if let Some(owner) = job.owner_id.as_deref() {
-                match crate::notifications::create(
-                    &state.pool,
-                    owner,
-                    "job_done",
-                    &format!("Downloaded: {}", item.title),
-                    Some(&job.url),
-                    Some(&format!("/watch/{}", item.id)),
-                )
-                .await
-                {
-                    Ok(id) => state.emit("notification.created", &id, None, Some(owner)),
-                    Err(err) => tracing::warn!(%err, "could not notify finished download"),
-                }
+            match notify_job_done(&state.pool, &job, &item).await {
+                Ok(Some(id)) => state.emit(
+                    "notification.created",
+                    &id,
+                    None,
+                    job.owner_id.as_deref(),
+                ),
+                Ok(None) => {}
+                Err(err) => tracing::warn!(%err, "could not notify finished download"),
             }
             cleanup_incoming(state, &job.id).await;
             tracing::info!(job = %job.id, item = %item.id, "job done");
@@ -208,22 +203,15 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
             .bind(&job.id)
             .execute(&state.pool)
             .await?;
-            if !retry {
-                if let Some(owner) = job.owner_id.as_deref() {
-                    match crate::notifications::create(
-                        &state.pool,
-                        owner,
-                        "job_failed",
-                        "Download failed",
-                        Some(&message),
-                        Some("/add"),
-                    )
-                    .await
-                    {
-                        Ok(id) => state.emit("notification.created", &id, None, Some(owner)),
-                        Err(err) => tracing::warn!(%err, "could not notify failed download"),
-                    }
-                }
+            match notify_job_failed(&state.pool, &job, retry, &message).await {
+                Ok(Some(id)) => state.emit(
+                    "notification.created",
+                    &id,
+                    None,
+                    job.owner_id.as_deref(),
+                ),
+                Ok(None) => {}
+                Err(err) => tracing::warn!(%err, "could not notify failed download"),
             }
             tracing::warn!(job = %job.id, retry, %message, "job failed");
         }
@@ -639,6 +627,54 @@ async fn download_direct(state: &AppState, job: &Job) -> Result<Item> {
     Ok(item)
 }
 
+/// One `job_done` row for the owner; `None` when the job has no owner.
+async fn notify_job_done(
+    pool: &sqlx::SqlitePool,
+    job: &Job,
+    item: &Item,
+) -> anyhow::Result<Option<String>> {
+    let Some(owner) = job.owner_id.as_deref() else {
+        return Ok(None);
+    };
+    Ok(Some(
+        crate::notifications::create(
+            pool,
+            owner,
+            "job_done",
+            &format!("Downloaded: {}", item.title),
+            Some(&job.url),
+            Some(&format!("/watch/{}", item.id)),
+        )
+        .await?,
+    ))
+}
+
+/// Retries stay silent; only the final failure notifies the owner.
+async fn notify_job_failed(
+    pool: &sqlx::SqlitePool,
+    job: &Job,
+    retry: bool,
+    message: &str,
+) -> anyhow::Result<Option<String>> {
+    if retry {
+        return Ok(None);
+    }
+    let Some(owner) = job.owner_id.as_deref() else {
+        return Ok(None);
+    };
+    Ok(Some(
+        crate::notifications::create(
+            pool,
+            owner,
+            "job_failed",
+            "Download failed",
+            Some(message),
+            Some("/add"),
+        )
+        .await?,
+    ))
+}
+
 /// Reject loopback, private, link-local and other non-public targets so a
 /// non-admin account cannot use the worker as a network proxy.
 pub(crate) fn host_is_forbidden(host: &str) -> bool {
@@ -737,6 +773,99 @@ fn is_permanent_error(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn notify_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO users (id, email, name, password_hash, role, created_at, updated_at)
+             VALUES ('owner-1', 'o@example.com', 'Owner', 'x', 'user', 1, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    fn job(owner: Option<&str>) -> Job {
+        Job {
+            id: "job-1".into(),
+            owner_id: owner.map(str::to_string),
+            dedupe_key: "d".into(),
+            url: "https://example.com/a".into(),
+            kind: "music".into(),
+            mode: "audio+thumb".into(),
+            status: "running".into(),
+            stage: None,
+            progress: 0.0,
+            error: None,
+            item_id: None,
+            collection_id: None,
+            priority: 0,
+            attempts: 1,
+            max_attempts: 3,
+            scheduled_at: 0,
+            claimed_by: None,
+            claimed_at: None,
+            heartbeat_at: None,
+            created_at: 1,
+            updated_at: 1,
+        }
+    }
+
+    fn item() -> Item {
+        Item {
+            rowid: 1,
+            owner_id: Some("owner-1".into()),
+            id: "item-1".into(),
+            kind: "music".into(),
+            title: "Track".into(),
+            source_url: None,
+            path: "music/aa/item-1.mp3".into(),
+            thumb_path: None,
+            mime: "audio/mpeg".into(),
+            bytes: 1,
+            duration_ms: None,
+            width: None,
+            height: None,
+            sha256: None,
+            position_ms: 0,
+            last_played_at: None,
+            created_at: 1,
+            updated_at: 1,
+        }
+    }
+
+    #[tokio::test]
+    async fn download_outcomes_notify_once_and_retries_stay_silent() {
+        let pool = notify_pool().await;
+        let done = notify_job_done(&pool, &job(Some("owner-1")), &item())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!done.is_empty());
+
+        assert!(notify_job_failed(&pool, &job(Some("owner-1")), true, "timeout")
+            .await
+            .unwrap()
+            .is_none());
+        let failed = notify_job_failed(&pool, &job(Some("owner-1")), false, "permanent")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!failed.is_empty());
+
+        let kinds: Vec<String> =
+            sqlx::query_scalar("SELECT kind FROM notifications WHERE user_id = 'owner-1' ORDER BY rowid")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(kinds, vec!["job_done", "job_failed"]);
+        assert!(notify_job_done(&pool, &job(None), &item())
+            .await
+            .unwrap()
+            .is_none());
+    }
 
     #[test]
     fn private_targets_are_blocked() {

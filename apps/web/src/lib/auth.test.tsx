@@ -91,6 +91,36 @@ describe("AuthProvider", () => {
     expect(document.documentElement.dataset.mode).toBe("light");
   });
 
+  it("loads the theme after signing in", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: false });
+      if (path === "/api/auth/me") return Promise.resolve({ user: null }).catch(() => null);
+      if (path === "/api/auth/login") return Promise.resolve({ user: ADMIN });
+      if (path === "/api/profile")
+        return Promise.resolve({ theme: "ocean", themeMode: "dark" });
+      return Promise.resolve(null);
+    });
+    function LoginProbe() {
+      const { login, preferences } = useAuth();
+      return (
+        <>
+          <button type="button" onClick={() => void login("a@example.com", "x")}>
+            go
+          </button>
+          <span data-testid="theme">{preferences?.theme ?? "none"}</span>
+        </>
+      );
+    }
+    render(
+      <AuthProvider>
+        <LoginProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("theme")).toHaveTextContent("none"));
+    screen.getByRole("button", { name: "go" }).click();
+    await waitFor(() => expect(screen.getByTestId("theme")).toHaveTextContent("ocean"));
+  });
+
   it("clears the previous account's queue when the session expires", async () => {
     localStorage.setItem("mm.player.v1", "{\"queue\":[\"someone-else\"]}");
     mocks.api.mockImplementation((path: string) => {

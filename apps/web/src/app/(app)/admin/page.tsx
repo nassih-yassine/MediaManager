@@ -29,7 +29,11 @@ export default function AdminPage() {
   const [form, setForm] = useState<CreateForm>(EMPTY);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"users" | "reports" | "announce">("users");
+  const [tab, setTab] = useState<"users" | "reports" | "announce">(() => {
+    if (typeof window === "undefined") return "users";
+    const value = new URLSearchParams(window.location.search).get("tab");
+    return value === "reports" || value === "announce" ? value : "users";
+  });
   const [reports, setReports] = useState<
     Array<{
       id: string;

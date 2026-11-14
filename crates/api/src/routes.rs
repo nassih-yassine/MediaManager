@@ -1660,6 +1660,12 @@ async fn create_report(
     AuthUser(user): AuthUser,
     Json(body): Json<NewReport>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    if user.is_admin() {
+        return Err(ApiError::bad_request(
+            "admin_no_reports",
+            "admins receive reports; they do not submit them",
+        ));
+    }
     if body.kind != "bug" && body.kind != "feature" {
         return Err(ApiError::bad_request(
             "invalid_report",
@@ -2269,12 +2275,19 @@ async fn update_profile(
             "themeMode must be light or dark",
         ));
     }
+    // COALESCE keeps concurrent partial updates from clobbering each other:
+    // only the fields present in this request are written.
     sqlx::query(
-        "UPDATE users SET name = ?, theme = ?, theme_mode = ?, updated_at = ? WHERE id = ?",
+        "UPDATE users SET
+           name       = COALESCE(?, name),
+           theme      = COALESCE(?, theme),
+           theme_mode = COALESCE(?, theme_mode),
+           updated_at = ?
+         WHERE id = ?",
     )
-    .bind(&name)
-    .bind(&theme)
-    .bind(&theme_mode)
+    .bind(body.name.as_deref().map(str::trim))
+    .bind(body.theme.as_deref())
+    .bind(body.theme_mode.as_deref())
     .bind(db::now_ms())
     .bind(&user.id)
     .execute(&state.pool)
@@ -2834,6 +2847,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn admins_do_not_submit_reports() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-admin-report-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let admin = auth::create_user(&state.pool, "admin@example.com", "Admin", "secret123", "admin")
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &admin.id, 30).await.unwrap();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::POST)
+                    .uri("/api/reports")
+                    .header(axum::http::header::COOKIE, format!("mm_session={token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"kind":"bug","title":"Admin report","body":"Should be rejected."}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn reports_notify_admins_and_resolve_once() {
         use tower::ServiceExt;
         let dir = std::env::temp_dir().join(format!("mm-reports-{}", uuid::Uuid::now_v7()));
@@ -3002,6 +3044,25 @@ mod tests {
 
         let stored = auth::find_user(&pool, &user.id).await.unwrap().unwrap();
         assert_eq!(stored.theme, "ocean");
+        assert_eq!(stored.theme_mode, "light");
+
+        // A theme-only PATCH must not revert the name (or vice versa).
+        let theme_only = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::PATCH)
+                    .uri("/api/profile")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"theme":"moss"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(theme_only.status(), StatusCode::OK);
+        let stored = auth::find_user(&pool, &user.id).await.unwrap().unwrap();
+        assert_eq!(stored.name, "Annie");
+        assert_eq!(stored.theme, "moss");
         assert_eq!(stored.theme_mode, "light");
         let _ = std::fs::remove_dir_all(&dir);
     }
