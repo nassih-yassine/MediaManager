@@ -1,0 +1,202 @@
+use std::path::{Component, Path, PathBuf};
+
+use anyhow::{Context, Result};
+use tokio::process::Command;
+
+use crate::config::Config;
+use crate::db;
+use crate::models::{self, Item};
+
+/// Join a DB-relative path under the library root, rejecting anything that
+/// could escape it.
+pub fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
+    let rel_path = Path::new(rel);
+    if rel_path.is_absolute() {
+        return None;
+    }
+    if rel_path.components().any(|c| {
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return None;
+    }
+    Some(root.join(rel_path))
+}
+
+pub fn extension_of(path: &Path) -> String {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+/// Convert an image to a JPEG thumbnail (no upscaling). Returns the written path.
+pub async fn make_jpeg_thumb(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
+    if extension_of(src) == "jpg" || extension_of(src) == "jpeg" {
+        tokio::fs::rename(src, dest).await?;
+        return Ok(());
+    }
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let status = Command::new(&cfg.ffmpeg)
+        .arg("-y")
+        .arg("-i")
+        .arg(src)
+        .args(["-vf", "scale='min(640,iw)':-2", "-frames:v", "1", "-update", "1", "-q:v", "3"])
+        .arg(dest)
+        .status()
+        .await
+        .with_context(|| format!("spawning {}", cfg.ffmpeg))?;
+    if !status.success() {
+        anyhow::bail!("ffmpeg thumbnail conversion failed for {}", src.display());
+    }
+    Ok(())
+}
+
+/// Move a finished file into the sharded library layout, generate its thumbnail
+/// if one was produced, and insert the item row.
+#[allow(clippy::too_many_arguments)]
+pub async fn finalize(
+    pool: &sqlx::SqlitePool,
+    cfg: &Config,
+    kind: &str,
+    title: &str,
+    media_src: &Path,
+    thumb_src: Option<&Path>,
+    mime: &str,
+    source_url: Option<&str>,
+    duration_ms: Option<i64>,
+    width: Option<i64>,
+    height: Option<i64>,
+) -> Result<Item> {
+    let id = uuid::Uuid::now_v7().to_string();
+    let prefix = &id[..2];
+    let kind_dir = models::kind_dir(kind);
+
+    let ext = {
+        let e = extension_of(media_src);
+        if e.is_empty() {
+            models::ext_for_mime(mime).unwrap_or("bin").to_string()
+        } else {
+            e
+        }
+    };
+
+    let media_rel = format!("{kind_dir}/{prefix}/{id}.{ext}");
+    let media_dest = cfg.library_dir.join(&media_rel);
+    tokio::fs::create_dir_all(media_dest.parent().unwrap()).await?;
+    tokio::fs::rename(media_src, &media_dest)
+        .await
+        .with_context(|| format!("moving {} into library", media_src.display()))?;
+
+    let thumb_rel = if let Some(src) = thumb_src {
+        let rel = format!(".thumbs/{prefix}/{id}.jpg");
+        let dest = cfg.library_dir.join(&rel);
+        tokio::fs::create_dir_all(dest.parent().unwrap()).await?;
+        match make_jpeg_thumb(cfg, src, &dest).await {
+            Ok(()) => Some(rel),
+            Err(err) => {
+                tracing::warn!(%err, "thumbnail generation failed; item kept without thumb");
+                None
+            }
+        }
+    } else if kind == "picture" {
+        let rel = format!(".thumbs/{prefix}/{id}.jpg");
+        let dest = cfg.library_dir.join(&rel);
+        tokio::fs::create_dir_all(dest.parent().unwrap()).await?;
+        match make_jpeg_thumb(cfg, &media_dest, &dest).await {
+            Ok(()) => Some(rel),
+            Err(err) => {
+                tracing::warn!(%err, "picture thumbnail failed");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let bytes = tokio::fs::metadata(&media_dest)
+        .await
+        .map(|m| m.len() as i64)
+        .unwrap_or(0);
+    let now = db::now_ms();
+
+    sqlx::query(
+        "INSERT INTO items
+           (id, kind, title, source_url, path, thumb_path, mime, bytes,
+            duration_ms, width, height, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(kind)
+    .bind(title)
+    .bind(source_url)
+    .bind(&media_rel)
+    .bind(&thumb_rel)
+    .bind(mime)
+    .bind(bytes)
+    .bind(duration_ms)
+    .bind(width)
+    .bind(height)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+        .bind(&id)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(item)
+}
+
+/// Remove an item's files (best effort) and its row. FTS triggers handle search.
+pub async fn remove_item(pool: &sqlx::SqlitePool, cfg: &Config, item: &Item, delete_file: bool) -> Result<()> {
+    if delete_file {
+        if let Some(path) = safe_join(&cfg.library_dir, &item.path) {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        if let Some(thumb) = &item.thumb_path {
+            if let Some(path) = safe_join(&cfg.library_dir, thumb) {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+        }
+    }
+    sqlx::query("DELETE FROM items WHERE id = ?")
+        .bind(&item.id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_path_traversal() {
+        let root = Path::new("/library");
+        assert!(safe_join(root, "../etc/passwd").is_none());
+        assert!(safe_join(root, "music/../../etc/passwd").is_none());
+        assert!(safe_join(root, "/etc/passwd").is_none());
+    }
+
+    #[test]
+    fn accepts_library_relative_paths() {
+        let root = Path::new("/library");
+        assert_eq!(
+            safe_join(root, "music/ab/id.mp3").unwrap(),
+            Path::new("/library/music/ab/id.mp3")
+        );
+    }
+
+    #[test]
+    fn extension_lowercases() {
+        assert_eq!(extension_of(Path::new("a/b/X.MP4")), "mp4");
+        assert_eq!(extension_of(Path::new("noext")), "");
+    }
+}

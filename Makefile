@@ -1,0 +1,60 @@
+# MediaManager — run from the repo root.
+# cargo runs with --manifest-path so the CWD stays at the repo root and
+# dotenvy picks up the root .env.
+
+SHELL := /bin/bash
+API_DIR := crates/api
+WEB_DIR := apps/web
+CARGO_RUN := cargo run --manifest-path $(API_DIR)/Cargo.toml
+
+.PHONY: help install dev api worker web build test check lint fmt clean
+
+help:
+	@echo "make install   install web deps + fetch rust deps"
+	@echo "make dev       run API (:8787) and web (:3000) together"
+	@echo "make api       run API only"
+	@echo "make worker    run worker only (MM_ROLE=worker)"
+	@echo "make web       run Next dev server"
+	@echo "make test      cargo test"
+	@echo "make check     cargo check + tsc --noEmit"
+	@echo "make lint      eslint"
+
+install:
+	cd $(WEB_DIR) && npm install
+	cargo fetch --manifest-path $(API_DIR)/Cargo.toml
+
+dev:
+	@trap 'kill 0' INT TERM; \
+	$(MAKE) api & \
+	$(MAKE) web & \
+	wait
+
+api:
+	$(CARGO_RUN)
+
+worker:
+	MM_ROLE=worker $(CARGO_RUN)
+
+web:
+	cd $(WEB_DIR) && npm run dev
+
+build:
+	cargo build --release --manifest-path $(API_DIR)/Cargo.toml
+	cd $(WEB_DIR) && npm run build
+
+test:
+	cargo test --manifest-path $(API_DIR)/Cargo.toml
+
+check:
+	cargo check --manifest-path $(API_DIR)/Cargo.toml
+	cd $(WEB_DIR) && npx tsc --noEmit
+
+lint:
+	cd $(WEB_DIR) && npm run lint
+
+fmt:
+	cargo fmt --manifest-path $(API_DIR)/Cargo.toml
+
+clean:
+	cargo clean --manifest-path $(API_DIR)/Cargo.toml
+	rm -rf $(WEB_DIR)/.next

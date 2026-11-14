@@ -1,0 +1,93 @@
+# AGENTS.md
+
+Local, single-user media manager for downloaded media. Next.js UI + Rust API +
+SQLite. Read `docs/superpowers/specs/2026-11-14-media-manager-spec.md` before
+touching the data model, job queue, or download pipeline.
+
+## Commands (verified on this machine)
+
+```sh
+make install    # npm install + cargo fetch
+make dev        # API :8787 + web :3000
+make api        # API only
+make worker     # worker only (MM_ROLE=worker)
+make web        # Next dev server only
+make test       # cargo test (7 unit tests)
+make check      # cargo check + tsc --noEmit
+make lint       # eslint
+cd apps/web && npm run build   # works with the backend down
+```
+
+Single Rust test from the repo root:
+
+```sh
+cargo test --manifest-path crates/api/Cargo.toml <name>
+```
+
+Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
+`dotenvy` picks up the root `.env`.
+
+## Architecture rules that are not obvious from the tree
+
+- **Rust owns SQLite and the library files.** The Next app must never write the
+  DB or compose filesystem paths. All data goes through `/api`.
+- Next rewrites `/api`, `/files`, `/thumbs` to `:8787` (`apps/web/next.config.ts`).
+  Use relative URLs in the client; never hardcode `localhost:8787`.
+- Pages are client components that fetch in `useEffect`. This is deliberate:
+  `next build` must not require a running backend.
+- **Jobs are rows, not in-memory tasks.** Claim is a single
+  `UPDATE ... RETURNING`; a 30s heartbeat keeps the lease alive; the reaper
+  re-queues `running` rows whose `heartbeat_at` is older than `MM_LEASE_S`.
+  Don't reintroduce in-process job state as the source of truth.
+- SQLite runs in WAL with one writer. Keep write transactions short and never
+  hold one across a download.
+- FTS5 is created at runtime (`db::ensure_fts`). If it is unavailable, search
+  falls back to `LIKE`. Don't assume `MATCH` exists.
+- Storage is sharded: `<kind>/<id[0:2]>/<id>.<ext>`, thumbs in
+  `.thumbs/<prefix>/<id>.jpg`. Build paths only through `media::safe_join`.
+- Finalize order matters: write `.incoming/<job-id>/` → rename into the library
+  → INSERT `items` → mark the job `done`. Keep it.
+- `/files/*` and `/thumbs/*` are `ServeDir` mounts. That is what gives video
+  seeking (HTTP Range). Don't replace them with handlers that buffer the file.
+- Downloads and uploads stream to disk and are capped by `MM_MAX_DOWNLOAD_MB`.
+- No sqlx compile-time macros: queries are runtime strings, so there is no
+  `DATABASE_URL` / `cargo sqlx prepare` step.
+
+## Gotchas that have already cost time
+
+- **yt-dlp JS runtime:** only `deno` is enabled by default and deno is not
+  installed here. Every invocation passes `--no-js-runtimes --js-runtimes node`
+  or YouTube extraction fails.
+- Title/duration/dimensions come from yt-dlp's `--write-info-json` output, not
+  stdout parsing. Only progress comes from `--progress-template`.
+- The sidecar JPG is the required cover artifact. `--embed-thumbnail` is not
+  reliable, so cover embedding runs as a separate best-effort `ffmpeg` pass.
+  That pass changes the file size — update `items.bytes` after it.
+- `ffmpeg` writing a single image needs `-update 1`, otherwise it warns about
+  image sequence patterns.
+- Permanent download errors (video unavailable, 404/403, private) fail the job
+  immediately; everything else retries 3x with exponential backoff.
+- `pkill -f target/debug/mm` matches the calling shell and kills it. Use
+  `pgrep -x mm` and `kill <pid>`.
+- Port 3000 is sometimes already held by another local dev server; Next falls
+  back to 3001 and the app still works, because `/api` and `/files` are proxied
+  server-side. Check the port in the Next banner before assuming 3000.
+- Deleting an item without `?delete_file=true` leaves the file on disk. The UI
+  always passes `true`; think before changing that default.
+
+## API contract
+
+- DTOs are camelCase; DB columns are snake_case.
+- `GET /api/items?kind=&q=&limit=&cursor=` uses keyset pagination
+  (`created_at,rowid`), no `OFFSET`.
+- Errors are `{ "error": "...", "code": "..." }`.
+- No auth, loopback only. CORS is locked to `MM_WEB_ORIGIN`.
+
+## Smoke test after changes
+
+1. `make dev`, open `http://localhost:3000`.
+2. Upload a picture on `/add` → thumbnail appears in the grid.
+3. Request the file with `Range: bytes=0-99` → expect `206`.
+4. Add a YouTube URL as music → `.mp3` + JPG appear in the library, cover is
+   embedded (`ffprobe` shows an `mjpeg` stream).
+5. Delete with `delete_file=true` → both DB row and file are gone.
