@@ -583,7 +583,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       >
         <video
           ref={videoRef}
-          src={`${current?.fileUrl ?? ""}${mediaVersion ? `?v=${mediaVersion}` : ""}`}
+          src={
+            current
+              ? `${current.fileUrl}${mediaVersion ? `?v=${mediaVersion}` : ""}`
+              : undefined
+          }
           playsInline
           preload="metadata"
           className="aspect-video w-full bg-black"
