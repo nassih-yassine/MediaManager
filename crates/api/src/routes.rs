@@ -4,14 +4,19 @@ use std::process::Stdio;
 use axum::{
     extract::{DefaultBodyLimit, Multipart, Path as AxumPath, Query, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{get, post, put},
     Json, Router,
 };
+use futures_util::{stream, Stream};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Sqlite};
+use std::convert::Infallible;
 use tower_http::cors::CorsLayer;
 
 use crate::db;
@@ -82,6 +87,12 @@ impl From<anyhow::Error> for ApiError {
     }
 }
 
+impl From<std::io::Error> for ApiError {
+    fn from(err: std::io::Error) -> Self {
+        ApiError::internal(err)
+    }
+}
+
 pub fn router(state: AppState) -> Router {
     let origin: axum::http::HeaderValue = state
         .cfg
@@ -114,6 +125,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/events", get(sse_events))
         .route("/api/metrics", get(metrics))
         .route("/api/items", get(list_items))
         .route(
@@ -124,6 +136,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/items/{id}/progress", post(update_item_progress))
         .route("/api/items/{id}/playlists", get(item_playlists))
         .route("/api/jobs", get(list_jobs).post(create_job))
+        .route("/api/jobs/clear", post(clear_jobs))
         .route("/api/jobs/{id}", get(get_job).delete(cancel_job))
         .route("/api/playlists", get(list_playlists).post(create_playlist))
         .route(
@@ -138,6 +151,16 @@ pub fn router(state: AppState) -> Router {
             axum::routing::delete(remove_playlist_item),
         )
         .route("/api/playlists/{id}/order", put(reorder_playlist))
+        .route(
+            "/api/playlists/{id}/cover",
+            put(set_cover_from_item).delete(remove_cover),
+        )
+        .route(
+            "/api/playlists/{id}/cover/upload",
+            post(upload_cover).layer(DefaultBodyLimit::max(
+                state.cfg.max_download_bytes() as usize
+            )),
+        )
         .route(
             "/api/uploads",
             post(upload).layer(DefaultBodyLimit::max(
@@ -337,6 +360,7 @@ async fn patch_item(
         .bind(&id)
         .fetch_one(&state.pool)
         .await?;
+    state.emit("item.updated", &item.id, None);
     Ok(Json(item.to_dto()))
 }
 
@@ -362,6 +386,7 @@ async fn delete_item(
         params.delete_file.unwrap_or(false),
     )
     .await?;
+    state.emit("item.deleted", &item.id, None);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -369,7 +394,8 @@ async fn delete_item(
 #[serde(rename_all = "camelCase")]
 struct ProgressBody {
     position_ms: i64,
-}async fn update_item_progress(
+}
+async fn update_item_progress(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<ProgressBody>,
@@ -523,12 +549,10 @@ async fn create_job(
         .map_err(|(code, message)| ApiError::bad_request(code, message))?;
 
     if let Some(collection_id) = &body.collection_id {
-        let target = sqlx::query_scalar::<_, String>(
-            "SELECT kind FROM playlists WHERE id = ?",
-        )
-        .bind(collection_id)
-        .fetch_optional(&state.pool)
-        .await?;
+        let target = sqlx::query_scalar::<_, String>("SELECT kind FROM playlists WHERE id = ?")
+            .bind(collection_id)
+            .fetch_optional(&state.pool)
+            .await?;
         let Some(target_kind) = target else {
             return Err(ApiError::not_found("playlist not found"));
         };
@@ -587,6 +611,51 @@ async fn create_job(
         .fetch_one(&state.pool)
         .await?;
     Ok((StatusCode::CREATED, Json(json!(job.to_dto()))))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClearJobsBody {
+    scope: String,
+}
+
+/// `finished` removes done/failed/cancelled rows, `active` cancels queued and
+/// running jobs, `all` does both. Active downloads keep running until their
+/// worker notices the cancellation, then their partial files are discarded.
+async fn clear_jobs(
+    State(state): State<AppState>,
+    Json(body): Json<ClearJobsBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let now = db::now_ms();
+    let mut cancelled = 0u64;
+    let mut deleted = 0u64;
+
+    if body.scope == "active" || body.scope == "all" {
+        let result = sqlx::query(
+            "UPDATE jobs SET status = 'cancelled', updated_at = ?
+              WHERE status IN ('queued','running')",
+        )
+        .bind(now)
+        .execute(&state.pool)
+        .await?;
+        cancelled = result.rows_affected();
+    }
+
+    if body.scope == "finished" || body.scope == "all" {
+        let result = sqlx::query("DELETE FROM jobs WHERE status IN ('done','failed','cancelled')")
+            .execute(&state.pool)
+            .await?;
+        deleted = result.rows_affected();
+    }
+
+    if body.scope != "active" && body.scope != "finished" && body.scope != "all" {
+        return Err(ApiError::bad_request(
+            "invalid_scope",
+            "scope must be active, finished or all",
+        ));
+    }
+
+    Ok(Json(json!({ "cancelled": cancelled, "deleted": deleted })))
 }
 
 #[derive(Deserialize)]
@@ -745,6 +814,11 @@ async fn upload(
     )
     .await?;
     let _ = tokio::fs::remove_dir_all(&dir).await;
+    if item.kind == "picture" {
+        let _ = media::attach_to_collection(&state.pool, &state.default_gallery, &item.id).await;
+        state.emit("collection.changed", &state.default_gallery, None);
+    }
+    state.emit("item.created", &item.id, None);
 
     Ok(Json(item.to_dto()))
 }
@@ -760,7 +834,8 @@ fn collection_kind(raw: Option<&str>) -> Result<&'static str, ApiError> {
     }
 }
 
-fn clean_playlist_name(raw: &str) -> Result<String, ApiError> {    let name = raw.trim();
+fn clean_playlist_name(raw: &str) -> Result<String, ApiError> {
+    let name = raw.trim();
     if name.is_empty() {
         return Err(ApiError::bad_request(
             "invalid_name",
@@ -796,7 +871,7 @@ async fn list_playlists(
         ""
     };
     let sql = format!(
-        "SELECT p.id, p.name, p.kind, p.created_at, p.updated_at,
+        "SELECT p.id, p.name, p.kind, p.cover_path, p.created_at, p.updated_at,
                 COUNT(pi.item_id) AS item_count,
                 (SELECT i.thumb_path
                    FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
@@ -848,6 +923,7 @@ async fn create_playlist(
     .bind(now)
     .execute(&state.pool)
     .await?;
+    state.emit("collection.changed", &id, None);
 
     Ok((
         StatusCode::CREATED,
@@ -856,6 +932,7 @@ async fn create_playlist(
             name,
             kind: kind.to_string(),
             item_count: 0,
+            cover_url: None,
             thumb_url: None,
             thumb_urls: Vec::new(),
             created_at: now,
@@ -884,10 +961,21 @@ async fn get_playlist(
     .fetch_all(&state.pool)
     .await?;
 
+    let cover_url = playlist
+        .cover_path
+        .as_deref()
+        .map(models::thumb_url)
+        .or_else(|| {
+            items
+                .iter()
+                .find_map(|item| item.thumb_path.as_deref().map(models::thumb_url))
+        });
+
     Ok(Json(PlaylistDetailDto {
         id: playlist.id,
         name: playlist.name,
         kind: playlist.kind,
+        cover_url,
         created_at: playlist.created_at,
         updated_at: playlist.updated_at,
         items: items.iter().map(|i| i.to_dto()).collect(),
@@ -909,6 +997,7 @@ async fn rename_playlist(
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("playlist not found"));
     }
+    state.emit("collection.changed", &id, None);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -916,6 +1005,12 @@ async fn delete_playlist(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, ApiError> {
+    let cover =
+        sqlx::query_scalar::<_, Option<String>>("SELECT cover_path FROM playlists WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&state.pool)
+            .await?
+            .flatten();
     let result = sqlx::query("DELETE FROM playlists WHERE id = ?")
         .bind(&id)
         .execute(&state.pool)
@@ -923,6 +1018,12 @@ async fn delete_playlist(
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("playlist not found"));
     }
+    if let Some(cover) = cover {
+        if let Some(path) = media::safe_join(&state.cfg.library_dir, &cover) {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+    }
+    state.emit("collection.changed", &id, None);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -945,11 +1046,10 @@ async fn add_playlist_items(
 
     if kind == "gallery" {
         for item_id in &body.item_ids {
-            let item_kind =
-                sqlx::query_scalar::<_, String>("SELECT kind FROM items WHERE id = ?")
-                    .bind(item_id)
-                    .fetch_optional(&state.pool)
-                    .await?;
+            let item_kind = sqlx::query_scalar::<_, String>("SELECT kind FROM items WHERE id = ?")
+                .bind(item_id)
+                .fetch_optional(&state.pool)
+                .await?;
             if let Some(item_kind) = item_kind {
                 if item_kind != "picture" {
                     return Err(ApiError::bad_request(
@@ -992,6 +1092,7 @@ async fn add_playlist_items(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    state.emit("collection.changed", &id, None);
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1010,6 +1111,7 @@ async fn remove_playlist_item(
         .bind(&id)
         .execute(&state.pool)
         .await?;
+    state.emit("collection.changed", &id, None);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1034,7 +1136,180 @@ async fn reorder_playlist(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    state.emit("collection.changed", &id, None);
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn cover_rel(id: &str) -> String {
+    format!(".thumbs/covers/{id}.jpg")
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CoverBody {
+    item_id: String,
+}
+
+async fn set_cover_from_item(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<CoverBody>,
+) -> Result<StatusCode, ApiError> {
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .is_some();
+    if !exists {
+        return Err(ApiError::not_found("playlist not found"));
+    }
+
+    let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+        .bind(&body.item_id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::not_found("item not found"))?;
+
+    let source = match item.thumb_path.as_deref() {
+        Some(thumb) => state.cfg.library_dir.join(thumb),
+        None if item.kind == "picture" => state.cfg.library_dir.join(&item.path),
+        None => {
+            return Err(ApiError::bad_request(
+                "no_cover",
+                "this item has no image that can be used as a cover",
+            ))
+        }
+    };
+    if !source.exists() {
+        return Err(ApiError::not_found("cover image is missing on disk"));
+    }
+
+    let rel = cover_rel(&id);
+    let dest = state.cfg.library_dir.join(&rel);
+    tokio::fs::create_dir_all(dest.parent().unwrap()).await?;
+    if media::extension_of(&source) == "jpg" {
+        tokio::fs::copy(&source, &dest).await?;
+    } else {
+        media::make_jpeg_thumb(&state.cfg, &source, &dest).await?;
+    }
+
+    sqlx::query("UPDATE playlists SET cover_path = ?, updated_at = ? WHERE id = ?")
+        .bind(&rel)
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    state.emit("collection.changed", &id, None);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn upload_cover(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    mut multipart: Multipart,
+) -> Result<StatusCode, ApiError> {
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM playlists WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .is_some();
+    if !exists {
+        return Err(ApiError::not_found("playlist not found"));
+    }
+
+    let dir = state
+        .cfg
+        .incoming_dir()
+        .join(format!("cover-{}", uuid::Uuid::now_v7()));
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(ApiError::internal)?;
+
+    let max = state.cfg.max_download_bytes();
+    let mut saved: Option<std::path::PathBuf> = None;
+    while let Some(mut field) = multipart.next_field().await.map_err(ApiError::internal)? {
+        if field.name() != Some("file") {
+            continue;
+        }
+        let name = field.file_name().unwrap_or("cover.jpg");
+        let ext = Path::new(name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "jpg".to_string());
+        let dest = dir.join(format!("source.{ext}"));
+        let mut file = tokio::fs::File::create(&dest)
+            .await
+            .map_err(ApiError::internal)?;
+        let mut written = 0u64;
+        use tokio::io::AsyncWriteExt;
+        while let Some(chunk) = field.chunk().await.map_err(ApiError::internal)? {
+            written += chunk.len() as u64;
+            if written > max {
+                return Err(ApiError {
+                    status: StatusCode::PAYLOAD_TOO_LARGE,
+                    code: "too_large",
+                    message: format!("cover exceeds {} MB", state.cfg.max_download_mb),
+                });
+            }
+            file.write_all(&chunk).await.map_err(ApiError::internal)?;
+        }
+        file.flush().await.map_err(ApiError::internal)?;
+        saved = Some(dest);
+    }
+
+    let source =
+        saved.ok_or_else(|| ApiError::bad_request("no_file", "expected a `file` field"))?;
+    let rel = cover_rel(&id);
+    let dest = state.cfg.library_dir.join(&rel);
+    tokio::fs::create_dir_all(dest.parent().unwrap()).await?;
+    media::make_jpeg_thumb(&state.cfg, &source, &dest)
+        .await
+        .map_err(ApiError::internal)?;
+    sqlx::query("UPDATE playlists SET cover_path = ?, updated_at = ? WHERE id = ?")
+        .bind(&rel)
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+    state.emit("collection.changed", &id, None);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn remove_cover(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query("UPDATE playlists SET cover_path = NULL, updated_at = ? WHERE id = ?")
+        .bind(db::now_ms())
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("playlist not found"));
+    }
+    let dest = state.cfg.library_dir.join(cover_rel(&id));
+    let _ = tokio::fs::remove_file(dest).await;
+    state.emit("collection.changed", &id, None);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn sse_events(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.events.subscribe();
+    let stream = stream::unfold(rx, |mut rx| async move {
+        loop {
+            match rx.recv().await {
+                Ok(payload) => return Some((Ok(Event::default().data(payload)), rx)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
@@ -1114,7 +1389,8 @@ mod tests {
     }
 
     #[test]
-    fn job_mode_matches_the_kind() {        assert_eq!(resolve_job_mode("music", None).unwrap(), "audio+thumb");
+    fn job_mode_matches_the_kind() {
+        assert_eq!(resolve_job_mode("music", None).unwrap(), "audio+thumb");
         assert_eq!(resolve_job_mode("video", None).unwrap(), "full");
         assert_eq!(resolve_job_mode("book", Some("full")).unwrap(), "full");
 

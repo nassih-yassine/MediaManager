@@ -11,6 +11,15 @@ import { api } from "@/lib/api";
 import type { CollectionKind, PlaylistSummary } from "@/lib/types";
 
 export function CollectionMosaic({ playlist }: { playlist: PlaylistSummary }) {
+  if (playlist.coverUrl) {
+    return (
+      <img
+        src={playlist.coverUrl}
+        alt=""
+        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+      />
+    );
+  }
   const thumbs = playlist.thumbUrls.slice(0, 4);
   if (thumbs.length === 0) {
     return (

@@ -42,6 +42,8 @@ async fn main() -> anyhow::Result<()> {
     };
     db::recover(&pool, &cfg).await?;
 
+    let default_gallery = media::ensure_default_gallery(&pool).await?;
+
     match media::backfill_book_covers(&pool, &cfg).await {
         Ok(0) => {}
         Ok(count) => tracing::info!(count, "generated missing book covers"),
@@ -56,6 +58,11 @@ async fn main() -> anyhow::Result<()> {
             .user_agent(concat!("MediaManager/", env!("CARGO_PKG_VERSION")))
             .timeout(std::time::Duration::from_secs(60 * 60))
             .build()?,
+        events: {
+            let (events, _) = tokio::sync::broadcast::channel(256);
+            events
+        },
+        default_gallery,
     };
 
     let mut handles = Vec::new();

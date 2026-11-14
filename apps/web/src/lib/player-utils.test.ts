@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appendUnique,
   clamp01,
+  dedupeById,
   indexAfterRemoval,
   indexAfterRemovingAll,
+  insertNextUnique,
   isPlayable,
   moveItem,
   nextIndex,
@@ -147,5 +150,53 @@ describe("resumeTarget", () => {
   it("ignores unknown durations", () => {
     expect(resumeTarget(30_000, null)).toBeNull();
     expect(resumeTarget(30_000, 0)).toBeNull();
+  });
+});
+
+describe("appendUnique", () => {
+  const a = { id: "a" };
+  const b = { id: "b" };
+
+  it("skips ids already queued and duplicates in the batch", () => {
+    expect(appendUnique([a], [a, b, b])).toEqual([a, b]);
+  });
+
+  it("returns an equal queue when everything is already there", () => {
+    expect(appendUnique([a, b], [b])).toEqual([a, b]);
+  });
+});
+
+describe("insertNextUnique", () => {
+  const a = { id: "a" };
+  const b = { id: "b" };
+  const c = { id: "c" };
+  const d = { id: "d" };
+
+  it("inserts a new item after the current one", () => {
+    expect(insertNextUnique([a, b, c], 1, d)).toEqual({
+      queue: [a, b, d, c],
+      index: 1,
+    });
+  });
+
+  it("moves an existing item instead of duplicating it", () => {
+    expect(insertNextUnique([a, b, c], 0, c)).toEqual({
+      queue: [a, c, b],
+      index: 0,
+    });
+  });
+
+  it("does nothing when the current item is requested", () => {
+    const queue = [a, b];
+    expect(insertNextUnique(queue, 0, a).queue).toBe(queue);
+  });
+});
+
+describe("dedupeById", () => {
+  it("keeps the first occurrence", () => {
+    expect(dedupeById([{ id: "a" }, { id: "b" }, { id: "a" }])).toEqual([
+      { id: "a" },
+      { id: "b" },
+    ]);
   });
 });

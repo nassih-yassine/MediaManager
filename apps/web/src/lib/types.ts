@@ -47,6 +47,7 @@ export interface PlaylistSummary {
   name: string;
   kind: CollectionKind;
   itemCount: number;
+  coverUrl: string | null;
   thumbUrl: string | null;
   thumbUrls: string[];
   createdAt: number;
@@ -65,6 +66,7 @@ export interface PlaylistDetail {
   id: string;
   name: string;
   kind: CollectionKind;
+  coverUrl: string | null;
   createdAt: number;
   updatedAt: number;
   items: Item[];

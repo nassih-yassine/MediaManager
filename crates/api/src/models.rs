@@ -220,6 +220,7 @@ pub struct Playlist {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub cover_path: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -230,6 +231,7 @@ pub struct PlaylistSummaryRow {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub cover_path: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub item_count: i64,
@@ -244,6 +246,7 @@ pub struct PlaylistSummaryDto {
     pub name: String,
     pub kind: String,
     pub item_count: i64,
+    pub cover_url: Option<String>,
     pub thumb_url: Option<String>,
     pub thumb_urls: Vec<String>,
     pub created_at: i64,
@@ -265,6 +268,11 @@ impl PlaylistSummaryRow {
             name: self.name.clone(),
             kind: self.kind.clone(),
             item_count: self.item_count,
+            cover_url: self
+                .cover_path
+                .as_deref()
+                .map(thumb_url)
+                .or_else(|| self.thumb_path.as_deref().map(thumb_url)),
             thumb_url: self.thumb_path.as_deref().map(thumb_url),
             thumb_urls,
             created_at: self.created_at,
@@ -279,6 +287,7 @@ pub struct PlaylistDetailDto {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub cover_url: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub items: Vec<ItemDto>,

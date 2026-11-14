@@ -46,7 +46,7 @@ async function preflight() {
   }
 }
 
-async function uploadFixture() {
+async function uploadFixture(title = TITLE) {
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAACXBIWXMAAAABAAAAAQBPJcTWAAAA2ElEQVR4nO3QQQ3AIADAQEjwNT+IQfMULH2yx52CpvM5e/Bt3Q74O4OCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUDAoGBYOCQcGgYFAwKBgUXvpzArXcR4BgAAAAAElFTkSuQmCC",
     "base64",
@@ -54,7 +54,7 @@ async function uploadFixture() {
   const form = new FormData();
   form.append("file", new Blob([png], { type: "image/png" }), "e2e.png");
   const res = await fetch(
-    `${API}/api/uploads?kind=picture&title=${encodeURIComponent(TITLE)}`,
+    `${API}/api/uploads?kind=picture&title=${encodeURIComponent(title)}`,
     { method: "POST", body: form },
   );
   if (!res.ok) fail(`fixture upload failed: ${res.status} ${await res.text()}`);
@@ -169,6 +169,7 @@ async function main() {
   console.log("PASS preflight: web and api reachable");
 
   let fixture = null;
+  let live = null;
   let browser = null;
   let profileDir = null;
   let logFile = null;
@@ -212,18 +213,6 @@ async function main() {
       mobile: false,
     });
     console.log("PASS CDP domains enabled");
-
-    await sleep(1000);
-    const probe = await client.send(
-      "Runtime.evaluate",
-      {
-        expression:
-          "({ url: location.href, ready: document.readyState, len: document.body ? document.body.innerText.length : -1 })",
-        returnByValue: true,
-      },
-      sessionId,
-    );
-    console.log("DEBUG page", JSON.stringify(probe));
 
     const evaluate = async (expression) => {
       const result = await cdp("Runtime.evaluate", {
@@ -292,7 +281,6 @@ async function main() {
       "library item",
     );
     console.log("PASS library renders the fixture item");
-
     const overflow = await evaluate(
       "document.documentElement.scrollWidth - window.innerWidth",
     );
@@ -340,7 +328,14 @@ async function main() {
     }
     console.log("PASS playback resumes from the stored position");
 
-    await evaluate(`${byLabel("Queue ", true)}.click()`);
+    await evaluate(`(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => {
+        const label = x.getAttribute('aria-label') || '';
+        return label.startsWith('Queue ') && !label.includes(${JSON.stringify(resumeItem.title)});
+      });
+      if (b) b.click();
+      return !!b;
+    })()`);
     await clickCenter(byLabel("Queue"));
     await waitFor(
       "document.querySelectorAll('li[draggable]').length >= 2",
@@ -426,6 +421,22 @@ async function main() {
     fixture = null;
     console.log("PASS delete removes the item and its file");
 
+    // Live updates: a change made outside the tab appears without a refresh.
+    live = await uploadFixture("E2E LIVE ITEM");
+    await waitFor(
+      `document.body.innerText.includes('E2E LIVE ITEM')`,
+      12000,
+      "live item appears",
+    );
+    await fetch(`${API}/api/items/${live.id}?delete_file=true`, { method: "DELETE" });
+    await waitFor(
+      `!document.body.innerText.includes('E2E LIVE ITEM')`,
+      12000,
+      "live item disappears",
+    );
+    live = null;
+    console.log("PASS live updates arrive without a refresh");
+
     if (client.problems.length > 0) {
       fail(`browser problems:\n  ${client.problems.join("\n  ")}`);
     }
@@ -440,6 +451,7 @@ async function main() {
       }).catch(() => {});
     }
     if (fixture) await deleteIfPresent(fixture.id);
+    if (live) await deleteIfPresent(live.id);
     if (browser) {
       browser.kill();
       await new Promise((resolve) => {

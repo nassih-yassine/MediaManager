@@ -12,8 +12,11 @@ import {
 
 import type { Item } from "@/lib/types";
 import {
+  appendUnique,
+  dedupeById,
   indexAfterRemoval,
   indexAfterRemovingAll,
+  insertNextUnique,
   isPlayable,
   moveItem,
   nextIndex,
@@ -22,6 +25,7 @@ import {
   resumeTarget,
 } from "@/lib/player-utils";
 import { api as apiRequest } from "@/lib/api";
+import { useRealtime } from "@/lib/realtime";
 
 export type RepeatMode = "off" | "all" | "one";
 
@@ -130,11 +134,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (!raw) return;
       const saved = JSON.parse(raw) as Partial<Persisted>;
       if (!Array.isArray(saved.queue) || saved.queue.length === 0) return;
-      setQueue(saved.queue);
+      const restored = dedupeById(saved.queue as Item[]);
+      if (restored.length === 0) return;
+      setQueue(restored);
       setIndex(
         Math.min(
           Math.max(0, Number(saved.index) || 0),
-          saved.queue.length - 1,
+          restored.length - 1,
         ),
       );
       if (typeof saved.volume === "number") setVolumeState(saved.volume);
@@ -307,13 +313,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         playNow([item], 0);
         return;
       }
-      setQueue((prev) => {
-        const nextQueue = [...prev];
-        nextQueue.splice(index + 1, 0, item);
-        return nextQueue;
-      });
+      const result = insertNextUnique(queue, index, item);
+      if (result.queue === queue) return;
+      setQueue(result.queue);
+      setIndex(result.index);
     },
-    [index, queue.length, playNow],
+    [index, queue, playNow],
   );
 
   const addToQueue = useCallback(
@@ -324,9 +329,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         playNow(playable, 0);
         return;
       }
-      setQueue((prev) => [...prev, ...playable]);
+      const next = appendUnique(queue, playable);
+      if (next.length === queue.length) return;
+      setQueue(next);
     },
-    [queue.length, playNow],
+    [queue, playNow],
   );
 
   const removeAt = useCallback(
@@ -389,6 +396,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     },
     [queue, index],
   );
+
+  // Deleting an item anywhere (another tab, another view) prunes the queue.
+  useRealtime((event) => {
+    if (event.type === "item.deleted" && event.id) removeItem(event.id);
+  });
 
   const toggle = useCallback(() => {
     const el = videoRef.current;

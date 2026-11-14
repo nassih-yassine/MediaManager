@@ -320,6 +320,57 @@ pub async fn backfill_book_covers(pool: &sqlx::SqlitePool, cfg: &Config) -> Resu
     Ok(done)
 }
 
+/// The system gallery every new picture lands in. Created once; existing
+/// pictures are attached the first time it is created.
+pub const DEFAULT_GALLERY_NAME: &str = "All pictures";
+
+pub async fn ensure_default_gallery(pool: &sqlx::SqlitePool) -> Result<String> {
+    if let Some(id) = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM playlists
+          WHERE kind = 'gallery' AND name = ?
+          ORDER BY created_at LIMIT 1",
+    )
+    .bind(DEFAULT_GALLERY_NAME)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(id);
+    }
+
+    let id = uuid::Uuid::now_v7().to_string();
+    let now = db::now_ms();
+    sqlx::query(
+        "INSERT INTO playlists (id, name, kind, created_at, updated_at)
+         VALUES (?, ?, 'gallery', ?, ?)",
+    )
+    .bind(&id)
+    .bind(DEFAULT_GALLERY_NAME)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    let pictures: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM items WHERE kind = 'picture' ORDER BY created_at")
+            .fetch_all(pool)
+            .await?;
+    for (position, item_id) in pictures.into_iter().enumerate() {
+        sqlx::query(
+            "INSERT OR IGNORE INTO playlist_items
+               (playlist_id, item_id, position, added_at)
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&item_id)
+        .bind(position as i64)
+        .bind(now)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(id)
+}
+
 /// Attach an item to a playlist or gallery at the end. Idempotent.
 pub async fn attach_to_collection(
     pool: &sqlx::SqlitePool,
@@ -501,6 +552,49 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The default gallery is created once and existing pictures are filed.
+    #[tokio::test]
+    async fn default_gallery_is_created_and_backfilled() {
+        let dir = std::env::temp_dir().join(format!("mm-defgal-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = test_db(&dir).await;
+        let now = db::now_ms();
+
+        for (id, kind) in [
+            ("pic-1", "picture"),
+            ("pic-2", "picture"),
+            ("song", "music"),
+        ] {
+            sqlx::query(
+                "INSERT INTO items (id, kind, title, path, mime, bytes, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, 'application/octet-stream', 1, ?, ?)",
+            )
+            .bind(id)
+            .bind(kind)
+            .bind(id)
+            .bind(format!("picture/aa/{id}"))
+            .bind(now)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let first = ensure_default_gallery(&pool).await.unwrap();
+        let second = ensure_default_gallery(&pool).await.unwrap();
+        assert_eq!(first, second, "the gallery is created once");
+
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items WHERE playlist_id = ?")
+                .bind(&first)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 2, "only pictures are filed, not music");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Attaching a finished download to a collection is idempotent.
     #[tokio::test]
     async fn attaches_an_item_to_a_collection_once() {
@@ -528,18 +622,21 @@ mod tests {
         .await
         .unwrap();
 
-        attach_to_collection(&pool, "col-1", "item-a").await.unwrap();
-        attach_to_collection(&pool, "col-1", "item-a").await.unwrap();
+        attach_to_collection(&pool, "col-1", "item-a")
+            .await
+            .unwrap();
+        attach_to_collection(&pool, "col-1", "item-a")
+            .await
+            .unwrap();
 
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items")
             .fetch_one(&pool)
             .await
             .unwrap();
-        let position: i64 =
-            sqlx::query_scalar("SELECT position FROM playlist_items LIMIT 1")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let position: i64 = sqlx::query_scalar("SELECT position FROM playlist_items LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(count, 1);
         assert_eq!(position, 0);
 

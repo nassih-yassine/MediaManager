@@ -147,6 +147,7 @@ CREATE INDEX idx_jobs_item    ON jobs(item_id);
 CREATE TABLE playlists (
   id TEXT PRIMARY KEY, name TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'playlist',   -- playlist | gallery
+  cover_path TEXT,                          -- custom cover under .thumbs/covers/
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
 CREATE TABLE playlist_items (
@@ -270,6 +271,7 @@ as a separate best-effort pass so a missing mutagen/ffmpeg never fails the job.
 
 ```
 POST   /api/jobs              {url, kind, mode, collectionId?} -> {id}  409 dup, 429 full
+POST   /api/jobs/clear        {scope:"active"|"finished"|"all"}
 GET    /api/jobs              ?active=1|status=&limit=
 GET    /api/jobs/:id
 DELETE /api/jobs/:id          cancel queued/running
@@ -288,7 +290,11 @@ DELETE /api/playlists/:id
 POST   /api/playlists/:id/items            {itemIds}
 DELETE /api/playlists/:id/items/:itemId
 PUT    /api/playlists/:id/order            {itemIds}
+PUT    /api/playlists/:id/cover            {itemId}
+POST   /api/playlists/:id/cover/upload     multipart
+DELETE /api/playlists/:id/cover
 GET    /api/health            {status, db:"ok|degraded", queue_depth, active}
+GET    /api/events            Server-Sent Events (item/collection changes)
 GET    /api/metrics           Prometheus text
 GET    /files/:id/:filename   Range-capable, streamed from disk
 ```
@@ -341,6 +347,17 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
   "Add pictures" dialog that searches the library and appends a selection. The Add
   media form can also target a playlist/gallery up front; downloads attach on
   completion (`jobs.collection_id`), uploads attach immediately.
+- **Covers:** a playlist/gallery can use any image already in it or an uploaded image;
+  stored under `.thumbs/covers/<collection-id>.jpg`. Missing cover falls back to the
+  first item's thumbnail.
+- **Live updates:** the API streams `item.*` and `collection.changed` over SSE
+  (`/api/events`); views refresh without a reload. A streaming Next route proxies it
+  because the generic rewrite buffers event streams.
+- **Pictures default:** `All pictures` is a system gallery created at startup; new
+  pictures are filed into it automatically, so the Pictures tab is never empty by
+  default. Loose pictures remain possible when removed from every gallery.
+- **Queue controls:** the play queue has a clear action plus always-visible row
+  removal; the download queue can be cleared/cancelled from the Add page.
 - **Themes**: every component uses semantic tokens (`--canvas`, `--panel`, `--line`,
   `--ink`, `--muted`, `--accent`, `--accent-ink`, `--danger`) defined in
   `apps/web/src/app/globals.css`. Four families (Slate, Paper, Ocean, Moss) × dark

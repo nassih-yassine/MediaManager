@@ -239,6 +239,19 @@ textarea {
   font: inherit;
 }
 
+/* Tailwind v4 no longer opts buttons into the pointer cursor. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label[for],
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 input[type="range"] {
   accent-color: var(--accent);
 }
@@ -260,6 +273,12 @@ select {
   background: var(--line-strong);
   border-radius: 999px;
   border: 2px solid var(--canvas);
+}
+
+/* Firefox does not support the webkit pseudos. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

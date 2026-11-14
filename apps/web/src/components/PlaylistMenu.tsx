@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { CheckIcon, PlaylistAddIcon, PlusIcon } from "@/components/icons";
 import { useToast } from "@/components/ui/Toast";
@@ -36,16 +37,64 @@ export function PlaylistMenu({
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [coords, setCoords] = useState<{
+    left: number;
+    top: number;
+    up: boolean;
+  } | null>(null);
 
   const single = itemIds.length === 1;
   const itemKey = itemIds.join(",");
   const noun = kind === "gallery" ? "gallery" : "playlist";
 
   useEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+
+    function place() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const width = 288;
+      const margin = 8;
+      const rect = trigger.getBoundingClientRect();
+      const left = Math.min(
+        Math.max(margin, rect.right - width),
+        window.innerWidth - width - margin,
+      );
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const up = spaceBelow < 340 || (placement === "top" && spaceAbove > 340);
+      setCoords({
+        left,
+        top: up ? rect.top - margin : rect.bottom + margin,
+        up,
+      });
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, placement]);
+
+  useEffect(() => {
     if (!open) return;
 
     function onPointerDown(event: PointerEvent) {
-      if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (
+        !wrap.current?.contains(target) &&
+        !panelRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -188,6 +237,7 @@ export function PlaylistMenu({
       }}
     >
       <button
+        ref={triggerRef}
         type="button"
         aria-label={`Add to ${noun}`}
         aria-expanded={open}
@@ -200,12 +250,19 @@ export function PlaylistMenu({
         ) : null}
       </button>
 
-      {open ? (
-        <div
-          className={`absolute right-0 z-50 w-72 rounded-xl border border-line bg-panel p-2 shadow-2xl ${
-            placement === "top" ? "bottom-full mb-2" : "top-full mt-2"
-          }`}
-        >
+      {open && coords
+        ? createPortal(
+            <div
+              ref={panelRef}
+              role="menu"
+              aria-label={`Add to ${noun}`}
+              style={{
+                left: coords.left,
+                top: coords.top,
+                transform: coords.up ? "translateY(-100%)" : undefined,
+              }}
+              className="fixed z-[90] w-72 rounded-xl border border-line bg-panel p-2 shadow-2xl"
+            >
           <p className="px-2 pt-1 pb-2 text-[10px] font-semibold tracking-[0.14em] text-muted uppercase">
             {single
               ? `Add to ${noun}`
@@ -269,8 +326,10 @@ export function PlaylistMenu({
               <PlusIcon className="h-3.5 w-3.5" />
             </button>
           </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

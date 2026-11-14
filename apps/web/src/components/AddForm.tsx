@@ -10,9 +10,13 @@ import {
   LinkIcon,
   MovieIcon,
   PlusIcon,
+  TrashIcon,
 } from "@/components/icons";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { api, formatBytes } from "@/lib/api";
+import { useRealtime } from "@/lib/realtime";
+import { SelectMenu } from "@/components/ui/SelectMenu";
 import {
   type CollectionKind,
   type Item,
@@ -78,7 +82,7 @@ function JobRow({
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium" title={job.url}>
+          <p className="truncate text-[13px] font-medium">
             {prettyUrl(job.url)}
           </p>
           <p
@@ -139,10 +143,12 @@ export function AddForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
   const [collections, setCollections] = useState<PlaylistSummary[]>([]);
   const [collectionId, setCollectionId] = useState("");
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const knownStatus = useRef(new Map<string, string>());
   const firstPoll = useRef(true);
@@ -190,6 +196,10 @@ export function AddForm() {
       .catch(() => {});
   }, []);
 
+  useRealtime((event) => {
+    if (event.type === "item.created") void refreshJobs();
+  });
+
   useEffect(() => {
     setCollectionId("");
   }, [kind]);
@@ -199,51 +209,65 @@ export function AddForm() {
     setError(null);
   }
 
-  function takeFile(next: File | null) {
-    setFile(next);
-    if (next) setError(null);
+  function addFiles(next: FileList | File[] | null) {
+    const list = next ? Array.from(next) : [];
+    if (list.length > 0) {
+      setFiles(list);
+      setError(null);
+    }
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
 
-    if (acceptsFile && file) {
+    if (acceptsFile && files.length > 0) {
       setSubmitting(true);
-      try {
-        const body = new FormData();
-        body.append("file", file);
-        const res = await fetch(`/api/uploads?kind=${kind}`, {
-          method: "POST",
-          body,
-        });
-        if (!res.ok) {
-          const data = (await res.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          throw new Error(data?.error ?? "Upload failed");
-        }
-        const created = (await res.json()) as Item;
-        if (collectionId) {
-          await api(`/api/playlists/${collectionId}/items`, {
+      let added = 0;
+      const failures: string[] = [];
+      for (const file of files) {
+        try {
+          const body = new FormData();
+          body.append("file", file);
+          const res = await fetch(`/api/uploads?kind=${kind}`, {
             method: "POST",
-            body: JSON.stringify({ itemIds: [created.id] }),
+            body,
           });
-          window.dispatchEvent(new Event("mm:playlists-changed"));
+          if (!res.ok) {
+            const data = (await res.json().catch(() => null)) as {
+              error?: string;
+            } | null;
+            throw new Error(data?.error ?? "Upload failed");
+          }
+          const created = (await res.json()) as Item;
+          if (collectionId) {
+            await api(`/api/playlists/${collectionId}/items`, {
+              method: "POST",
+              body: JSON.stringify({ itemIds: [created.id] }),
+            });
+          }
+          added += 1;
+        } catch (err) {
+          failures.push(`${file.name}: ${(err as Error).message}`);
         }
+      }
+      if (collectionId) {
+        window.dispatchEvent(new Event("mm:playlists-changed"));
+      }
+      if (added > 0) {
         toast(
           targetCollection
-            ? `“${file.name}” added to “${targetCollection.name}”`
-            : `“${file.name}” added to the library`,
+            ? `Added ${added} ${added === 1 ? "file" : "files"} to “${targetCollection.name}”`
+            : `Added ${added} ${added === 1 ? "file" : "files"} to the library`,
           "success",
         );
-        takeFile(null);
-        if (fileInput.current) fileInput.current.value = "";
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setSubmitting(false);
       }
+      if (failures.length > 0) {
+        setError(failures.join(" · "));
+      }
+      setFiles([]);
+      if (fileInput.current) fileInput.current.value = "";
+      setSubmitting(false);
       return;
     }
 
@@ -285,6 +309,23 @@ export function AddForm() {
       await refreshJobs();
     } catch (err) {
       toast((err as Error).message, "error");
+    }
+  }
+
+  async function clearJobs() {
+    setClearing(true);
+    try {
+      await api("/api/jobs/clear", {
+        method: "POST",
+        body: JSON.stringify({ scope: "all" }),
+      });
+      toast("Download queue cleared", "success");
+      await refreshJobs();
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setClearing(false);
+      setClearOpen(false);
     }
   }
 
@@ -376,19 +417,20 @@ export function AddForm() {
               Add to {kind === "picture" ? "gallery" : "playlist"}{" "}
               <span className="font-normal tracking-normal normal-case">(optional)</span>
             </label>
-            <select
-              id="collection"
+            <SelectMenu
               value={collectionId}
-              onChange={(event) => setCollectionId(event.target.value)}
-              className="mt-2 h-10 w-full rounded-lg border border-line bg-canvas px-3 text-sm text-muted focus:outline-none"
-            >
-              <option value="">Don&apos;t add</option>
-              {availableCollections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Don't add" },
+                ...availableCollections.map((collection) => ({
+                  value: collection.id,
+                  label: collection.name,
+                })),
+              ]}
+              onChange={setCollectionId}
+              ariaLabel={`Add to ${kind === "picture" ? "gallery" : "playlist"}`}
+              className="mt-2 h-10 w-full rounded-lg border border-line bg-canvas px-3 text-sm text-muted"
+              panelWidth={280}
+            />
             {availableCollections.length === 0 ? (
               <p className="mt-1.5 text-xs text-muted">
                 No {kind === "picture" ? "galleries" : "playlists"} yet. Create
@@ -400,7 +442,7 @@ export function AddForm() {
           {acceptsFile ? (
             <div className="mt-6">
               <p className="text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">
-                Or upload a file
+                Or upload from this machine
               </p>
               <label
                 htmlFor="file"
@@ -412,7 +454,7 @@ export function AddForm() {
                 onDrop={(event) => {
                   event.preventDefault();
                   setDragging(false);
-                  takeFile(event.dataTransfer.files?.[0] ?? null);
+                  addFiles(event.dataTransfer.files);
                 }}
                 className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-7 text-center transition-colors ${
                   dragging
@@ -422,33 +464,39 @@ export function AddForm() {
               >
                 <PlusIcon className="h-5 w-5 text-muted" />
                 <span className="mt-2 text-sm">
-                  {file ? file.name : "Drop a file here, or browse"}
+                  {files.length > 0
+                    ? `${files.length} ${files.length === 1 ? "file" : "files"} ready`
+                    : "Drop files here, or browse"}
                 </span>
-                <span className="mt-1 text-xs text-muted">
-                  {file
-                    ? formatBytes(file.size)
+                <span className="mt-1 max-w-full truncate text-xs text-muted">
+                  {files.length > 0
+                    ? `${formatBytes(files.reduce((sum, file) => sum + file.size, 0))} · ${files
+                        .slice(0, 3)
+                        .map((file) => file.name)
+                        .join(", ")}${files.length > 3 ? "…" : ""}`
                     : kind === "book"
-                      ? "PDF, EPUB"
-                      : "JPG, PNG, WebP, GIF"}
+                      ? "PDF, EPUB — select one or many"
+                      : "JPG, PNG, WebP, GIF — select one or many"}
                 </span>
                 <input
                   ref={fileInput}
                   id="file"
                   type="file"
+                  multiple
                   className="hidden"
-                  onChange={(event) => takeFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) => addFiles(event.target.files)}
                 />
               </label>
-              {file ? (
+              {files.length > 0 ? (
                 <button
                   type="button"
                   onClick={() => {
-                    takeFile(null);
+                    setFiles([]);
                     if (fileInput.current) fileInput.current.value = "";
                   }}
                   className="mt-2 text-xs text-muted hover:text-ink"
                 >
-                  Clear file
+                  Clear files
                 </button>
               ) : null}
             </div>
@@ -467,8 +515,10 @@ export function AddForm() {
           >
             {submitting
               ? "Starting…"
-              : acceptsFile && file
-                ? "Upload"
+              : acceptsFile && files.length > 0
+                ? files.length === 1
+                  ? "Upload"
+                  : `Upload ${files.length} files`
                 : "Start download"}
           </button>
         </form>
@@ -482,13 +532,24 @@ export function AddForm() {
             </p>
             <h2 className="mt-1 text-lg font-semibold tracking-tight">Queue</h2>
           </div>
-          <button
-            type="button"
-            onClick={refreshJobs}
-            className="text-xs text-muted hover:text-ink"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={refreshJobs}
+              className="text-xs text-muted hover:text-ink"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setClearOpen(true)}
+              disabled={jobs.length === 0}
+              className="flex items-center gap-1 text-xs text-muted hover:text-danger disabled:opacity-40"
+            >
+              <TrashIcon className="h-3 w-3" />
+              Clear
+            </button>
+          </div>
         </div>
 
         <ul className="mt-3 space-y-2">
@@ -508,6 +569,16 @@ export function AddForm() {
           times unless the source is gone.
         </p>
       </aside>
+
+      <ConfirmDialog
+        open={clearOpen}
+        busy={clearing}
+        title="Clear download queue?"
+        description="Active downloads are cancelled. Finished, failed and cancelled entries are removed. Files already saved to the library stay."
+        confirmLabel="Clear queue"
+        onCancel={() => setClearOpen(false)}
+        onConfirm={clearJobs}
+      />
     </div>
   );
 }

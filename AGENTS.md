@@ -12,7 +12,7 @@ make dev        # API :8787 + web :3000
 make api        # API only
 make worker     # worker only (MM_ROLE=worker)
 make web        # Next dev server only
-make test       # cargo test (13) + vitest (56)
+make test       # cargo test (14) + vitest (62)
 make test-web   # vitest only
 make e2e        # real Chromium smoke test; needs `make dev` running
 make check      # cargo check + tsc --noEmit
@@ -96,6 +96,26 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   `jobs.collection_id` and the worker attaches after finalize.
 - `GET /api/items/:id/playlists?kind=` powers membership checkmarks. Keep the picker
   in sync with mutations via the `mm:playlists-changed` window event.
+- **Live updates use SSE.** The API broadcasts JSON on `/api/events`; the browser
+  subscribes once via `useRealtime` (`src/lib/realtime.ts`). The Next rewrite buffers
+  SSE, so `src/app/api/events/route.ts` proxies the stream explicitly — do not remove
+  it or route `/api/events` through the generic rewrite. Events: `item.created`,
+  `item.updated`, `item.deleted`, `collection.changed`; each is also re-dispatched as
+  the `mm:realtime` window event for tests/inspection.
+- **Default gallery:** `ensure_default_gallery` creates `All pictures` at startup and
+  backfills existing pictures. Uploads and finished picture downloads are attached to
+  it automatically. Music/video/book are never placed there.
+- **Clearing the download queue:** `POST /api/jobs/clear {scope:"active"|"finished"|"all"}`.
+  Active jobs are marked cancelled (workers discard the partial item on completion);
+  finished/failed rows are deleted. The Add page exposes this behind a confirm.
+- **Multi-file upload:** the Add form accepts several files for pictures/books and
+  uploads them sequentially, attaching each to the selected collection.
+- **Menus must be portaled.** Popovers inside cards/sidebars get clipped by
+  `overflow-hidden`/`overflow-y-auto` (this already happened). `PlaylistMenu`,
+  `ThemePicker`, and `SelectMenu` render into `document.body` with fixed coordinates;
+  keep new popovers out of scroll containers. Native `<select>`/search widgets are not
+  used; `SelectMenu` and `BarSlider` carry the design. Buttons get a pointer cursor
+  globally (Tailwind v4 no longer does this).
 - **Themes are tokens, not per-component colors.** `src/app/globals.css` defines
   `--canvas`, `--panel`, `--panel-2`, `--line`, `--line-strong`, `--ink`, `--muted`,
   `--accent`, `--accent-ink`, `--danger` for four families × light/dark. To add a

@@ -7,10 +7,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PlaylistMenu } from "@/components/PlaylistMenu";
 import { CollectionMosaic } from "@/components/Playlists";
+import { SelectMenu } from "@/components/ui/SelectMenu";
 import { useToast } from "@/components/ui/Toast";
 import {
   BookIcon,
-  ChevronDownIcon,
+  CloseIcon,
   ImageIcon,
   MovieIcon,
   PlayIcon,
@@ -24,6 +25,7 @@ import { api, formatBytes, formatDate, formatDuration } from "@/lib/api";
 import { kindLabel } from "@/lib/kind";
 import { usePlayer } from "@/lib/player";
 import { isPlayable } from "@/lib/player-utils";
+import { useRealtime } from "@/lib/realtime";
 import { SORT_OPTIONS, sortItems, type SortKey } from "@/lib/sort";
 import {
   type Item,
@@ -241,6 +243,7 @@ export function Library() {
   const [galleries, setGalleries] = useState<PlaylistSummary[]>([]);
   const [galleryName, setGalleryName] = useState("");
   const [creatingGallery, setCreatingGallery] = useState(false);
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestId = useRef(0);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -266,6 +269,27 @@ export function Library() {
       .then((data) => setGalleries(data.playlists))
       .catch(() => {});
   }, [kind, reload]);
+
+  // Live library: downloads finishing or deletes elsewhere show up immediately.
+  useRealtime((event) => {
+    if (!event.type.startsWith("item.")) return;
+    if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+    realtimeTimer.current = setTimeout(
+      () => setReload((value) => value + 1),
+      180,
+    );
+  });
+
+  useEffect(() => {
+    function onFocus() {
+      setReload((value) => value + 1);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+    };
+  }, []);
 
   // "/" focuses search, Escape clears selection. Ignore while typing.
   useEffect(() => {
@@ -446,16 +470,28 @@ export function Library() {
             <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               ref={searchRef}
-              type="search"
+              type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search titles"
               aria-label="Search titles"
+              autoComplete="off"
               className="h-10 w-full rounded-full border border-line bg-panel pr-10 pl-9 text-sm placeholder:text-muted/70 focus:border-line-strong focus:outline-none"
             />
-            <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-muted sm:block">
-              /
-            </kbd>
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-1 text-muted hover:text-ink"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-muted sm:block">
+                /
+              </kbd>
+            )}
           </label>
           <Link
             href="/add"
@@ -486,21 +522,14 @@ export function Library() {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="relative">
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as SortKey)}
-              aria-label="Sort library"
-              className="h-9 appearance-none rounded-full border border-line bg-panel pr-8 pl-3 text-xs text-muted hover:text-ink focus:outline-none"
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-2.5 h-3 w-3 -translate-y-1/2 text-muted" />
-          </label>
+          <SelectMenu
+            value={sort}
+            options={SORT_OPTIONS}
+            onChange={(value) => setSort(value as SortKey)}
+            ariaLabel="Sort library"
+            className="h-9 rounded-full border border-line bg-panel pr-2.5 pl-3 text-xs text-muted hover:text-ink"
+            panelWidth={190}
+          />
 
           {selectionMode ? (
             <>

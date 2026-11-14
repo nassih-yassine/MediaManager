@@ -131,6 +131,7 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
                 .unwrap_or(None);
             if status.as_deref() == Some("cancelled") {
                 let _ = media::remove_item(&state.pool, &state.cfg, &item, true).await;
+                state.emit("item.deleted", &item.id, None);
                 return Ok(());
             }
             if let Some(collection_id) = &job.collection_id {
@@ -139,6 +140,15 @@ async fn run_job(state: &AppState, job: Job) -> Result<()> {
                 {
                     tracing::warn!(%err, %collection_id, "could not attach finished item");
                 }
+            }
+            state.emit("item.created", &item.id, job.collection_id.as_deref());
+            if let Some(collection_id) = &job.collection_id {
+                state.emit("collection.changed", collection_id, None);
+            }
+            if item.kind == "picture" {
+                let _ = media::attach_to_collection(&state.pool, &state.default_gallery, &item.id)
+                    .await;
+                state.emit("collection.changed", &state.default_gallery, None);
             }
             sqlx::query(
                 "UPDATE jobs

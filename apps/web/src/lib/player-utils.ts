@@ -50,6 +50,50 @@ export function removeAt<T>(items: T[], at: number): T[] {
   return items.filter((_, index) => index !== at);
 }
 
+/** Append items, skipping any id already present (and duplicates in the batch). */
+export function appendUnique<T extends { id: string }>(queue: T[], items: T[]): T[] {
+  const seen = new Set(queue.map((item) => item.id));
+  const next = [...queue];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    next.push(item);
+  }
+  return next;
+}
+
+/** Insert after the current item, moving an existing copy instead of cloning it. */
+export function insertNextUnique<T extends { id: string }>(
+  queue: T[],
+  index: number,
+  item: T,
+): { queue: T[]; index: number } {
+  const existing = queue.findIndex((entry) => entry.id === item.id);
+  if (existing === index) return { queue, index };
+
+  if (existing === -1) {
+    const next = [...queue];
+    next.splice(index + 1, 0, item);
+    return { queue: next, index };
+  }
+
+  const without = queue.filter((_, at) => at !== existing);
+  const shifted = existing < index ? index - 1 : index;
+  const next = [...without];
+  next.splice(shifted + 1, 0, item);
+  return { queue: next, index: shifted };
+}
+
+/** Drop duplicate ids while keeping the first occurrence. */
+export function dedupeById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 /** The index that should be selected after removing `at`. */
 export function indexAfterRemoval(
   index: number,

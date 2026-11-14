@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useToast } from "@/components/ui/Toast";
+import { BarSlider } from "@/components/ui/BarSlider";
 import {
   CheckIcon,
   CloseIcon,
@@ -18,6 +19,7 @@ import {
   RepeatOneIcon,
   ShuffleIcon,
   VolumeIcon,
+  TrashIcon,
 } from "@/components/icons";
 import { usePlayer } from "@/lib/player";
 import { kindLabel } from "@/lib/kind";
@@ -114,7 +116,7 @@ function QueueRow({
         type="button"
         onClick={() => onRemove(at)}
         aria-label={`Remove ${item.title} from queue`}
-        className="shrink-0 rounded p-1 text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger"
+        className="shrink-0 rounded p-1 text-muted/60 transition-colors hover:text-danger"
       >
         <CloseIcon className="h-3.5 w-3.5" />
       </button>
@@ -184,7 +186,6 @@ export function PlayerBar() {
 
   const nextTrack = player.queue[player.index + 1] ?? null;
   const progress = Math.min(player.progress, player.duration || 0);
-  const pct = player.duration > 0 ? (progress / player.duration) * 100 : 0;
 
   return (
     <>
@@ -204,11 +205,13 @@ export function PlayerBar() {
                 type="button"
                 onClick={() => {
                   player.clearQueue();
+                  setQueueOpen(false);
                   toast("Queue cleared", "info");
                 }}
-                className="rounded-md px-2 py-1 text-xs text-muted hover:text-danger"
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted hover:text-danger"
               >
-                Clear
+                <TrashIcon className="h-3 w-3" />
+                Clear queue
               </button>
               <button
                 type="button"
@@ -250,27 +253,14 @@ export function PlayerBar() {
             <span className="w-10 shrink-0 text-right font-mono text-[10px] text-muted tabular-nums">
               {clock(progress)}
             </span>
-            <div className="group relative flex h-4 flex-1 items-center">
-              <div className="absolute inset-x-0 h-1 rounded-full bg-line" />
-              <div
-                className="absolute left-0 h-1 rounded-full bg-accent"
-                style={{ width: `${pct}%` }}
-              />
-              <span
-                className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-accent opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                style={{ left: `${pct}%` }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={player.duration || 0}
-                step={0.1}
-                value={progress}
-                onChange={(event) => player.seek(Number(event.target.value))}
-                aria-label="Seek"
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              />
-            </div>
+            <BarSlider
+              value={progress}
+              max={player.duration || 0}
+              step={0.1}
+              onChange={player.seek}
+              ariaLabel="Seek"
+              className="flex-1"
+            />
             <span className="w-10 shrink-0 font-mono text-[10px] text-muted tabular-nums">
               {clock(player.duration)}
             </span>
@@ -370,15 +360,13 @@ export function PlayerBar() {
               >
                 {player.muted || player.volume === 0 ? <MuteIcon /> : <VolumeIcon />}
               </button>
-              <input
-                type="range"
-                min={0}
+              <BarSlider
+                value={player.muted ? 0 : player.volume}
                 max={1}
                 step={0.01}
-                value={player.muted ? 0 : player.volume}
-                onChange={(event) => player.setVolume(Number(event.target.value))}
-                aria-label="Volume"
-                className="hidden h-1 w-20 cursor-pointer lg:block"
+                onChange={player.setVolume}
+                ariaLabel="Volume"
+                className="hidden w-20 lg:flex"
               />
               <button
                 type="button"

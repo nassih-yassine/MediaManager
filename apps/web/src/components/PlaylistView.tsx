@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AddItemsDialog } from "@/components/AddItemsDialog";
+import { CoverDialog } from "@/components/CoverDialog";
 import { useToast } from "@/components/ui/Toast";
 import {
   CloseIcon,
@@ -22,6 +23,7 @@ import { api, formatDuration } from "@/lib/api";
 import { kindLabel } from "@/lib/kind";
 import { usePlayer } from "@/lib/player";
 import { isPlayable } from "@/lib/player-utils";
+import { useRealtime } from "@/lib/realtime";
 import type { PlaylistDetail } from "@/lib/types";
 
 function totalLabel(seconds: number): string {
@@ -36,6 +38,9 @@ function HeroCover({
 }: {
   playlist: PlaylistDetail;
 }) {
+  if (playlist.coverUrl) {
+    return <img src={playlist.coverUrl} alt="" className="h-full w-full object-cover" />;
+  }
   const thumbs = playlist.items
     .map((item) => item.thumbUrl)
     .filter((url): url is string => Boolean(url))
@@ -76,6 +81,7 @@ export function PlaylistView() {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -95,6 +101,15 @@ export function PlaylistView() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useRealtime((event) => {
+    if (
+      event.type === "item.deleted" ||
+      (event.type === "collection.changed" && event.id === id)
+    ) {
+      void load();
+    }
+  });
 
   async function rename(event: React.FormEvent) {
     event.preventDefault();
@@ -303,6 +318,13 @@ export function PlaylistView() {
             )}
             <button
               type="button"
+              onClick={() => setCoverOpen(true)}
+              className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
+            >
+              Cover
+            </button>
+            <button
+              type="button"
               onClick={() => setEditing(true)}
               className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
             >
@@ -497,6 +519,13 @@ export function PlaylistView() {
             : "Drag rows to reorder. Removing here never deletes the file."}
         </p>
       ) : null}
+
+      <CoverDialog
+        open={coverOpen}
+        playlist={playlist}
+        onClose={() => setCoverOpen(false)}
+        onChanged={() => void load()}
+      />
 
       <AddItemsDialog
         open={addOpen}

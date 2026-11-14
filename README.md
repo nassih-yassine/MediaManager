@@ -10,6 +10,10 @@ lands in a plain folder tree on disk.
 - Playlists that hold any mix of items, with drag reordering.
 - Pictures tab: galleries on top, loose pictures below; create a gallery inline.
 - Add to a collection from its own page, or pick a target while adding media.
+- Live updates: new items, deletes and playlist changes appear without a reload.
+- `All pictures` default gallery; upload several pictures at once.
+- Custom playlist/gallery covers from an item or an upload.
+- Clear the play queue and the download activity explicitly.
 - Four themes (Slate, Paper, Ocean, Moss) in light and dark.
 - Books open in your native reader; the cover is the file's first page.
 - Multi-select in the library for bulk queue / playlist / delete.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "mm.appearance";
 
@@ -30,6 +31,13 @@ export function ThemePicker() {
   const [mode, setMode] = useState<Mode>("dark");
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [coords, setCoords] = useState<{
+    left: number;
+    top: number;
+    up: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -45,9 +53,49 @@ export function ThemePicker() {
   }, []);
 
   useEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+
+    function place() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const width = 240;
+      const margin = 8;
+      const rect = trigger.getBoundingClientRect();
+      const left = Math.min(
+        Math.max(margin, rect.right - width),
+        window.innerWidth - width - margin,
+      );
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const up = spaceBelow < 320;
+      setCoords({
+        left,
+        top: up ? rect.top - margin : rect.bottom + margin,
+        up,
+      });
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (
+        !wrapRef.current?.contains(target) &&
+        !panelRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -73,6 +121,7 @@ export function ThemePicker() {
   return (
     <div ref={wrapRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
@@ -91,8 +140,19 @@ export function ThemePicker() {
         </span>
       </button>
 
-      {open ? (
-        <div className="absolute right-0 bottom-full z-50 mb-2 w-60 rounded-xl border border-line bg-panel p-3 shadow-xl md:right-auto md:left-0">
+      {open && coords
+        ? createPortal(
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-label="Appearance"
+              style={{
+                left: coords.left,
+                top: coords.top,
+                transform: coords.up ? "translateY(-100%)" : undefined,
+              }}
+              className="fixed z-[90] w-60 rounded-xl border border-line bg-panel p-3 shadow-xl"
+            >
           <p className="text-[11px] font-medium tracking-wide text-muted uppercase">
             Theme
           </p>
@@ -141,8 +201,10 @@ export function ThemePicker() {
               </button>
             ))}
           </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
