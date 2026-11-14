@@ -8,7 +8,7 @@ RUN cargo build --release --manifest-path crates/api/Cargo.toml
 FROM debian:bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl ffmpeg nodejs poppler-utils unzip \
+        ca-certificates curl ffmpeg nodejs poppler-utils python3 unzip \
     && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
         -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp \
