@@ -4,6 +4,7 @@ import {
   clamp01,
   indexAfterRemoval,
   indexAfterRemovingAll,
+  isPlayable,
   moveItem,
   nextIndex,
   prevIndex,
@@ -107,6 +108,15 @@ describe("indexAfterRemovingAll", () => {
 
   it("resets when everything is removed", () => {
     expect(indexAfterRemovingAll([{ id: "a" }, { id: "a" }], 1, "a")).toBe(0);
+  });
+});
+
+describe("isPlayable", () => {
+  it("accepts only audio and video", () => {
+    expect(isPlayable({ kind: "music" })).toBe(true);
+    expect(isPlayable({ kind: "video" })).toBe(true);
+    expect(isPlayable({ kind: "book" })).toBe(false);
+    expect(isPlayable({ kind: "picture" })).toBe(false);
   });
 });
 

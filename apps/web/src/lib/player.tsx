@@ -14,6 +14,7 @@ import type { Item } from "@/lib/types";
 import {
   indexAfterRemoval,
   indexAfterRemovingAll,
+  isPlayable,
   moveItem,
   nextIndex,
   prevIndex,
@@ -281,14 +282,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playNow = useCallback(
     (items: Item[], startAt = 0) => {
-      if (items.length === 0) return;
-      const safeIndex = Math.min(Math.max(0, startAt), items.length - 1);
+      const playable = items.filter(isPlayable);
+      if (playable.length === 0) return;
+      const before = items.slice(0, startAt).filter(isPlayable).length;
+      const safeIndex = Math.min(Math.max(0, before), playable.length - 1);
       wantPlayRef.current = true;
       setPlaying(true);
-      setQueue(items);
+      setQueue(playable);
       setIndex(safeIndex);
       const el = videoRef.current;
-      if (el && current?.id === items[safeIndex]?.id && el.paused) {
+      if (el && current?.id === playable[safeIndex]?.id && el.paused) {
         void el.play().catch(() => {});
       }
     },
@@ -297,17 +300,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playItem = useCallback((item: Item) => playNow([item], 0), [playNow]);
 
-  const playNext = useCallback((item: Item) => {
-    setQueue((prev) => {
-      const nextQueue = [...prev];
-      nextQueue.splice(index + 1, 0, item);
-      return nextQueue;
-    });
-  }, [index]);
+  const playNext = useCallback(
+    (item: Item) => {
+      if (!isPlayable(item)) return;
+      if (queue.length === 0) {
+        playNow([item], 0);
+        return;
+      }
+      setQueue((prev) => {
+        const nextQueue = [...prev];
+        nextQueue.splice(index + 1, 0, item);
+        return nextQueue;
+      });
+    },
+    [index, queue.length, playNow],
+  );
 
-  const addToQueue = useCallback((items: Item[]) => {
-    setQueue((prev) => [...prev, ...items]);
-  }, []);
+  const addToQueue = useCallback(
+    (items: Item[]) => {
+      const playable = items.filter(isPlayable);
+      if (playable.length === 0) return;
+      if (queue.length === 0) {
+        playNow(playable, 0);
+        return;
+      }
+      setQueue((prev) => [...prev, ...playable]);
+    },
+    [queue.length, playNow],
+  );
 
   const removeAt = useCallback(
     (at: number) => {

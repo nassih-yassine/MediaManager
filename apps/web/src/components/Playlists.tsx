@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DiscIcon, PlusIcon } from "@/components/icons";
@@ -46,6 +47,7 @@ function Mosaic({ playlist }: { playlist: PlaylistSummary }) {
 
 export function Playlists() {
   const toast = useToast();
+  const router = useRouter();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,13 +76,14 @@ export function Playlists() {
     setBusy(true);
     setError(null);
     try {
-      await api<PlaylistSummary>("/api/playlists", {
+      const created = await api<PlaylistSummary>("/api/playlists", {
         method: "POST",
         body: JSON.stringify({ name: trimmed }),
       });
       setName("");
       toast(`Playlist “${trimmed}” created`, "success");
-      await load();
+      window.dispatchEvent(new Event("mm:playlists-changed"));
+      router.push(`/playlists/${created.id}`);
     } catch (err) {
       setError((err as Error).message);
     } finally {

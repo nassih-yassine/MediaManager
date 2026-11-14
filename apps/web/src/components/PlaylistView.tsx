@@ -18,6 +18,7 @@ import {
 import { api, formatDuration } from "@/lib/api";
 import { kindLabel } from "@/lib/kind";
 import { usePlayer } from "@/lib/player";
+import { isPlayable } from "@/lib/player-utils";
 import type { PlaylistDetail } from "@/lib/types";
 
 function totalLabel(seconds: number): string {
@@ -108,6 +109,7 @@ export function PlaylistView() {
       setPlaylist({ ...playlist, name });
       setEditing(false);
       toast("Playlist renamed", "success");
+      window.dispatchEvent(new Event("mm:playlists-changed"));
     } catch (err) {
       toast((err as Error).message, "error");
     } finally {
@@ -144,6 +146,7 @@ export function PlaylistView() {
         item ? `Removed “${item.title}” from the playlist` : "Removed",
         "info",
       );
+      window.dispatchEvent(new Event("mm:playlists-changed"));
     } catch (err) {
       toast((err as Error).message, "error");
       void load();
@@ -204,6 +207,7 @@ export function PlaylistView() {
     (sum, item) => sum + (item.durationMs ?? 0) / 1000,
     0,
   );
+  const playableCount = playlist.items.filter(isPlayable).length;
 
   return (
     <div className="max-w-4xl">
@@ -250,7 +254,7 @@ export function PlaylistView() {
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={playlist.items.length === 0}
+              disabled={playableCount === 0}
               onClick={() => player.playNow(playlist.items, 0)}
               className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
             >
@@ -259,7 +263,7 @@ export function PlaylistView() {
             </button>
             <button
               type="button"
-              disabled={playlist.items.length < 2}
+              disabled={playableCount < 2}
               onClick={shufflePlay}
               className="flex items-center gap-2 rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink disabled:opacity-50"
             >
@@ -360,34 +364,48 @@ export function PlaylistView() {
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => player.playNow(playlist.items, at)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="block truncate text-sm font-medium">{item.title}</span>
-                  <span className="mt-0.5 block font-mono text-[11px] text-muted">
-                    {kindLabel(item.kind)}
-                    {item.durationMs ? ` · ${formatDuration(item.durationMs)}` : ""}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isCurrent) player.toggle();
-                    else player.playNow(playlist.items, at);
-                  }}
-                  aria-label={
-                    isCurrent && player.playing ? `Pause ${item.title}` : `Play ${item.title}`
-                  }
-                  className="rounded-lg p-2 text-muted transition-colors hover:text-ink"
-                >
-                  {isCurrent && player.playing ? (
-                    <PauseIcon className="h-3.5 w-3.5" />
-                  ) : (
-                    <PlayIcon className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                {isPlayable(item) ? (
+                  <button
+                    type="button"
+                    onClick={() => player.playNow(playlist.items, at)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate text-sm font-medium">{item.title}</span>
+                    <span className="mt-0.5 block font-mono text-[11px] text-muted">
+                      {kindLabel(item.kind)}
+                      {item.durationMs ? ` · ${formatDuration(item.durationMs)}` : ""}
+                    </span>
+                  </button>
+                ) : (
+                  <Link
+                    href={`/read/${item.id}`}
+                    className="min-w-0 flex-1 text-left hover:underline"
+                  >
+                    <span className="block truncate text-sm font-medium">{item.title}</span>
+                    <span className="mt-0.5 block font-mono text-[11px] text-muted">
+                      {kindLabel(item.kind)} · open
+                    </span>
+                  </Link>
+                )}
+                {isPlayable(item) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isCurrent) player.toggle();
+                      else player.playNow(playlist.items, at);
+                    }}
+                    aria-label={
+                      isCurrent && player.playing ? `Pause ${item.title}` : `Play ${item.title}`
+                    }
+                    className="rounded-lg p-2 text-muted transition-colors hover:text-ink"
+                  >
+                    {isCurrent && player.playing ? (
+                      <PauseIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      <PlayIcon className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => removeItem(item.id)}

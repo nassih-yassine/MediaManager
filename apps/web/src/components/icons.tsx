@@ -274,3 +274,13 @@ export function LinkIcon({ className = base }: Props) {
     </svg>
   );
 }
+
+export function PlaylistAddIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M4 6.5h10M4 11h10M4 15.5h6" />
+      <path d="M17.5 13v6M14.5 16h6" />
+    </svg>
+  );
+}

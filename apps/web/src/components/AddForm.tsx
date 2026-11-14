@@ -136,6 +136,8 @@ export function AddForm() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
+  const knownStatus = useRef(new Map<string, string>());
+  const firstPoll = useRef(true);
 
   const isYoutubeKind = kind === "music" || kind === "video";
   const acceptsFile = kind === "book" || kind === "picture";
@@ -143,11 +145,23 @@ export function AddForm() {
   const refreshJobs = useCallback(async () => {
     try {
       const data = await api<{ jobs: Job[] }>("/api/jobs?limit=12");
+      for (const job of data.jobs) {
+        const previous = knownStatus.current.get(job.id);
+        if (!firstPoll.current && previous && previous !== job.status) {
+          if (job.status === "done") {
+            toast(`Saved ${prettyUrl(job.url)}`, "success");
+          } else if (job.status === "failed") {
+            toast(`Failed: ${prettyUrl(job.url)}`, "error");
+          }
+        }
+        knownStatus.current.set(job.id, job.status);
+      }
+      firstPoll.current = false;
       setJobs(data.jobs);
     } catch {
       // submit errors carry the useful message
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     void refreshJobs();

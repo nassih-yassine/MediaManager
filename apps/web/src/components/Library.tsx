@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PlaylistMenu } from "@/components/PlaylistMenu";
 import { useToast } from "@/components/ui/Toast";
 import {
   BookIcon,
@@ -21,13 +22,13 @@ import {
 import { api, formatBytes, formatDate, formatDuration } from "@/lib/api";
 import { kindLabel } from "@/lib/kind";
 import { usePlayer } from "@/lib/player";
+import { isPlayable } from "@/lib/player-utils";
 import { SORT_OPTIONS, sortItems, type SortKey } from "@/lib/sort";
 import {
   type Item,
   type ItemsPage,
   type Kind,
   KINDS,
-  type PlaylistSummary,
 } from "@/lib/types";
 
 const KIND_ICON: Record<Kind, typeof BookIcon> = {
@@ -134,6 +135,7 @@ function Card({
                 <PlusIcon className="h-3.5 w-3.5" />
               </button>
             ) : null}
+            <PlaylistMenu itemIds={[item.id]} variant="icon" placement="bottom" />
             <button
               type="button"
               aria-label={`Delete ${item.title}`}
@@ -227,8 +229,6 @@ export function Library() {
   const [reload, setReload] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
-  const [targetPlaylist, setTargetPlaylist] = useState("");
   const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const requestId = useRef(0);
@@ -260,15 +260,6 @@ export function Library() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    api<{ playlists: PlaylistSummary[] }>("/api/playlists")
-      .then((data) => {
-        setPlaylists(data.playlists);
-        setTargetPlaylist((current) => current || data.playlists[0]?.id || "");
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -339,24 +330,6 @@ export function Library() {
   function queueItem(item: Item) {
     player.addToQueue([item]);
     toast(`Queued “${item.title}”`, "success");
-  }
-
-  async function addSelectedToPlaylist() {
-    const playlist = playlists.find((p) => p.id === targetPlaylist);
-    if (!playlist || selectedItems.length === 0) return;
-    try {
-      await api(`/api/playlists/${playlist.id}/items`, {
-        method: "POST",
-        body: JSON.stringify({ itemIds: selectedItems.map((i) => i.id) }),
-      });
-      toast(
-        `Added ${selectedItems.length} to “${playlist.name}”`,
-        "success",
-      );
-      clearSelection();
-    } catch (err) {
-      toast((err as Error).message, "error");
-    }
   }
 
   async function deleteItems() {
@@ -586,7 +559,17 @@ export function Library() {
             <button
               type="button"
               disabled={selectedItems.length === 0}
-              onClick={() => player.playNow(selectedItems, 0)}
+              onClick={() => {
+                const playable = selectedItems.filter(isPlayable);
+                if (playable.length === 0) {
+                  toast("Books and pictures can't be played", "error");
+                  return;
+                }
+                if (playable.length < selectedItems.length) {
+                  toast("Skipped books and pictures", "info");
+                }
+                player.playNow(playable, 0);
+              }}
               className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink disabled:opacity-50"
             >
               <PlayIcon className="h-3.5 w-3.5" />
@@ -596,8 +579,13 @@ export function Library() {
               type="button"
               disabled={selectedItems.length === 0}
               onClick={() => {
-                player.addToQueue(selectedItems);
-                toast(`Queued ${selectedItems.length} items`, "success");
+                const playable = selectedItems.filter(isPlayable);
+                if (playable.length === 0) {
+                  toast("Books and pictures can't be queued", "error");
+                  return;
+                }
+                player.addToQueue(playable);
+                toast(`Queued ${playable.length} items`, "success");
                 clearSelection();
               }}
               className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:text-ink disabled:opacity-50"
@@ -605,31 +593,11 @@ export function Library() {
               <QueueIcon className="h-3.5 w-3.5" />
               Queue
             </button>
-            {playlists.length > 0 ? (
-              <span className="flex items-center gap-1">
-                <select
-                  value={targetPlaylist}
-                  onChange={(event) => setTargetPlaylist(event.target.value)}
-                  aria-label="Target playlist"
-                  className="h-8 max-w-[150px] rounded-full border border-line px-2.5 text-xs text-muted"
-                >
-                  {playlists.map((playlist) => (
-                    <option key={playlist.id} value={playlist.id}>
-                      {playlist.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={selectedItems.length === 0}
-                  onClick={addSelectedToPlaylist}
-                  className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:text-ink disabled:opacity-50"
-                >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Add
-                </button>
-              </span>
-            ) : null}
+            <PlaylistMenu
+              itemIds={Array.from(selected)}
+              variant="pill"
+              placement="top"
+            />
             <button
               type="button"
               disabled={selected.size === 0}

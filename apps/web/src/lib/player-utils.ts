@@ -1,5 +1,10 @@
 export type RepeatMode = "off" | "all" | "one";
 
+/** Only audio and video can be handed to the media element. */
+export function isPlayable(item: { kind: string }): boolean {
+  return item.kind === "music" || item.kind === "video";
+}
+
 /** Index to advance to when a track ends, or null when playback should stop. */
 export function nextIndex(
   index: number,

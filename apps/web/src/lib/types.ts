@@ -51,6 +51,13 @@ export interface PlaylistSummary {
   updatedAt: number;
 }
 
+export interface PlaylistMembership {
+  id: string;
+  name: string;
+  itemCount: number;
+  contains: boolean;
+}
+
 export interface PlaylistDetail {
   id: string;
   name: string;

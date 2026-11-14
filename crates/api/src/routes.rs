@@ -121,6 +121,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/items/{id}/open", post(open_item))
         .route("/api/items/{id}/progress", post(update_item_progress))
+        .route("/api/items/{id}/playlists", get(item_playlists))
         .route("/api/jobs", get(list_jobs).post(create_job))
         .route("/api/jobs/{id}", get(get_job).delete(cancel_job))
         .route("/api/playlists", get(list_playlists).post(create_playlist))
@@ -352,9 +353,7 @@ async fn delete_item(
 #[serde(rename_all = "camelCase")]
 struct ProgressBody {
     position_ms: i64,
-}
-
-async fn update_item_progress(
+}async fn update_item_progress(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     Json(body): Json<ProgressBody>,
@@ -371,6 +370,48 @@ async fn update_item_progress(
         return Err(ApiError::not_found("item not found"));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Playlists that could contain this item, with a membership flag. Powers the
+/// add-to-playlist picker so it can show checkmarks without N requests.
+async fn item_playlists(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM items WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .is_some();
+    if !exists {
+        return Err(ApiError::not_found("item not found"));
+    }
+
+    let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
+        "SELECT p.id, p.name,
+                (SELECT COUNT(*) FROM playlist_items pi WHERE pi.playlist_id = p.id) AS item_count,
+                EXISTS(SELECT 1 FROM playlist_items x
+                        WHERE x.playlist_id = p.id AND x.item_id = ?) AS contains
+           FROM playlists p
+          ORDER BY p.name COLLATE NOCASE",
+    )
+    .bind(&id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let playlists: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(pid, name, count, contains)| {
+            json!({
+                "id": pid,
+                "name": name,
+                "itemCount": count,
+                "contains": contains != 0,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({ "playlists": playlists })))
 }
 
 async fn open_item(

@@ -10,13 +10,15 @@ import { api } from "@/lib/api";
 import type { PlaylistSummary } from "@/lib/types";
 
 const NAV = [
-  { href: "/", label: "Library", icon: LibraryIcon },
-  { href: "/add", label: "Add media", icon: AddMediaIcon },
+  { href: "/", label: "Library", icon: LibraryIcon, mobileOnly: false },
+  { href: "/add", label: "Add media", icon: AddMediaIcon, mobileOnly: false },
+  { href: "/playlists", label: "Playlists", icon: DiscIcon, mobileOnly: true },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,7 +32,15 @@ export function Sidebar() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, refreshKey]);
+
+  useEffect(() => {
+    function refresh() {
+      setRefreshKey((value) => value + 1);
+    }
+    window.addEventListener("mm:playlists-changed", refresh);
+    return () => window.removeEventListener("mm:playlists-changed", refresh);
+  }, []);
 
   return (
     <aside className="w-full border-b border-line bg-panel/50 md:sticky md:top-0 md:h-dvh md:w-[252px] md:shrink-0 md:overflow-y-auto md:border-r md:border-b-0">
@@ -56,6 +66,8 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+                  item.mobileOnly ? "md:hidden" : ""
+                } ${
                   active
                     ? "bg-panel-2 text-ink"
                     : "text-muted hover:bg-panel-2/70 hover:text-ink"
