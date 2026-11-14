@@ -276,7 +276,7 @@ GET    /api/jobs              ?active=1|status=&limit=
 GET    /api/jobs/:id
 DELETE /api/jobs/:id          cancel queued/running
 POST   /api/uploads           multipart, {kind}                  size-capped
-GET    /api/items             ?kind=&q=&limit=&cursor=&sort=&ungrouped=  keyset pagination
+GET    /api/items             ?kind=&q=&limit=&cursor=&sort=&ungrouped=&hide_pictures=  keyset pagination
 GET    /api/items/:id
 PATCH  /api/items/:id         {title}
 DELETE /api/items/:id?delete_file=true
@@ -286,7 +286,7 @@ GET    /api/playlists         summaries with count + cover  ?kind=playlist|galle
 POST   /api/playlists         {name, kind?}
 GET    /api/playlists/:id     playlist + ordered items
 PATCH  /api/playlists/:id     {name}
-DELETE /api/playlists/:id
+DELETE /api/playlists/:id     ?mode=move|delete_items (galleries); default gallery → 400
 POST   /api/playlists/:id/items            {itemIds}
 DELETE /api/playlists/:id/items/:itemId
 PUT    /api/playlists/:id/order            {itemIds}
@@ -344,6 +344,17 @@ GET    /files/:id/:filename   Range-capable, streamed from disk
   detail grid; `/galleries` redirects to `/?kind=picture`. Galleries reuse the playlist
   tables with `kind='gallery'`, accept only pictures, and are added from picture cards.
   The gallery page can also upload pictures directly (button or drop onto the grid).
+- **Gallery viewer:** clicking a tile opens a full-screen carousel with previous/next
+  buttons, keyboard arrows, a thumbnail strip, and swipe left/right on touch.
+- **Gallery selection:** the gallery header has a `Select` toggle; tiles then show
+  checkmarks and a bar offers Move (to another gallery), Remove (membership only) and
+  Delete pictures (files). The default gallery only offers Delete pictures.
+- **Deleting a gallery** asks keep-or-delete: `mode=move` re-files its pictures into
+  `All pictures`, `mode=delete_items` deletes files and rows. The default gallery
+  cannot be deleted (`400 default_gallery`).
+- **Library `All`** is collection-first: standalone pictures are hidden there
+  (`hide_pictures=1`) so only galleries and non-picture kinds show; loose pictures
+  remain in the Galleries tab.
 - **Adding from a collection:** a playlist or gallery page has an "Add items" /
   "Add pictures" dialog that searches the library and appends a selection. The Add
   media form can also target a playlist/gallery up front; downloads attach on

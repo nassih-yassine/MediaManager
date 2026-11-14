@@ -104,7 +104,21 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   the `mm:realtime` window event for tests/inspection.
 - **Default gallery:** `ensure_default_gallery` creates `All pictures` at startup and
   backfills existing pictures. Uploads and finished picture downloads are attached to
-  it automatically. Music/video/book are never placed there.
+  it automatically. Music/video/book are never placed there. It is reported as
+  `isDefault: true`; `DELETE /api/playlists/:id` on it returns
+  `400 default_gallery`, and the UI hides Delete for it.
+- **Gallery delete asks keep-or-delete:** `DELETE /api/playlists/:id?mode=move`
+  (default) re-attaches the gallery's pictures to the default gallery;
+  `mode=delete_items` deletes the files and rows first. The UI uses
+  `DeleteCollectionDialog`; plain playlists only ever detach.
+- **Gallery lightbox and selection:** clicking a tile opens `GalleryLightbox` (portal,
+  arrows/Escape, thumbnail strip, swipe). Header `Select` toggles a tile-selection bar:
+  move (append to another gallery, then remove from this one), remove membership, or
+  delete files. Inside the default gallery only "Delete pictures" is offered, since
+  move/remove would fight the backfill invariant.
+- **Library `All` is collection-first:** `GET /api/items?hide_pictures=1` hides
+  standalone pictures so the grid shows galleries; the Galleries tab is the place
+  where loose pictures appear (`ungrouped=1`).
 - **Clearing the download queue:** `POST /api/jobs/clear {scope:"active"|"finished"|"all"}`.
   Active jobs are marked cancelled (workers discard the partial item on completion);
   finished/failed rows are deleted. The Add page exposes this behind a confirm.

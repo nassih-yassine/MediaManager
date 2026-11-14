@@ -177,6 +177,15 @@ async function main() {
 
   try {
     fixture = await uploadFixture();
+    // Uploads land in the default gallery; detach so the picture renders as a
+    // loose card on the Galleries tab (the All tab hides standalone pictures).
+    const defaultGallery = (
+      await (await fetch(`${API}/api/playlists?kind=gallery`)).json()
+    ).playlists.find((entry) => entry.isDefault);
+    if (!defaultGallery) fail("default gallery is missing");
+    await fetch(`${API}/api/playlists/${defaultGallery.id}/items/${fixture.id}`, {
+      method: "DELETE",
+    });
     console.log(`PASS fixture uploaded: ${fixture.id}`);
 
     profileDir = await mkdtemp(path.join(tmpdir(), "mm-e2e-"));
@@ -275,12 +284,19 @@ async function main() {
       15000,
       "page body",
     );
+    // The All tab is collection-first: standalone pictures are hidden there.
+    await sleep(1500);
+    const allHasTitle = await evaluate(
+      `document.body.innerText.includes(${JSON.stringify(TITLE)})`,
+    );
+    if (allHasTitle) fail("standalone picture leaked into the All tab");
+    await evaluate("location.href = '/?kind=picture'");
     await waitFor(
       `document.body.innerText.includes(${JSON.stringify(TITLE)})`,
       15000,
-      "library item",
+      "library item on the Galleries tab",
     );
-    console.log("PASS library renders the fixture item");
+    console.log("PASS All hides pictures; Galleries tab renders the fixture");
     const overflow = await evaluate(
       "document.documentElement.scrollWidth - window.innerWidth",
     );
@@ -300,10 +316,17 @@ async function main() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ positionMs: 30_000 }),
     });
+    // Music is on the All tab; the Galleries tab only shows pictures.
+    await evaluate("location.href = '/'");
+    await waitFor(
+      `document.body.innerText.includes(${JSON.stringify(resumeItem.title)})`,
+      15000,
+      "music item on the All tab",
+    );
     // Reload so the library fetches the item with the stored position.
     await evaluate("location.reload()");
     await waitFor(
-      `document.body.innerText.includes(${JSON.stringify(TITLE)})`,
+      `document.body.innerText.includes(${JSON.stringify(resumeItem.title)})`,
       15000,
       "library after progress reload",
     );
@@ -384,10 +407,11 @@ async function main() {
     );
     console.log("PASS theme switches and persists");
 
-    // Delete the fixture through the UI.
+    // Delete the fixture through the UI, back on the Galleries tab.
+    await evaluate("location.href = '/?kind=picture'");
     await waitFor(
       `!!${byLabel(`Delete ${TITLE}`)}`,
-      10000,
+      15000,
       "delete button",
     );
     await evaluate(`${byLabel(`Delete ${TITLE}`)}.click()`);
@@ -423,6 +447,9 @@ async function main() {
 
     // Live updates: a change made outside the tab appears without a refresh.
     live = await uploadFixture("E2E LIVE ITEM");
+    await fetch(`${API}/api/playlists/${defaultGallery.id}/items/${live.id}`, {
+      method: "DELETE",
+    });
     await waitFor(
       `document.body.innerText.includes('E2E LIVE ITEM')`,
       12000,

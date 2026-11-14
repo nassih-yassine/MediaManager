@@ -284,3 +284,21 @@ export function PlaylistAddIcon({ className = base }: Props) {
     </svg>
   );
 }
+
+export function ChevronLeftIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}

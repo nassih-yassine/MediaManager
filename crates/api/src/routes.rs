@@ -185,6 +185,7 @@ struct ListParams {
     cursor: Option<String>,
     sort: Option<String>,
     ungrouped: Option<u8>,
+    hide_pictures: Option<u8>,
 }
 
 fn fts_terms(q: &str) -> Vec<String> {
@@ -249,6 +250,9 @@ async fn list_items(
                 WHERE pi.item_id = i.id AND p.kind = 'gallery')",
         );
     }
+    if params.hide_pictures.unwrap_or(0) == 1 {
+        count.push(" AND i.kind != 'picture'");
+    }
     let total: i64 = count.build_query_scalar().fetch_one(&state.pool).await?;
 
     let mut rows: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT i.* FROM items i");
@@ -271,6 +275,9 @@ async fn list_items(
                 JOIN playlists p ON p.id = pi.playlist_id
                 WHERE pi.item_id = i.id AND p.kind = 'gallery')",
         );
+    }
+    if params.hide_pictures.unwrap_or(0) == 1 {
+        rows.push(" AND i.kind != 'picture'");
     }
 
     let sort = params.sort.as_deref().unwrap_or("newest");
@@ -894,7 +901,10 @@ async fn list_playlists(
         query = query.bind(kind);
     }
     let rows = query.fetch_all(&state.pool).await?;
-    let playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
+    let mut playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
+    for playlist in &mut playlists {
+        playlist.is_default = playlist.id == state.default_gallery;
+    }
     Ok(Json(json!({ "playlists": playlists })))
 }
 
@@ -931,6 +941,7 @@ async fn create_playlist(
             id,
             name,
             kind: kind.to_string(),
+            is_default: false,
             item_count: 0,
             cover_url: None,
             thumb_url: None,
@@ -970,11 +981,13 @@ async fn get_playlist(
                 .iter()
                 .find_map(|item| item.thumb_path.as_deref().map(models::thumb_url))
         });
+    let is_default = playlist.id == state.default_gallery;
 
     Ok(Json(PlaylistDetailDto {
         id: playlist.id,
         name: playlist.name,
         kind: playlist.kind,
+        is_default,
         cover_url,
         created_at: playlist.created_at,
         updated_at: playlist.updated_at,
@@ -1001,16 +1014,72 @@ async fn rename_playlist(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct DeleteCollectionParams {
+    mode: Option<String>,
+}
+
 async fn delete_playlist(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
+    Query(params): Query<DeleteCollectionParams>,
 ) -> Result<StatusCode, ApiError> {
-    let cover =
-        sqlx::query_scalar::<_, Option<String>>("SELECT cover_path FROM playlists WHERE id = ?")
-            .bind(&id)
-            .fetch_optional(&state.pool)
-            .await?
-            .flatten();
+    let playlist = sqlx::query_as::<_, Playlist>("SELECT * FROM playlists WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::not_found("playlist not found"))?;
+
+    if playlist.id == state.default_gallery {
+        return Err(ApiError::bad_request(
+            "default_gallery",
+            "the default gallery cannot be deleted",
+        ));
+    }
+
+    let mode = params.mode.as_deref().unwrap_or("move");
+    if mode != "move" && mode != "delete_items" {
+        return Err(ApiError::bad_request(
+            "invalid_mode",
+            "mode must be move or delete_items",
+        ));
+    }
+
+    if playlist.kind == "gallery" {
+        let item_ids: Vec<String> =
+            sqlx::query_scalar("SELECT item_id FROM playlist_items WHERE playlist_id = ?")
+                .bind(&id)
+                .fetch_all(&state.pool)
+                .await?;
+
+        if mode == "delete_items" {
+            for item_id in &item_ids {
+                if let Some(item) = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = ?")
+                    .bind(item_id)
+                    .fetch_optional(&state.pool)
+                    .await?
+                {
+                    if let Err(err) = media::remove_item(&state.pool, &state.cfg, &item, true).await
+                    {
+                        tracing::warn!(%err, item = %item_id, "could not delete gallery picture");
+                    } else {
+                        state.emit("item.deleted", item_id, None);
+                    }
+                }
+            }
+        } else {
+            for item_id in &item_ids {
+                if let Err(err) =
+                    media::attach_to_collection(&state.pool, &state.default_gallery, item_id).await
+                {
+                    tracing::warn!(%err, item = %item_id, "could not move picture to default gallery");
+                }
+            }
+            state.emit("collection.changed", &state.default_gallery, None);
+        }
+    }
+
+    let cover = playlist.cover_path;
     let result = sqlx::query("DELETE FROM playlists WHERE id = ?")
         .bind(&id)
         .execute(&state.pool)

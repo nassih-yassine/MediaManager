@@ -245,6 +245,7 @@ pub struct PlaylistSummaryDto {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub is_default: bool,
     pub item_count: i64,
     pub cover_url: Option<String>,
     pub thumb_url: Option<String>,
@@ -267,6 +268,7 @@ impl PlaylistSummaryRow {
             id: self.id.clone(),
             name: self.name.clone(),
             kind: self.kind.clone(),
+            is_default: false,
             item_count: self.item_count,
             cover_url: self
                 .cover_path
@@ -287,6 +289,7 @@ pub struct PlaylistDetailDto {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub is_default: bool,
     pub cover_url: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,

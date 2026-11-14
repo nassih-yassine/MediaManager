@@ -261,7 +261,7 @@ export function Library() {
   }, []);
 
   useEffect(() => {
-    if (kind !== "picture") {
+    if (kind !== "picture" && kind !== "all") {
       setGalleries([]);
       return;
     }
@@ -321,6 +321,7 @@ export function Library() {
 
     const params = new URLSearchParams({ limit: "48", sort });
     if (kind !== "all") params.set("kind", kind);
+    if (kind === "all") params.set("hide_pictures", "1");
     if (kind === "picture") params.set("ungrouped", "1");
     if (debounced) params.set("q", debounced);
 
@@ -345,6 +346,7 @@ export function Library() {
     setLoadingMore(true);
     const params = new URLSearchParams({ limit: "48", cursor, sort });
     if (kind !== "all") params.set("kind", kind);
+    if (kind === "all") params.set("hide_pictures", "1");
     if (kind === "picture") params.set("ungrouped", "1");
     if (debounced) params.set("q", debounced);
     try {

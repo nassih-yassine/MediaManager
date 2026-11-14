@@ -8,8 +8,15 @@ import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AddItemsDialog } from "@/components/AddItemsDialog";
 import { CoverDialog } from "@/components/CoverDialog";
+import { GalleryLightbox } from "@/components/GalleryLightbox";
+import {
+  DeleteCollectionDialog,
+  type DeleteCollectionMode,
+} from "@/components/DeleteCollectionDialog";
+import { SelectMenu } from "@/components/ui/SelectMenu";
 import { useToast } from "@/components/ui/Toast";
 import {
+  CheckIcon,
   CloseIcon,
   DiscIcon,
   ImageIcon,
@@ -24,7 +31,7 @@ import { kindLabel } from "@/lib/kind";
 import { usePlayer } from "@/lib/player";
 import { isPlayable } from "@/lib/player-utils";
 import { useRealtime } from "@/lib/realtime";
-import type { PlaylistDetail } from "@/lib/types";
+import type { PlaylistDetail, PlaylistSummary } from "@/lib/types";
 
 function totalLabel(seconds: number): string {
   const total = Math.floor(seconds);
@@ -84,6 +91,14 @@ export function PlaylistView() {
   const [coverOpen, setCoverOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  const [viewer, setViewer] = useState<number | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [galleries, setGalleries] = useState<PlaylistSummary[]>([]);
+  const [targetGallery, setTargetGallery] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [deleteModeOpen, setDeleteModeOpen] = useState(false);
+  const [deletePicturesOpen, setDeletePicturesOpen] = useState(false);
   const pictureInput = useRef<HTMLInputElement | null>(null);
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
@@ -114,6 +129,23 @@ export function PlaylistView() {
     }
   });
 
+  useEffect(() => {
+    if (!selectionMode || !playlist || playlist.kind !== "gallery") return;
+    api<{ playlists: PlaylistSummary[] }>("/api/playlists?kind=gallery")
+      .then((data) => {
+        const options = data.playlists.filter(
+          (entry) => entry.id !== playlist.id,
+        );
+        setGalleries(options);
+        setTargetGallery((current) =>
+          options.some((entry) => entry.id === current)
+            ? current
+            : (options[0]?.id ?? ""),
+        );
+      })
+      .catch(() => {});
+  }, [selectionMode, playlist]);
+
   async function rename(event: React.FormEvent) {
     event.preventDefault();
     if (!playlist) return;
@@ -139,17 +171,29 @@ export function PlaylistView() {
     }
   }
 
-  async function removePlaylist() {
+  async function removePlaylist(mode: DeleteCollectionMode = "move") {
     if (!playlist) return;
     setBusy(true);
     try {
-      await api(`/api/playlists/${playlist.id}`, { method: "DELETE" });
-      toast(`Deleted “${playlist.name}”`, "success");
-      router.push("/playlists");
+      const url =
+        playlist.kind === "gallery"
+          ? `/api/playlists/${playlist.id}?mode=${mode}`
+          : `/api/playlists/${playlist.id}`;
+      await api(url, { method: "DELETE" });
+      toast(
+        playlist.kind === "gallery"
+          ? mode === "delete_items"
+            ? `Deleted “${playlist.name}” and its pictures`
+            : `Deleted “${playlist.name}”; pictures moved to All pictures`
+          : `Deleted “${playlist.name}”`,
+        "success",
+      );
+      router.push(playlist.kind === "gallery" ? "/galleries" : "/playlists");
     } catch (err) {
       toast((err as Error).message, "error");
       setBusy(false);
       setConfirmDelete(false);
+      setDeleteModeOpen(false);
     }
   }
 
@@ -160,6 +204,7 @@ export function PlaylistView() {
       ...playlist,
       items: playlist.items.filter((entry) => entry.id !== itemId),
     });
+    setViewer(null);
     try {
       await api(`/api/playlists/${playlist.id}/items/${itemId}`, {
         method: "DELETE",
@@ -245,6 +290,96 @@ export function PlaylistView() {
     if (failures.length > 0) toast(failures[0], "error");
     if (pictureInput.current) pictureInput.current.value = "";
     setUploading(false);
+    await load();
+  }
+
+  function toggleSelected(itemId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+
+  function exitSelection() {
+    setSelectionMode(false);
+    setSelected(new Set());
+  }
+
+  async function moveSelected() {
+    if (!playlist || !targetGallery || selected.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    try {
+      await api(`/api/playlists/${targetGallery}/items`, {
+        method: "POST",
+        body: JSON.stringify({ itemIds: ids }),
+      });
+      for (const itemId of ids) {
+        await api(`/api/playlists/${playlist.id}/items/${itemId}`, {
+          method: "DELETE",
+        });
+      }
+      toast(
+        `Moved ${ids.length} ${ids.length === 1 ? "picture" : "pictures"}`,
+        "success",
+      );
+      exitSelection();
+      await load();
+      window.dispatchEvent(new Event("mm:playlists-changed"));
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function removeSelected() {
+    if (!playlist || selected.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    try {
+      for (const itemId of ids) {
+        await api(`/api/playlists/${playlist.id}/items/${itemId}`, {
+          method: "DELETE",
+        });
+      }
+      toast(
+        `Removed ${ids.length} ${ids.length === 1 ? "picture" : "pictures"} from this gallery`,
+        "info",
+      );
+      exitSelection();
+      await load();
+      window.dispatchEvent(new Event("mm:playlists-changed"));
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function deleteSelected() {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selected);
+    const results = await Promise.allSettled(
+      ids.map((itemId) =>
+        api(`/api/items/${itemId}?delete_file=true`, { method: "DELETE" }),
+      ),
+    );
+    const failed = results.filter((entry) => entry.status === "rejected").length;
+    const removed = ids.length - failed;
+    if (removed > 0) {
+      toast(
+        `Deleted ${removed} ${removed === 1 ? "picture" : "pictures"}`,
+        "success",
+      );
+    }
+    if (failed > 0) toast(`${failed} could not be deleted`, "error");
+    setDeletePicturesOpen(false);
+    setBulkBusy(false);
+    exitSelection();
     await load();
   }
 
@@ -388,6 +523,18 @@ export function PlaylistView() {
                 </button>
               </>
             )}
+            {gallery && playlist.items.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectionMode) exitSelection();
+                  else setSelectionMode(true);
+                }}
+                className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:text-ink"
+              >
+                {selectionMode ? "Done" : "Select"}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setCoverOpen(true)}
@@ -402,13 +549,17 @@ export function PlaylistView() {
             >
               Rename
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:border-danger/50 hover:text-danger"
-            >
-              Delete
-            </button>
+            {!playlist.isDefault ? (
+              <button
+                type="button"
+                onClick={() =>
+                  gallery ? setDeleteModeOpen(true) : setConfirmDelete(true)
+                }
+                className="rounded-full border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:border-danger/50 hover:text-danger"
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -450,32 +601,66 @@ export function PlaylistView() {
               : ""
           }`}
         >
-          {playlist.items.map((item) => (
-            <div
-              key={item.id}
-              className="group relative aspect-square overflow-hidden rounded-xl border border-line bg-panel-2"
-            >
-              <Link href={`/read/${item.id}`} className="block h-full w-full">
-                <img
-                  src={item.thumbUrl ?? item.fileUrl}
-                  alt={item.title}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                />
-              </Link>
-              <button
-                type="button"
-                onClick={() => removeItem(item.id)}
-                aria-label={`Remove ${item.title} from gallery`}
-                className="absolute top-2 right-2 z-10 rounded-lg border border-white/25 bg-black/45 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:border-danger/60 hover:text-danger"
+          {playlist.items.map((item, at) => {
+            const isSelected = selected.has(item.id);
+            return (
+              <div
+                key={item.id}
+                className={`group relative aspect-square overflow-hidden rounded-xl border bg-panel-2 ${
+                  isSelected
+                    ? "border-accent ring-2 ring-accent/30"
+                    : "border-line"
+                }`}
               >
-                <CloseIcon className="h-3.5 w-3.5" />
-              </button>
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                <p className="truncate text-[11px] text-white">{item.title}</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    selectionMode ? toggleSelected(item.id) : setViewer(at)
+                  }
+                  className="block h-full w-full"
+                  aria-label={
+                    selectionMode
+                      ? `${isSelected ? "Deselect" : "Select"} ${item.title}`
+                      : `Open ${item.title}`
+                  }
+                >
+                  <img
+                    src={item.thumbUrl ?? item.fileUrl}
+                    alt={item.title}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                  />
+                </button>
+                {selectionMode ? (
+                  <span
+                    className={`pointer-events-none absolute top-2 left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border ${
+                      isSelected
+                        ? "border-accent bg-accent text-accent-ink"
+                        : "border-white/60 bg-black/40 text-transparent"
+                    }`}
+                    aria-hidden
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  </span>
+                ) : null}
+                {!selectionMode ? (
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    aria-label={`Remove ${item.title} from gallery`}
+                    className="absolute top-2 right-2 z-10 rounded-lg border border-white/25 bg-black/45 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:border-danger/60 hover:text-danger"
+                  >
+                    <CloseIcon className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                  <p className="truncate text-[11px] text-white">
+                    {item.title}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <ul className="mt-8 space-y-1">
@@ -617,6 +802,93 @@ export function PlaylistView() {
         onChanged={() => void load()}
       />
 
+      {selectionMode ? (
+        <div className="fixed inset-x-0 bottom-[92px] z-40 px-4">
+          <div className="animate-pop-in mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-line bg-panel/95 px-3 py-2.5 shadow-2xl backdrop-blur">
+            <span className="mr-1 text-sm font-semibold">
+              {selected.size} selected
+            </span>
+
+            {!playlist.isDefault ? (
+              <>
+                <SelectMenu
+                  value={targetGallery}
+                  options={galleries.map((entry) => ({
+                    value: entry.id,
+                    label: entry.name,
+                  }))}
+                  onChange={setTargetGallery}
+                  ariaLabel="Move to gallery"
+                  className="h-8 max-w-[170px] rounded-full border border-line px-2.5 text-xs text-muted"
+                  panelWidth={220}
+                />
+                <button
+                  type="button"
+                  onClick={moveSelected}
+                  disabled={!targetGallery || selected.size === 0 || bulkBusy}
+                  className="rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:text-ink disabled:opacity-40"
+                >
+                  Move
+                </button>
+                <button
+                  type="button"
+                  onClick={removeSelected}
+                  disabled={selected.size === 0 || bulkBusy}
+                  className="rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:text-ink disabled:opacity-40"
+                >
+                  Remove
+                </button>
+              </>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => setDeletePicturesOpen(true)}
+              disabled={selected.size === 0 || bulkBusy}
+              className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:border-danger/50 hover:text-danger disabled:opacity-40"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              Delete pictures
+            </button>
+            <button
+              type="button"
+              onClick={exitSelection}
+              className="ml-auto text-xs text-muted hover:text-ink"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {viewer !== null && playlist.items.length > 0 ? (
+        <GalleryLightbox
+          items={playlist.items}
+          index={Math.min(viewer, playlist.items.length - 1)}
+          onIndexChange={setViewer}
+          onClose={() => setViewer(null)}
+        />
+      ) : null}
+
+      <DeleteCollectionDialog
+        open={deleteModeOpen}
+        name={playlist.name}
+        itemCount={playlist.items.length}
+        busy={busy}
+        onCancel={() => setDeleteModeOpen(false)}
+        onConfirm={removePlaylist}
+      />
+
+      <ConfirmDialog
+        open={deletePicturesOpen}
+        busy={bulkBusy}
+        title={`Delete ${selected.size} ${selected.size === 1 ? "picture" : "pictures"}?`}
+        description="The files are removed from disk and from every gallery. This cannot be undone."
+        confirmLabel="Delete pictures"
+        onCancel={() => setDeletePicturesOpen(false)}
+        onConfirm={deleteSelected}
+      />
+
       <AddItemsDialog
         open={addOpen}
         collectionId={playlist.id}
@@ -630,12 +902,10 @@ export function PlaylistView() {
         open={confirmDelete}
         busy={busy}
         title={`Delete “${playlist.name}”?`}
-        description={`The ${gallery ? "gallery" : "playlist"} is removed. Its ${
-          gallery ? "pictures" : "items"
-        } stay in the library.`}
-        confirmLabel={`Delete ${gallery ? "gallery" : "playlist"}`}
+        description="The playlist is removed. Its items stay in the library."
+        confirmLabel="Delete playlist"
         onCancel={() => setConfirmDelete(false)}
-        onConfirm={removePlaylist}
+        onConfirm={() => void removePlaylist("move")}
       />
     </div>
   );

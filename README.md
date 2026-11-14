@@ -9,10 +9,17 @@ lands in a plain folder tree on disk.
 - Resume where you stopped: positions are saved per item (even across reloads).
 - Playlists that hold any mix of items, with drag reordering.
 - Galleries tab: galleries on top, loose pictures below; create a gallery inline.
+- Full-screen gallery viewer: keyboard arrows, thumbnail strip, swipe on touch.
+- Select mode inside a gallery: move pictures to another gallery, remove them
+  from it, or delete the files.
 - Upload pictures directly from a gallery, or drop them onto its grid.
 - Add to a collection from its own page, or pick a target while adding media.
 - Live updates: new items, deletes and playlist changes appear without a reload.
-- `All pictures` default gallery; upload several pictures at once.
+- `All pictures` default gallery (cannot be deleted); upload several pictures at once.
+- Deleting a gallery asks whether its pictures move to `All pictures` or are
+  deleted from disk.
+- The Library `All` tab lists collections and hides individual pictures so the
+  grid stays gallery-first.
 - Custom playlist/gallery covers from an item or an upload.
 - Clear the play queue and the download activity explicitly.
 - Four themes (Slate, Paper, Ocean, Moss) in light and dark.
