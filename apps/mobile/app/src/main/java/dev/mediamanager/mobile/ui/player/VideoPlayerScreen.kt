@@ -87,7 +87,7 @@ fun PlayerOverlay(
 ) {
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
     if (now?.isVideo == true) {
-        VideoPlayerScreen(player = player, onClose = onClose)
+        VideoWatchScreen(player = player, onClose = onClose)
     } else {
         NowPlayingScreen(player = player, filesDir = filesDir, audio = audio, volume = volume, onClose = onClose)
     }
