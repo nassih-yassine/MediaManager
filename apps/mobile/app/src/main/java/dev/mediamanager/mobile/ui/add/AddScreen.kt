@@ -52,11 +52,14 @@ import dev.mediamanager.mobile.ui.components.SectionTitle
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
+@androidx.compose.material3.ExperimentalMaterial3Api
 @Composable
 fun AddScreen(
     container: AppContainer,
     player: dev.mediamanager.mobile.playback.PlayerRepository,
     onOpenDownloads: () -> Unit = {},
+    sharedUrl: String? = null,
+    onSharedHandled: () -> Unit = {},
 ) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
@@ -64,6 +67,14 @@ fun AddScreen(
 
     var form by remember { mutableStateOf(AddFormState()) }
     var message by remember { mutableStateOf<String?>(null) }
+    var sharedSheet by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(sharedUrl) {
+        if (sharedUrl != null) {
+            form = form.copy(url = sharedUrl, error = null)
+            sharedSheet = true
+        }
+    }
     val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
     val activeJobs by container.db.jobDao().observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
     val active = activeJobs.firstOrNull { it.status == "running" } ?: activeJobs.firstOrNull()
@@ -289,6 +300,62 @@ fun AddScreen(
             Spacer(Modifier.height(16.dp))
         }
     }
+
+    if (sharedSheet && sharedUrl != null) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = {
+                sharedSheet = false
+                onSharedHandled()
+            },
+            containerColor = colors.panel,
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Text(
+                    "Download this link?",
+                    color = colors.ink,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    dev.mediamanager.mobile.ui.jobLabel(sharedUrl),
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                SharedChoice(
+                    title = "Audio",
+                    subtitle = "mp3 with cover art",
+                    onClick = {
+                        scope.launch {
+                            val result = container.jobQueue.enqueue(sharedUrl, DownloadMode.AUDIO)
+                            container.settings.addRecentUrl(sharedUrl)
+                            DownloadService.start(container.appContext)
+                            message = if (result.duplicate) "Already in the downloads" else "Queued as audio"
+                            form = AddFormState(mode = DownloadMode.AUDIO)
+                            sharedSheet = false
+                            onSharedHandled()
+                        }
+                    },
+                )
+                SharedChoice(
+                    title = "Video",
+                    subtitle = "mp4",
+                    onClick = {
+                        scope.launch {
+                            val result = container.jobQueue.enqueue(sharedUrl, DownloadMode.VIDEO)
+                            container.settings.addRecentUrl(sharedUrl)
+                            DownloadService.start(container.appContext)
+                            message = if (result.duplicate) "Already in the downloads" else "Queued as video"
+                            form = AddFormState(mode = DownloadMode.VIDEO)
+                            sharedSheet = false
+                            onSharedHandled()
+                        }
+                    },
+                )
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -330,5 +397,24 @@ private fun ModeCard(
             color = colors.muted,
             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+
+@Composable
+private fun SharedChoice(title: String, subtitle: String, onClick: () -> Unit) {
+    val colors = LocalAppColors.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+            Text(subtitle, color = colors.muted, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+        }
+        Icon(Icons.Default.Download, contentDescription = null, tint = colors.accent)
     }
 }

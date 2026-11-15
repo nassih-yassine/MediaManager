@@ -1,17 +1,21 @@
 package dev.mediamanager.mobile
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.mutableStateOf
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import dev.mediamanager.mobile.ui.AppShell
 
 class MainActivity : ComponentActivity() {
+
+    private val sharedLink = mutableStateOf<String?>(null)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -21,9 +25,28 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         maybeAskForNotifications()
         val container = (application as App).container
+        sharedLink.value = extractLink(intent)
         setContent {
-            AppShell(container = container, player = container.player)
+            AppShell(
+                container = container,
+                player = container.player,
+                sharedUrl = sharedLink.value,
+                onSharedHandled = { sharedLink.value = null },
+            )
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        sharedLink.value = extractLink(intent)
+    }
+
+    /** Pulls the first http(s) link out of a share payload. */
+    private fun extractLink(intent: Intent?): String? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
+        return Regex("https?://\\S+").find(text)?.value
     }
 
     private fun maybeAskForNotifications() {

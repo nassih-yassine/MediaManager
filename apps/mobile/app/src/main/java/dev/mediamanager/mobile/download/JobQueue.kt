@@ -47,6 +47,12 @@ class JobQueue(
             dao.markFailed(id, "failed", message, now)
             return false
         }
+        // A dropped connection must not burn the retry budget: give the attempt
+        // back and come around again shortly.
+        if (isNetworkTrouble(message)) {
+            dao.requeue(id, now + 15_000, (job.attempts - 1).coerceAtLeast(0), message, now)
+            return true
+        }
         val backoff = 60_000L shl (job.attempts - 1).coerceIn(0, 5)
         // Keep the reason visible on the row: a retry that says nothing is undebuggable.
         dao.requeue(id, now + backoff, job.attempts, message, now)

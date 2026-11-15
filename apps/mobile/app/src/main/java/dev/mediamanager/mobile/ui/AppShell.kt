@@ -73,7 +73,12 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun AppShell(container: AppContainer, player: PlayerRepository) {
+fun AppShell(
+    container: AppContainer,
+    player: PlayerRepository,
+    sharedUrl: String? = null,
+    onSharedHandled: () -> Unit = {},
+) {
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
         initialValue = Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
     )
@@ -84,6 +89,10 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
         var storageOpen by remember { mutableStateOf(false) }
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)
+
+        androidx.compose.runtime.LaunchedEffect(sharedUrl) {
+            if (sharedUrl != null) tab = Tab.ADD.name
+        }
         val filesDir = container.appContext.filesDir
 
         Box(Modifier.fillMaxSize().background(colors.canvas)) {
@@ -186,6 +195,8 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                                 container = container,
                                 player = player,
                                 onOpenDownloads = { downloadsOpen = true },
+                                sharedUrl = sharedUrl,
+                                onSharedHandled = onSharedHandled,
                             )
                             Tab.SETTINGS -> SettingsScreen(
                                 container = container,

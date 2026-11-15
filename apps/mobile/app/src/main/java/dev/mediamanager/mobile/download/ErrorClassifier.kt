@@ -58,6 +58,31 @@ fun classify(output: String): Failure {
     return Failure.Retryable(readable(message))
 }
 
+/**
+ * Connectivity trouble is not the job's fault: the attempt is given back and the
+ * job retries as soon as the network is usable again.
+ */
+fun isNetworkTrouble(message: String): Boolean {
+    val text = message.lowercase()
+    return listOf(
+        "timed out",
+        "timeout",
+        "connection reset",
+        "connection refused",
+        "connection abort",
+        "broken pipe",
+        "unexpected end of stream",
+        "network is unreachable",
+        "unable to resolve host",
+        "temporary failure",
+        "unable to download webpage",
+        "no address associated",
+        "stream was reset",
+        "software caused connection abort",
+        "eof",
+    ).any { text.contains(it) }
+}
+
 private fun readable(message: String): String = message
     .removePrefix("ERROR:")
     .trim()

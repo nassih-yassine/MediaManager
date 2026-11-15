@@ -77,12 +77,35 @@ class JobQueueTest {
     fun `retryable failure backs off and stays queued`() = runTest {
         val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
         queue.claim("w1")
-        val willRetry = queue.fail(job.id, "timed out", permanent = false)
+        val willRetry = queue.fail(job.id, "ERROR: something nobody has seen before", permanent = false)
         assertTrue(willRetry)
         val stored = db.jobDao().get(job.id)!!
         assertEquals("queued", stored.status)
         assertEquals(now + 60_000, stored.scheduledAt)
         assertEquals(1, stored.attempts)
+    }
+
+    @Test
+    fun `network failure gives the attempt back and retries soon`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.claim("w1")
+        val willRetry = queue.fail(job.id, "unable to download video data: connection reset", permanent = false)
+        assertTrue(willRetry)
+        val stored = db.jobDao().get(job.id)!!
+        assertEquals("queued", stored.status)
+        assertEquals(0, stored.attempts)
+        assertEquals(now + 15_000, stored.scheduledAt)
+    }
+
+    @Test
+    fun `repeated network drops never fail the job`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        repeat(6) {
+            queue.claim("w1")
+            assertTrue(queue.fail(job.id, "timed out", permanent = false))
+            now += 20_000
+        }
+        assertEquals("queued", db.jobDao().get(job.id)!!.status)
     }
 
     @Test
@@ -100,11 +123,11 @@ class JobQueueTest {
         val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
         repeat(2) {
             queue.claim("w1")
-            assertTrue(queue.fail(job.id, "timed out", permanent = false))
+            assertTrue(queue.fail(job.id, "ERROR: something nobody has seen before", permanent = false))
             now += 600_000
         }
         queue.claim("w1")
-        assertFalse(queue.fail(job.id, "timed out", permanent = false))
+        assertFalse(queue.fail(job.id, "ERROR: something nobody has seen before", permanent = false))
         assertEquals("failed", db.jobDao().get(job.id)!!.status)
         assertEquals(3, db.jobDao().get(job.id)!!.attempts)
     }
