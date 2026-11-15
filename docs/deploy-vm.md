@@ -112,6 +112,8 @@ podman compose -f compose.yaml -f compose.podman.yaml --profile tls up -d
 ```
 
 Caddy fetches a Let's Encrypt cert automatically for `PUBLIC_HOST`.
+Also add `COMPOSE_PROFILES=tls` to `.env` so later deploys bring Caddy
+back up (the deploy workflow does not pass CLI flags).
 
 ## 6. Wire CI/CD
 
