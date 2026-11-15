@@ -1,7 +1,18 @@
 package dev.mediamanager.mobile.ui.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,12 +21,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -26,6 +40,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
@@ -39,6 +55,7 @@ import dev.mediamanager.mobile.ui.components.SelectMenu
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import dev.mediamanager.mobile.ui.theme.ThemeFamily
 import dev.mediamanager.mobile.ui.theme.ThemeMode
+import dev.mediamanager.mobile.ui.theme.colorsFor
 import kotlinx.coroutines.launch
 
 private val heights = listOf(720, 1080, 1440, 2160)
@@ -47,6 +64,7 @@ private val heights = listOf(720, 1080, 1440, 2160)
 fun SettingsScreen(
     container: AppContainer,
     onBack: () -> Unit = {},
+    onOpenStorage: () -> Unit = {},
 ) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
@@ -55,6 +73,7 @@ fun SettingsScreen(
     )
     val wifiOnly by container.settings.wifiOnly.collectAsStateWithLifecycle(initialValue = false)
     val maxHeight by container.settings.maxHeight.collectAsStateWithLifecycle(initialValue = 1080)
+    val libraryBytes by container.db.itemDao().observeTotalBytes().collectAsStateWithLifecycle(initialValue = 0L)
 
     BackHandler(onBack = onBack)
 
@@ -66,35 +85,49 @@ fun SettingsScreen(
     ) {
         SettingsCard("Appearance", Icons.Default.Palette) {
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Theme", color = colors.ink, modifier = Modifier.weight(1f))
+                Text("Mode", color = colors.ink, modifier = Modifier.weight(1f))
                 SelectMenu(
-                    label = "Theme",
-                    options = ThemeFamily.entries.map { family ->
-                        family to family.key.replaceFirstChar { it.uppercase() }
-                    },
-                    selected = appearance.family,
-                    onSelect = { family -> scope.launch { container.settings.setAppearance(family, appearance.mode) } },
+                    label = "Mode",
+                    options = listOf(
+                        ThemeMode.LIGHT to "Light",
+                        ThemeMode.DARK to "Dark",
+                        ThemeMode.SYSTEM to "System",
+                    ),
+                    selected = appearance.mode,
+                    onSelect = { mode -> scope.launch { container.settings.setAppearance(appearance.family, mode) } },
                 )
             }
             HorizontalDivider(color = colors.line)
             Column(Modifier.padding(vertical = 12.dp)) {
                 Text(
-                    "Mode",
+                    "Theme",
                     color = colors.ink,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                Segmented(
-                    options = listOf(
-                        ThemeMode.LIGHT.name to "Light",
-                        ThemeMode.DARK.name to "Dark",
-                        ThemeMode.SYSTEM.name to "System",
-                    ),
-                    selected = appearance.mode.name,
-                    onSelect = { mode ->
-                        scope.launch { container.settings.setAppearance(appearance.family, ThemeMode.valueOf(mode)) }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                val dark = when (appearance.mode) {
+                    ThemeMode.DARK -> true
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                }
+                ThemeFamily.entries.chunked(2).forEach { row ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        row.forEach { family ->
+                            ThemeOption(
+                                family = family,
+                                dark = dark,
+                                selected = appearance.family == family,
+                                modifier = Modifier.weight(1f),
+                                onSelect = {
+                                    scope.launch { container.settings.setAppearance(family, appearance.mode) }
+                                },
+                            )
+                        }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
             }
         }
 
@@ -135,12 +168,33 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
         SettingsCard("Storage", Icons.Default.Storage) {
-            Text(
-                "The library reports its own size on the Storage tab, including thumbnails, playlist covers and temporary files.",
-                color = colors.muted,
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenStorage)
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Library storage", color = colors.ink)
+                    Text(
+                        "Total, breakdown and the largest items",
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text(
+                    dev.mediamanager.mobile.ui.format.formatBytes(libraryBytes),
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = colors.muted,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -175,6 +229,46 @@ private fun SettingsCard(
         SectionTitle(title, icon)
         MmSurface(Modifier.fillMaxWidth()) {
             content()
+        }
+    }
+}
+
+
+/** A theme you can see before you pick it: its own panel, ink and accent. */
+@Composable
+private fun ThemeOption(
+    family: ThemeFamily,
+    dark: Boolean,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onSelect: () -> Unit,
+) {
+    val palette = colorsFor(family, dark)
+    val active = LocalAppColors.current.accent
+    Box(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(palette.canvas)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) active else palette.line,
+                shape = RoundedCornerShape(14.dp),
+            )
+            .clickable(onClick = onSelect)
+            .padding(12.dp),
+    ) {
+        Column {
+            Text(
+                family.key.replaceFirstChar { it.uppercase() },
+                color = palette.ink,
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(palette.accent, palette.panel2, palette.line, palette.muted).forEach { dot ->
+                    Box(Modifier.size(14.dp).clip(CircleShape).background(dot))
+                }
+            }
         }
     }
 }

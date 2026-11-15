@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,7 +60,26 @@ fun DownloadsScreen(
     val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
     var confirmClear by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MmTextButton("Back", Icons.Default.ArrowBack, color = colors.muted, onClick = onClose)
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Downloads",
+                color = colors.ink,
+                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(64.dp))
+        }
         SectionTitle("Active")
         if (active.isEmpty()) {
             Text("Nothing downloading.", color = colors.muted)

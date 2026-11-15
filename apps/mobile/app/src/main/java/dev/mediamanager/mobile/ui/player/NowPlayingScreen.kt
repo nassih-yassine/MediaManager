@@ -43,6 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +86,13 @@ fun NowPlayingScreen(
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     val route by audio.route.collectAsStateWithLifecycle()
     var volumeLevel by remember { mutableIntStateOf(volume.current) }
+    // Hardware keys change the stream too; keep the in-app bar honest while open.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(2_000)
+            volumeLevel = volume.current
+        }
+    }
 
     BackHandler(onBack = onClose)
     // The state starts null for one frame; never close the screen on that frame.

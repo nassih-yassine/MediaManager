@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -61,7 +62,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 @Composable
-fun StorageScreen(container: AppContainer, player: PlayerRepository) {
+fun StorageScreen(
+    container: AppContainer,
+    player: PlayerRepository,
+    onClose: () -> Unit = {},
+) {
+    androidx.activity.compose.BackHandler(onBack = onClose)
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val temp = remember { MutableStateFlow(0L) }
@@ -83,6 +89,23 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
     ) {
         item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MmTextButton("Back", Icons.Default.ArrowBack, color = colors.muted, onClick = onClose)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Storage",
+                    color = colors.ink,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.size(64.dp))
+            }
+        }
+
+        item {
             LibraryCard(snapshot)
         }
 
@@ -95,7 +118,6 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                 LegendRow("Video", snapshot.videoBytes, snapshot.libraryBytes, colors.accent.copy(alpha = 0.75f))
                 LegendRow("Thumbnails", snapshot.thumbBytes, snapshot.libraryBytes, colors.accent.copy(alpha = 0.5f))
                 LegendRow("Covers", snapshot.coversBytes, snapshot.libraryBytes, colors.accent.copy(alpha = 0.32f))
-                LegendRow("Temp", snapshot.tempBytes, snapshot.libraryBytes, colors.muted)
             }
         }
 
@@ -216,7 +238,6 @@ private fun StackedBar(snapshot: StorageSnapshot) {
         snapshot.videoBytes to colors.accent.copy(alpha = 0.75f),
         snapshot.thumbBytes to colors.accent.copy(alpha = 0.5f),
         snapshot.coversBytes to colors.accent.copy(alpha = 0.32f),
-        snapshot.tempBytes to colors.muted.copy(alpha = 0.5f),
     ).filter { it.first > 0 }
 
     Row(

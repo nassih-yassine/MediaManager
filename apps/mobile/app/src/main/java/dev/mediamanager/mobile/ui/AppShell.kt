@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -44,6 +43,7 @@ import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Appearance
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.ui.add.AddScreen
+import dev.mediamanager.mobile.ui.downloads.DownloadsScreen
 import dev.mediamanager.mobile.ui.home.HomeScreen
 import dev.mediamanager.mobile.ui.library.LibraryFilter
 import dev.mediamanager.mobile.ui.library.LibraryScreen
@@ -60,7 +60,6 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     LIBRARY("Library", Icons.Default.LibraryMusic),
     ADD("Add", Icons.Default.AddCircle),
-    STORAGE("Storage", Icons.Default.Storage),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
@@ -72,6 +71,8 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
     MmTheme(appearance.family, appearance.mode) {
         var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
         var nowPlayingOpen by remember { mutableStateOf(false) }
+        var downloadsOpen by remember { mutableStateOf(false) }
+        var storageOpen by remember { mutableStateOf(false) }
         var libraryFilter by remember { mutableStateOf(LibraryFilter.ALL) }
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)
@@ -169,14 +170,46 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                                 initialFilter = libraryFilter,
                             )
 
-                            Tab.ADD -> AddScreen(container, player)
-                            Tab.STORAGE -> StorageScreen(container, player)
+                            Tab.ADD -> AddScreen(
+                                container = container,
+                                player = player,
+                                onOpenDownloads = { downloadsOpen = true },
+                            )
                             Tab.SETTINGS -> SettingsScreen(
                                 container = container,
                                 onBack = { tab = Tab.HOME.name },
+                                onOpenStorage = { storageOpen = true },
                             )
                         }
                     }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = storageOpen,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it }),
+            ) {
+                Box(Modifier.fillMaxSize().background(colors.canvas).statusBarsPadding()) {
+                    StorageScreen(
+                        container = container,
+                        player = player,
+                        onClose = { storageOpen = false },
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = downloadsOpen,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it }),
+            ) {
+                Box(Modifier.fillMaxSize().background(colors.canvas).statusBarsPadding()) {
+                    DownloadsScreen(
+                        container = container,
+                        player = player,
+                        onClose = { downloadsOpen = false },
+                    )
                 }
             }
 

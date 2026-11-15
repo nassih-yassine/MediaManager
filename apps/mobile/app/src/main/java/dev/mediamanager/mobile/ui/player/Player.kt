@@ -64,37 +64,42 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
     val current = now ?: return
     val colors = LocalAppColors.current
+    val item = dev.mediamanager.mobile.data.Item(
+        id = current.itemId,
+        kind = if (current.isVideo) "video" else "audio",
+        title = current.title,
+        sizeBytes = 0,
+        path = "",
+        thumbPath = current.thumbPath,
+        available = true,
+        positionMs = current.positionMs,
+        durationMs = current.durationMs,
+        mime = "",
+        sourceUrl = null,
+        createdAt = 0,
+    )
+
     Column(
         Modifier
             .fillMaxWidth()
             .background(colors.panel)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Thumb(
-                item = dev.mediamanager.mobile.data.Item(
-                    id = current.itemId,
-                    kind = if (current.isVideo) "video" else "audio",
-                    title = current.title,
-                    sizeBytes = 0,
-                    path = "",
-                    thumbPath = current.thumbPath,
-                    available = true,
-                    positionMs = current.positionMs,
-                    durationMs = current.durationMs,
-                    mime = "",
-                    sourceUrl = null,
-                    createdAt = 0,
-                ),
-                filesDir = filesDir,
-                modifier = Modifier.size(40.dp),
-            )
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onOpen)
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Thumb(item = item, filesDir = filesDir, modifier = Modifier.size(44.dp))
+            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(
                     current.title,
                     color = colors.ink,
                     maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                 )
                 Text(
@@ -103,42 +108,83 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
             }
-            IconButton(onClick = { player.toggle() }) {
-                Icon(
-                    if (current.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (current.isPlaying) "Pause" else "Play",
-                    tint = colors.ink,
-                )
-            }
-            IconButton(onClick = { player.cycleRepeat() }) {
-                Icon(
-                    if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) {
-                        Icons.Default.RepeatOne
-                    } else {
-                        Icons.Default.Repeat
-                    },
-                    contentDescription = "Repeat",
-                    tint = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) {
-                        colors.muted
-                    } else {
-                        colors.accent
-                    },
-                )
-            }
-            IconButton(onClick = { player.next() }) {
-                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
-            }
-            IconButton(onClick = { player.stop() }) {
+            IconButton(onClick = { player.stop() }, modifier = Modifier.size(40.dp)) {
                 Icon(Icons.Default.Close, contentDescription = "Stop and close player", tint = colors.muted)
             }
         }
+
         val fraction = if (current.durationMs > 0) current.positionMs.toFloat() / current.durationMs else 0f
         LinearProgressIndicator(
             progress = { fraction.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(2.dp),
+            modifier = Modifier.fillMaxWidth().height(2.dp).padding(top = 2.dp),
             color = colors.accent,
             trackColor = colors.panel2,
         )
+
+        Row(
+            Modifier.fillMaxWidth().padding(top = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MiniControl(
+                icon = Icons.Default.Shuffle,
+                description = "Shuffle",
+                tint = if (current.shuffle) colors.accent else colors.muted,
+                onClick = { player.toggleShuffle() },
+            )
+            MiniControl(
+                icon = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                description = "Repeat",
+                tint = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
+                onClick = { player.cycleRepeat() },
+            )
+            MiniControl(
+                icon = Icons.Default.SkipPrevious,
+                description = "Previous",
+                tint = colors.ink,
+                onClick = { player.previous() },
+            )
+            MiniControl(
+                icon = Icons.Default.Replay10,
+                description = "Back 10 seconds",
+                tint = colors.ink,
+                onClick = { player.skipBy(-10_000) },
+            )
+            IconButton(
+                onClick = { player.toggle() },
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)).background(colors.accent),
+            ) {
+                Icon(
+                    if (current.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (current.isPlaying) "Pause" else "Play",
+                    tint = colors.accentInk,
+                )
+            }
+            MiniControl(
+                icon = Icons.Default.Forward10,
+                description = "Forward 10 seconds",
+                tint = colors.ink,
+                onClick = { player.skipBy(10_000) },
+            )
+            MiniControl(
+                icon = Icons.Default.SkipNext,
+                description = "Next",
+                tint = colors.ink,
+                onClick = { player.next() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniControl(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    tint: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(44.dp)) {
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
     }
 }
 
