@@ -1,6 +1,7 @@
 package dev.mediamanager.mobile.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,7 +83,12 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(colors.panel)
+            .background(colors.panel.copy(alpha = 0.88f))
+            .border(
+                width = 0.5.dp,
+                color = colors.line.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            )
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Row(
@@ -133,12 +139,6 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                 onClick = { player.toggleShuffle() },
             )
             MiniControl(
-                icon = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                description = "Repeat",
-                tint = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
-                onClick = { player.cycleRepeat() },
-            )
-            MiniControl(
                 icon = Icons.Default.SkipPrevious,
                 description = "Previous",
                 tint = colors.ink,
@@ -171,6 +171,12 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                 description = "Next",
                 tint = colors.ink,
                 onClick = { player.next() },
+            )
+            MiniControl(
+                icon = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                description = "Repeat",
+                tint = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
+                onClick = { player.cycleRepeat() },
             )
         }
     }

@@ -21,7 +21,7 @@ class TokensTest {
     @Test
     fun `every family has a distinct dark canvas`() {
         val canvases = ThemeFamily.entries.map { colorsFor(it, true).canvas.toArgb() }.toSet()
-        assertEquals(4, canvases.size)
+        assertEquals(ThemeFamily.entries.size, canvases.size)
     }
 
     @Test

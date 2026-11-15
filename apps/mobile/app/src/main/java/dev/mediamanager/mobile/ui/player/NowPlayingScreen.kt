@@ -1,7 +1,9 @@
 package dev.mediamanager.mobile.ui.player
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,12 +49,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +73,7 @@ import dev.mediamanager.mobile.playback.speedLabel
 import dev.mediamanager.mobile.ui.components.SelectMenu
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -85,6 +93,9 @@ fun NowPlayingScreen(
     val queue by player.queue.collectAsStateWithLifecycle(initialValue = emptyList())
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     val route by audio.route.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val dragOffset = remember { Animatable(0f) }
+    val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
     var volumeLevel by remember { mutableIntStateOf(volume.current) }
     // Hardware keys change the stream too; keep the in-app bar honest while open.
     LaunchedEffect(Unit) {
@@ -98,14 +109,59 @@ fun NowPlayingScreen(
     // The state starts null for one frame; never close the screen on that frame.
     val current = now ?: return
 
+    Box(Modifier.fillMaxSize().background(colors.canvas)) {
+        val backdrop = current.thumbPath?.let { File(filesDir, it) }
+        if (backdrop != null && backdrop.exists()) {
+            coil.compose.AsyncImage(
+                model = backdrop,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(60.dp)
+                    .graphicsLayer { alpha = 0.42f },
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0f to colors.canvas.copy(alpha = 0.15f),
+                            0.45f to colors.canvas.copy(alpha = 0.85f),
+                            1f to colors.canvas,
+                        ),
+                    ),
+            )
+        }
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.canvas)
+            .graphicsLayer { translationY = dragOffset.value }
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp),
     ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { _, delta ->
+                            scope.launch {
+                                dragOffset.snapTo((dragOffset.value + delta).coerceAtLeast(0f))
+                            }
+                        },
+                        onDragEnd = {
+                            if (dragOffset.value > dismissAt) {
+                                onClose()
+                            } else {
+                                scope.launch { dragOffset.animateTo(0f) }
+                            }
+                        },
+                        onDragCancel = { scope.launch { dragOffset.animateTo(0f) } },
+                    )
+                },
+        ) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) {
                 Icon(Icons.Default.Close, contentDescription = "Close player", tint = colors.muted)
@@ -122,6 +178,7 @@ fun NowPlayingScreen(
 
         Spacer(Modifier.height(8.dp))
         Artwork(current, filesDir, colors.panel2, colors.muted)
+        }
 
         Spacer(Modifier.height(16.dp))
         Text(
@@ -296,6 +353,7 @@ fun NowPlayingScreen(
                 }
             }
         }
+    }
     }
 }
 

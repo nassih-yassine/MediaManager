@@ -7,7 +7,9 @@ enum class ThemeFamily(val key: String) {
     SLATE("slate"),
     PAPER("paper"),
     OCEAN("ocean"),
-    MOSS("moss");
+    MOSS("moss"),
+    EMBER("ember"),
+    VIOLET("violet");
 
     companion object {
         fun fromKey(key: String?): ThemeFamily = entries.firstOrNull { it.key == key } ?: SLATE
@@ -132,6 +134,54 @@ fun colorsFor(family: ThemeFamily, dark: Boolean): AppColors = when (family) {
         accent = Color(0xFF3F6F1F),
         accentInk = Color(0xFFF4FFE9),
         danger = Color(0xFFA83A2A),
+    )
+
+    ThemeFamily.EMBER -> if (dark) AppColors(
+        canvas = Color(0xFF0D0705),
+        panel = Color(0xFF170D0A),
+        panel2 = Color(0xFF20120D),
+        line = Color(0xFF34201A),
+        lineStrong = Color(0xFF4B2E25),
+        ink = Color(0xFFFBEEE8),
+        muted = Color(0xFFB39A90),
+        accent = Color(0xFFFF6B4A),
+        accentInk = Color(0xFF2A0B04),
+        danger = Color(0xFFFF8F7A),
+    ) else AppColors(
+        canvas = Color(0xFFFBF5F2),
+        panel = Color(0xFFFFFDFC),
+        panel2 = Color(0xFFF4E7E1),
+        line = Color(0xFFE6D3CB),
+        lineStrong = Color(0xFFCBB0A5),
+        ink = Color(0xFF1D1210),
+        muted = Color(0xFF7A625B),
+        accent = Color(0xFFB53A1F),
+        accentInk = Color(0xFFFFF6F2),
+        danger = Color(0xFFA21D12),
+    )
+
+    ThemeFamily.VIOLET -> if (dark) AppColors(
+        canvas = Color(0xFF0A0712),
+        panel = Color(0xFF120D1D),
+        panel2 = Color(0xFF191226),
+        line = Color(0xFF2A2040),
+        lineStrong = Color(0xFF3D2F5C),
+        ink = Color(0xFFF0EAFF),
+        muted = Color(0xFFA596C4),
+        accent = Color(0xFFB18CFF),
+        accentInk = Color(0xFF1C0B3A),
+        danger = Color(0xFFFF8FA3),
+    ) else AppColors(
+        canvas = Color(0xFFF7F4FF),
+        panel = Color(0xFFFFFFFF),
+        panel2 = Color(0xFFECE5FB),
+        line = Color(0xFFD9CFEF),
+        lineStrong = Color(0xFFBFB0E0),
+        ink = Color(0xFF171025),
+        muted = Color(0xFF6B5D85),
+        accent = Color(0xFF6B3FD4),
+        accentInk = Color(0xFFF6F0FF),
+        danger = Color(0xFFB3261E),
     )
 }
 

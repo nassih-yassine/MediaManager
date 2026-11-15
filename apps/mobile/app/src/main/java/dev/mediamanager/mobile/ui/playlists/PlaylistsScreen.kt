@@ -62,6 +62,17 @@ import java.io.File
 import java.util.UUID
 
 @Composable
+fun PlaylistsTab(container: AppContainer, player: PlayerRepository) {
+    var selectedId by remember { mutableStateOf<String?>(null) }
+    val id = selectedId
+    if (id == null) {
+        PlaylistListContent(container, onOpen = { selectedId = it })
+    } else {
+        PlaylistDetailScreen(container, player, playlistId = id, onBack = { selectedId = null })
+    }
+}
+
+@Composable
 fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()

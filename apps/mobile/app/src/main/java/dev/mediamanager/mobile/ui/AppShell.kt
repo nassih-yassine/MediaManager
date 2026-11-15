@@ -3,6 +3,10 @@ package dev.mediamanager.mobile.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -19,8 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -45,7 +51,6 @@ import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.ui.add.AddScreen
 import dev.mediamanager.mobile.ui.downloads.DownloadsScreen
 import dev.mediamanager.mobile.ui.home.HomeScreen
-import dev.mediamanager.mobile.ui.library.LibraryFilter
 import dev.mediamanager.mobile.ui.library.LibraryScreen
 import dev.mediamanager.mobile.ui.player.MiniPlayer
 import dev.mediamanager.mobile.ui.player.NowPlayingScreen
@@ -59,6 +64,7 @@ import dev.mediamanager.mobile.ui.theme.ThemeMode
 private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     LIBRARY("Library", Icons.Default.LibraryMusic),
+    PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
     ADD("Add", Icons.Default.AddCircle),
     SETTINGS("Settings", Icons.Default.Settings),
 }
@@ -73,7 +79,6 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
         var nowPlayingOpen by remember { mutableStateOf(false) }
         var downloadsOpen by remember { mutableStateOf(false) }
         var storageOpen by remember { mutableStateOf(false) }
-        var libraryFilter by remember { mutableStateOf(LibraryFilter.ALL) }
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)
         val filesDir = container.appContext.filesDir
@@ -100,7 +105,14 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                 },
                 bottomBar = {
                     Column {
-                        MiniPlayer(player = player, filesDir = filesDir, onOpen = { nowPlayingOpen = true })
+                        AnimatedVisibility(
+                            visible = !nowPlayingOpen,
+                            enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                            exit = fadeOut(tween(180)) + shrinkVertically(tween(180)),
+                        ) {
+                            MiniPlayer(player = player, filesDir = filesDir, onOpen = { nowPlayingOpen = true })
+                        }
+                        HorizontalDivider(color = colors.line)
                         NavigationBar(containerColor = colors.panel, contentColor = colors.ink) {
                             Tab.entries.forEach { entry ->
                                 NavigationBarItem(
@@ -157,18 +169,15 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                                 container = container,
                                 player = player,
                                 onAdd = { tab = Tab.ADD.name },
-                                onOpenPlaylists = {
-                                    libraryFilter = LibraryFilter.PLAYLISTS
-                                    tab = Tab.LIBRARY.name
-                                },
+                                onOpenPlaylists = { tab = Tab.PLAYLISTS.name },
                             )
 
                             Tab.LIBRARY -> LibraryScreen(
                                 container = container,
                                 player = player,
                                 onAdd = { tab = Tab.ADD.name },
-                                initialFilter = libraryFilter,
                             )
+                            Tab.PLAYLISTS -> dev.mediamanager.mobile.ui.playlists.PlaylistsTab(container, player)
 
                             Tab.ADD -> AddScreen(
                                 container = container,
@@ -215,8 +224,14 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
 
             AnimatedVisibility(
                 visible = nowPlayingOpen,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it }),
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(260),
+                ) + fadeIn(tween(200)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = tween(220),
+                ) + fadeOut(tween(160)),
             ) {
                 NowPlayingScreen(
                     player = player,
