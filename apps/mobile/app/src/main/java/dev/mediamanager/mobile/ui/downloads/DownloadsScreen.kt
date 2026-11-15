@@ -11,6 +11,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +36,7 @@ import dev.mediamanager.mobile.download.DownloadService
 import dev.mediamanager.mobile.ui.components.ConfirmDialog
 import dev.mediamanager.mobile.ui.components.EmptyState
 import dev.mediamanager.mobile.ui.components.SectionTitle
+import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
@@ -60,10 +66,15 @@ fun DownloadsScreen(container: AppContainer, player: dev.mediamanager.mobile.pla
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
                     )
-                    TextButton(onClick = {
-                        DownloadService.cancel(container.appContext)
-                        scope.launch { container.jobQueue.cancel(job.id) }
-                    }) { Text("Cancel", color = colors.danger) }
+                    MmTextButton(
+                        "Cancel",
+                        Icons.Default.Close,
+                        color = colors.danger,
+                        onClick = {
+                            DownloadService.cancel(container.appContext)
+                            scope.launch { container.jobQueue.cancel(job.id) }
+                        },
+                    )
                 }
                 Text(
                     "${job.mode} · ${job.stage ?: job.status} · ${(job.progress * 100).toInt()}%" +
@@ -96,7 +107,7 @@ fun DownloadsScreen(container: AppContainer, player: dev.mediamanager.mobile.pla
             SectionTitle("Finished")
             Spacer(Modifier.weight(1f))
             if (finished.isNotEmpty()) {
-                TextButton(onClick = { confirmClear = true }) { Text("Clear", color = colors.muted) }
+                MmTextButton("Clear", Icons.Default.DeleteSweep, color = colors.muted, onClick = { confirmClear = true })
             }
         }
         if (finished.isEmpty()) {
@@ -145,7 +156,7 @@ private fun FinishedRow(
             )
         }
         if (job.status == "done") {
-            TextButton(onClick = {
+            MmTextButton("Open", Icons.Default.PlayArrow, onClick = {
                 scope.launch {
                     job.itemId?.let { id ->
                         container.db.itemDao().get(id)?.let { item ->
@@ -153,19 +164,22 @@ private fun FinishedRow(
                         }
                     }
                 }
-            }) { Text("Open", color = colors.accent) }
+            })
         }
         if (job.status == "failed") {
-            TextButton(onClick = {
+            MmTextButton("Retry", Icons.Default.Refresh, onClick = {
                 scope.launch {
                     container.jobQueue.enqueue(job.url, DownloadMode.from(job.mode))
                     container.db.jobDao().deleteFinished(job.id)
                     DownloadService.start(container.appContext)
                 }
-            }) { Text("Retry", color = colors.accent) }
+            })
         }
-        TextButton(onClick = { scope.launch { container.db.jobDao().deleteFinished(job.id) } }) {
-            Text("Dismiss", color = colors.muted)
-        }
+        MmTextButton(
+            "Dismiss",
+            Icons.Default.Close,
+            color = colors.muted,
+            onClick = { scope.launch { container.db.jobDao().deleteFinished(job.id) } },
+        )
     }
 }

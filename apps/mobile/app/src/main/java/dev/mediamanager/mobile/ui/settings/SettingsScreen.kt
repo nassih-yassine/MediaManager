@@ -12,6 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.download.YtDlpExtractor
 import dev.mediamanager.mobile.ui.components.KeyValueRow
+import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.SectionTitle
 import dev.mediamanager.mobile.ui.components.Segmented
 import dev.mediamanager.mobile.ui.components.SelectMenu
@@ -58,10 +65,10 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Settings", color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onClose) { Text("Done", color = colors.accent) }
+            MmTextButton("Done", Icons.Default.Check, onClick = onClose)
         }
 
-        SectionTitle("Appearance")
+        SectionTitle("Appearance", Icons.Default.Palette)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Theme", color = colors.ink)
             Spacer(Modifier.weight(1f))
@@ -88,7 +95,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
         )
 
         Spacer(Modifier.height(16.dp))
-        SectionTitle("Downloads")
+        SectionTitle("Downloads", Icons.Default.Download)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Wi-Fi only", color = colors.ink)
@@ -116,7 +123,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
         }
 
         Spacer(Modifier.height(16.dp))
-        SectionTitle("Storage")
+        SectionTitle("Storage", Icons.Default.Storage)
         Text(
             "The library reports its own size. Re-check lives on the Storage tab.",
             color = colors.muted,
@@ -124,7 +131,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
         )
 
         Spacer(Modifier.height(16.dp))
-        SectionTitle("About")
+        SectionTitle("About", Icons.Default.Info)
         KeyValueRow("Version", "0.1.0")
         KeyValueRow("Extractor", YtDlpExtractor.version() ?: "bundled")
         Spacer(Modifier.height(8.dp))

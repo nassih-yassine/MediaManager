@@ -22,6 +22,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +57,7 @@ import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.data.PlaylistEntity
 import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.playback.PlayerRepository
+import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.Thumb
 import dev.mediamanager.mobile.ui.components.loadThumb
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
@@ -193,11 +200,14 @@ private fun PlaylistDetail(
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back", color = colors.muted) }
+            MmTextButton("Back", Icons.Default.ArrowBack, onClick = onBack, color = colors.muted)
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { if (items.isNotEmpty()) player.playItems(items, 0) }) {
-                Text("Play all", color = colors.accent)
-            }
+            MmTextButton(
+                "Play all",
+                Icons.Default.PlayArrow,
+                onClick = { if (items.isNotEmpty()) player.playItems(items, 0) },
+                enabled = items.isNotEmpty(),
+            )
         }
 
         Row(
@@ -225,13 +235,11 @@ private fun PlaylistDetail(
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
                 Row {
-                    TextButton(onClick = {
+                    MmTextButton("Rename", Icons.Default.Edit, onClick = {
                         renameValue = playlist?.name.orEmpty()
                         renameOpen = true
-                    }) { Text("Rename", color = colors.accent) }
-                    TextButton(onClick = { coverSheet = true }) {
-                        Text("Change cover", color = colors.accent)
-                    }
+                    })
+                    MmTextButton("Cover", Icons.Default.AddPhotoAlternate, onClick = { coverSheet = true })
                 }
             }
         }
@@ -273,10 +281,15 @@ private fun PlaylistDetail(
             }
         }
         Spacer(Modifier.height(16.dp))
-        TextButton(onClick = {
-            scope.launch { dao.delete(playlistId) }
-            onBack()
-        }) { Text("Delete playlist", color = colors.danger) }
+        MmTextButton(
+            "Delete playlist",
+            Icons.Default.Delete,
+            color = colors.danger,
+            onClick = {
+                scope.launch { dao.delete(playlistId) }
+                onBack()
+            },
+        )
     }
 
     if (renameOpen) {
@@ -330,16 +343,16 @@ private fun PlaylistDetail(
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Spacer(Modifier.height(8.dp))
-                SheetAction("From this playlist", enabled = items.isNotEmpty()) {
+                SheetAction("From this playlist", Icons.Default.PlaylistPlay, enabled = items.isNotEmpty()) {
                     coverSheet = false
                     itemPicker = true
                 }
-                SheetAction("Choose a photo") {
+                SheetAction("Choose a photo", Icons.Default.PhotoLibrary) {
                     coverSheet = false
                     pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }
                 if (playlist?.coverPath != null) {
-                    SheetAction("Remove cover", danger = true) {
+                    SheetAction("Remove cover", Icons.Default.Delete, danger = true) {
                         coverSheet = false
                         scope.launch {
                             container.playlistCovers.clear(playlistId)
@@ -396,12 +409,24 @@ private fun PlaylistDetail(
 @Composable
 private fun SheetAction(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     enabled: Boolean = true,
     danger: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colors = LocalAppColors.current
     TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = when {
+                !enabled -> colors.muted
+                danger -> colors.danger
+                else -> colors.accent
+            },
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.size(8.dp))
         Text(
             label,
             color = when {
@@ -409,7 +434,7 @@ private fun SheetAction(
                 danger -> colors.danger
                 else -> colors.accent
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
         )
     }
 }

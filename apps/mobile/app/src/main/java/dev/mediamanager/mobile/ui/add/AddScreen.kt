@@ -9,8 +9,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +39,7 @@ import dev.mediamanager.mobile.download.DownloadMode
 import dev.mediamanager.mobile.download.DownloadService
 import dev.mediamanager.mobile.ui.components.SectionTitle
 import dev.mediamanager.mobile.ui.components.Segmented
+import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
@@ -57,9 +66,14 @@ fun AddScreen(container: AppContainer) {
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             trailingIcon = {
-                TextButton(onClick = {
-                    clipboard.getText()?.text?.let { form = form.copy(url = it, error = null) }
-                }) { Text("Paste", color = colors.accent) }
+                Icon(
+                    Icons.Default.ContentPaste,
+                    contentDescription = "Paste",
+                    tint = colors.accent,
+                    modifier = Modifier.padding(end = 12.dp).clickable {
+                        clipboard.getText()?.text?.let { form = form.copy(url = it, error = null) }
+                    },
+                )
             },
         )
         form.error?.let {
@@ -97,7 +111,10 @@ fun AddScreen(container: AppContainer) {
             },
             enabled = !form.submitting,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (form.mode == DownloadMode.AUDIO) "Download audio" else "Download video") }
+        ) {
+            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(if (form.mode == DownloadMode.AUDIO) "Download audio" else "Download video")
+        }
 
         message?.let {
             Spacer(Modifier.height(12.dp))
@@ -109,9 +126,12 @@ fun AddScreen(container: AppContainer) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 SectionTitle("Recent downloads")
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { scope.launch { container.db.jobDao().clearFinished() } }) {
-                    Text("Clear", color = colors.muted)
-                }
+                MmTextButton(
+                    "Clear",
+                    Icons.Default.DeleteSweep,
+                    color = colors.muted,
+                    onClick = { scope.launch { container.db.jobDao().clearFinished() } },
+                )
             }
             finished.take(4).forEach { job ->
                 val failed = job.status == "failed"
@@ -119,6 +139,12 @@ fun AddScreen(container: AppContainer) {
                     Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.Top,
                 ) {
+                    Icon(
+                        if (failed) Icons.Default.ErrorOutline else Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = if (failed) colors.danger else colors.accent,
+                        modifier = Modifier.size(18.dp).padding(end = 8.dp),
+                    )
                     Column(Modifier.weight(1f)) {
                         Text(
                             dev.mediamanager.mobile.ui.jobLabel(job.url),
@@ -139,9 +165,12 @@ fun AddScreen(container: AppContainer) {
                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                         )
                     }
-                    TextButton(onClick = { scope.launch { container.db.jobDao().deleteFinished(job.id) } }) {
-                        Text("Dismiss", color = colors.muted)
-                    }
+                    MmTextButton(
+                        "Dismiss",
+                        Icons.Default.ErrorOutline,
+                        color = colors.muted,
+                        onClick = { scope.launch { container.db.jobDao().deleteFinished(job.id) } },
+                    )
                 }
             }
             HorizontalDivider(color = colors.line, modifier = Modifier.padding(vertical = 8.dp))

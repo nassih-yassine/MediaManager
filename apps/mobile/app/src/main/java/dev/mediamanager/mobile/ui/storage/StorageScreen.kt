@@ -13,9 +13,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +51,7 @@ import dev.mediamanager.mobile.storage.StorageSnapshot
 import dev.mediamanager.mobile.storage.usedFraction
 import dev.mediamanager.mobile.storage.share
 import dev.mediamanager.mobile.ui.components.ConfirmDialog
+import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.SectionTitle
 import dev.mediamanager.mobile.ui.components.Thumb
 import dev.mediamanager.mobile.ui.format.formatBytes
@@ -98,18 +109,18 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
 
         item { SectionTitle("Breakdown") }
         item {
-            BreakdownRow("Audio", snapshot.audioBytes, snapshot.audioCount, snapshot.libraryBytes)
-            BreakdownRow("Video", snapshot.videoBytes, snapshot.videoCount, snapshot.libraryBytes)
-            BreakdownRow("Thumbnails", snapshot.thumbBytes, 0, snapshot.libraryBytes)
-            BreakdownRow("Covers", snapshot.coversBytes, 0, snapshot.libraryBytes)
-            BreakdownRow("Temp", snapshot.tempBytes, 0, snapshot.libraryBytes)
+            BreakdownRow("Audio", snapshot.audioBytes, snapshot.audioCount, snapshot.libraryBytes, Icons.Default.MusicNote)
+            BreakdownRow("Video", snapshot.videoBytes, snapshot.videoCount, snapshot.libraryBytes, Icons.Default.Videocam)
+            BreakdownRow("Thumbnails", snapshot.thumbBytes, 0, snapshot.libraryBytes, Icons.Default.Image)
+            BreakdownRow("Covers", snapshot.coversBytes, 0, snapshot.libraryBytes, Icons.Default.PhotoLibrary)
+            BreakdownRow("Temp", snapshot.tempBytes, 0, snapshot.libraryBytes, Icons.Default.Schedule)
         }
 
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle("Largest items")
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = {
+                MmTextButton("Re-check", Icons.Default.Refresh, onClick = {
                     scope.launch {
                         val result = container.itemRepository.recheck()
                         temp.value = container.storage.measureTemp()
@@ -120,7 +131,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                             else -> "${result.missing.size} files missing on disk"
                         }
                     }
-                }) { Text("Re-check", color = colors.accent) }
+                })
             }
             recheckMessage?.let {
                 Text(it, color = colors.muted, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
@@ -155,9 +166,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                         style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                     )
                 }
-                TextButton(onClick = { pendingDelete = row.item }) {
-                    Text("Delete", color = colors.danger)
-                }
+                MmTextButton("Delete", Icons.Default.Delete, color = colors.danger, onClick = { pendingDelete = row.item })
             }
         }
         item { Spacer(Modifier.height(32.dp)) }
@@ -181,13 +190,20 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
 }
 
 @Composable
-private fun BreakdownRow(label: String, bytes: Long, count: Int, whole: Long) {
+private fun BreakdownRow(
+    label: String,
+    bytes: Long,
+    count: Int,
+    whole: Long,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
     val colors = LocalAppColors.current
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = colors.muted, modifier = Modifier.size(16.dp).padding(end = 6.dp))
         Text(
             label,
             color = colors.ink,
-            modifier = Modifier.width(80.dp),
+            modifier = Modifier.width(74.dp),
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             maxLines = 1,
         )

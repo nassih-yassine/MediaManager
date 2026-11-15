@@ -111,16 +111,6 @@ fun Thumb(item: Item, filesDir: File, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text.uppercase(),
-        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-        color = LocalAppColors.current.muted,
-        modifier = modifier.padding(vertical = 8.dp),
-    )
-}
-
-@Composable
 fun EmptyState(
     title: String,
     body: String,
@@ -268,6 +258,47 @@ fun ConfirmDialog(
             TextButton(onClick = onDismiss) { Text("Cancel", color = colors.muted) }
         },
     )
+}
+
+/** A text action with a leading glyph, at the 18 dp size the rest of the app uses. */
+@Composable
+fun MmTextButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    color: androidx.compose.ui.graphics.Color = LocalAppColors.current.accent,
+) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = modifier) {
+        androidx.compose.material3.Icon(
+            icon,
+            contentDescription = null,
+            tint = if (enabled) color else LocalAppColors.current.muted,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(text, color = if (enabled) color else LocalAppColors.current.muted)
+    }
+}
+
+@Composable
+fun SectionTitle(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = LocalAppColors.current.muted, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.size(6.dp))
+        }
+        Text(
+            text.uppercase(),
+            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            color = LocalAppColors.current.muted,
+        )
+    }
 }
 
 @Composable
