@@ -49,6 +49,8 @@ object YtDlpArgs {
                 "--no-warnings",
                 "--socket-timeout", "20",
                 "--retries", "2",
+                "--concurrent-fragments", "4",
+                "--http-chunk-size", "10M",
                 "--write-info-json",
                 "--write-thumbnail",
                 "--convert-thumbnails", "jpg",

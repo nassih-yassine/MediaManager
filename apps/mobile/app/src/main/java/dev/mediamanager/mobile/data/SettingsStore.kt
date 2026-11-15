@@ -24,7 +24,9 @@ class SettingsStore(private val context: Context) {
         val mode = stringPreferencesKey("theme_mode")
         val wifiOnly = booleanPreferencesKey("wifi_only")
         val maxHeight = intPreferencesKey("max_height")
+        val concurrentDownloads = intPreferencesKey("concurrent_downloads")
         val recentUrls = stringPreferencesKey("recent_urls")
+        val lastItemId = stringPreferencesKey("last_item_id")
     }
 
     val appearance: Flow<Appearance> = context.dataStore.data.map { prefs ->
@@ -51,6 +53,21 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setMaxHeight(value: Int) {
         context.dataStore.edit { it[Keys.maxHeight] = value }
+    }
+
+    val lastItemId: Flow<String?> = context.dataStore.data.map { it[Keys.lastItemId] }
+
+    suspend fun setLastItemId(id: String?) {
+        context.dataStore.edit { prefs ->
+            if (id == null) prefs.remove(Keys.lastItemId) else prefs[Keys.lastItemId] = id
+        }
+    }
+
+    /** Two jobs by default: enough to overlap a slow 4-connection download with another. */
+    val concurrentDownloads: Flow<Int> = context.dataStore.data.map { (it[Keys.concurrentDownloads] ?: 2).coerceIn(1, 3) }
+
+    suspend fun setConcurrentDownloads(value: Int) {
+        context.dataStore.edit { it[Keys.concurrentDownloads] = value.coerceIn(1, 3) }
     }
 
     val recentUrls: Flow<List<String>> = context.dataStore.data.map { prefs ->

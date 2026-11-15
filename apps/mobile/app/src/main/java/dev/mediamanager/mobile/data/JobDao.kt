@@ -19,7 +19,7 @@ interface JobDao {
     @Query("SELECT * FROM jobs WHERE status = 'queued' AND scheduledAt <= :now AND attempts < maxAttempts ORDER BY priority DESC, createdAt ASC LIMIT 1")
     suspend fun nextQueued(now: Long): JobEntity?
 
-    @Query("UPDATE jobs SET status = 'running', claimedBy = :worker, claimedAt = :now, heartbeatAt = :now, attempts = attempts + 1, error = NULL, stage = NULL, updatedAt = :now WHERE id = :id")
+    @Query("UPDATE jobs SET status = 'running', claimedBy = :worker, claimedAt = :now, heartbeatAt = :now, attempts = attempts + 1, progress = 0, error = NULL, stage = NULL, updatedAt = :now WHERE id = :id")
     suspend fun markRunning(id: String, worker: String, now: Long)
 
     /**
@@ -47,6 +47,10 @@ interface JobDao {
 
     @Query("UPDATE jobs SET metaTitle = :title, metaDurationMs = :durationMs, metaThumbPath = :thumbPath, updatedAt = :now WHERE id = :id")
     suspend fun setMeta(id: String, title: String?, durationMs: Long?, thumbPath: String?, now: Long)
+
+    /** Repairs rows written by the old parallel downloader, which stored 14.25 instead of 1. */
+    @Query("UPDATE jobs SET progress = 1 WHERE progress > 1")
+    suspend fun clampProgress()
 
     @Query("UPDATE jobs SET status = 'done', itemId = :itemId, progress = 1, stage = NULL, error = NULL, updatedAt = :now WHERE id = :id")
     suspend fun markDone(id: String, itemId: String, now: Long)

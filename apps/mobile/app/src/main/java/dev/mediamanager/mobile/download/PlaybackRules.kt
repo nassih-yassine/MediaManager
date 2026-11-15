@@ -36,3 +36,20 @@ fun resumeTarget(positionMs: Long, durationMs: Long?): Long {
     if (durationMs != null && durationMs > 0 && positionMs > durationMs - RESUME_END_GUARD_MS) return 0
     return positionMs
 }
+
+/**
+ * Where the restored queue should sit. The last played item wins; anything else
+ * (nothing saved, item deleted, empty queue) starts at the top.
+ */
+fun restoreIndex(ids: List<String>, lastItemId: String?): Int {
+    if (ids.isEmpty() || lastItemId == null) return 0
+    return ids.indexOf(lastItemId).coerceAtLeast(0)
+}
+
+/** How much of an item is already behind you, or 0 when a chip would be noise. */
+fun watchedFraction(positionMs: Long, durationMs: Long?): Float {
+    if (durationMs == null || durationMs <= 0) return 0f
+    if (positionMs < RESUME_MIN_MS) return 0f
+    val fraction = positionMs.toFloat() / durationMs
+    return if (fraction >= 0.995f) 0f else fraction.coerceIn(0f, 1f)
+}

@@ -12,7 +12,10 @@ import androidx.media3.session.SessionToken
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.data.toItem
+import dev.mediamanager.mobile.data.SettingsStore
 import dev.mediamanager.mobile.download.resumeTarget
+import dev.mediamanager.mobile.download.restoreIndex
+import kotlinx.coroutines.flow.first
 import dev.mediamanager.mobile.media.LibraryPaths
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +47,7 @@ class PlayerRepository(
     private val context: Context,
     private val db: AppDatabase,
     private val paths: LibraryPaths,
+    private val settings: SettingsStore,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -79,7 +83,10 @@ class PlayerRepository(
 
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     mediaItem?.mediaId?.let { id ->
-                        _queue.value.firstOrNull { it.id == id }?.let { current = it }
+                        _queue.value.firstOrNull { it.id == id }?.let {
+                            current = it
+                            scope.launch { settings.setLastItemId(it.id) }
+                        }
                     }
                     publish()
                 }
@@ -105,11 +112,17 @@ class PlayerRepository(
             if (ids.isEmpty()) return@launch
             val items = ids.mapNotNull { db.itemDao().get(it)?.toItem() }
             if (items.isEmpty()) return@launch
-            val index = ids.indexOfFirst { it == items.first().id }.coerceAtLeast(0)
+            // Park on the item that was playing, and put the cursor back on the frame
+            // where it stopped. Restoring at zero silently threw the resume point away.
+            val index = restoreIndex(items.map { it.id }, settings.lastItemId.first())
+            val start = items[index]
             _queue.value = items
-            c.setMediaItems(items.map(::mediaItem), index, 0)
-            val start = items.getOrNull(index)
             current = start
+            c.setMediaItems(
+                items.map(::mediaItem),
+                index,
+                resumeTarget(start.positionMs, start.durationMs),
+            )
             c.prepare()
             c.playWhenReady = false
             publish()
@@ -123,7 +136,10 @@ class PlayerRepository(
         val index = startIndex.coerceIn(0, items.lastIndex)
         _queue.value = items
         current = items[index]
-        scope.launch { db.queueDao().replaceAll(items.map { it.id }) }
+        scope.launch {
+            db.queueDao().replaceAll(items.map { it.id })
+            settings.setLastItemId(items[index].id)
+        }
         c.setMediaItems(items.map(::mediaItem), index, 0)
         val target = resumeTarget(current?.positionMs ?: 0, current?.durationMs)
         if (target > 0) c.seekTo(index, target)

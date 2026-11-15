@@ -8,15 +8,22 @@ class JobQueue(
     private val dao: JobDao,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    /** True when the library already holds this URL; a second copy is never queued. */
+    private val existsInLibrary: suspend (String) -> Boolean = { false },
 ) {
 
-    data class EnqueueResult(val job: JobEntity, val duplicate: Boolean)
+    data class EnqueueResult(
+        val job: JobEntity?,
+        val duplicate: Boolean,
+        val inLibrary: Boolean = false,
+    )
 
     suspend fun enqueue(url: String, mode: DownloadMode): EnqueueResult {
         val now = clock()
         val cleanUrl = normalizeUrl(url)
         val key = dedupeKey(cleanUrl, mode)
         dao.activeByDedupeKey(key)?.let { return EnqueueResult(it, duplicate = true) }
+        if (existsInLibrary(cleanUrl)) return EnqueueResult(null, duplicate = false, inLibrary = true)
         val job = JobEntity(
             id = newId(),
             dedupeKey = key,
@@ -69,5 +76,8 @@ class JobQueue(
 
     suspend fun cancel(id: String) = dao.cancel(id, clock())
 
-    suspend fun reapExpired(leaseMs: Long = 60_000L): Int = dao.requeueStale(clock() - leaseMs, clock())
+    suspend fun reapExpired(leaseMs: Long = 60_000L): Int {
+        dao.clampProgress()
+        return dao.requeueStale(clock() - leaseMs, clock())
+    }
 }

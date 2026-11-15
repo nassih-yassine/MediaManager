@@ -47,7 +47,7 @@ data class JobEntity(
     val metaThumbPath: String? = null,
     val itemId: String? = null,
     val attempts: Int = 0,
-    val maxAttempts: Int = 3,
+    val maxAttempts: Int = 5,
     val priority: Int = 0,
     val scheduledAt: Long,
     val claimedBy: String? = null,

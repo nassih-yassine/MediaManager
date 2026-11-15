@@ -9,6 +9,8 @@ import java.io.File
  */
 class LibraryPaths(private val root: File) {
 
+    /** App files root; the bundled FFmpeg lives underneath it. */
+    val filesRoot: File get() = root
     val libraryDir: File get() = File(root, "library")
     val thumbsDir: File get() = File(root, "thumbs")
     val incomingRoot: File get() = File(root, ".incoming")

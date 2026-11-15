@@ -56,7 +56,7 @@ import dev.mediamanager.mobile.ui.downloads.DownloadsScreen
 import dev.mediamanager.mobile.ui.home.HomeScreen
 import dev.mediamanager.mobile.ui.library.LibraryScreen
 import dev.mediamanager.mobile.ui.player.MiniPlayer
-import dev.mediamanager.mobile.ui.player.NowPlayingScreen
+import dev.mediamanager.mobile.ui.player.PlayerOverlay
 import dev.mediamanager.mobile.ui.settings.SettingsScreen
 import dev.mediamanager.mobile.ui.storage.StorageScreen
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
@@ -85,7 +85,7 @@ fun AppShell(
     )
     MmTheme(appearance.family, appearance.mode) {
         var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
-        var nowPlayingOpen by remember { mutableStateOf(false) }
+        var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
         var downloadsOpen by remember { mutableStateOf(false) }
         var storageOpen by remember { mutableStateOf(false) }
         val colors = LocalAppColors.current
@@ -256,7 +256,7 @@ fun AppShell(
                     animationSpec = tween(240),
                 ) + fadeOut(tween(140)),
             ) {
-                NowPlayingScreen(
+                PlayerOverlay(
                     player = player,
                     filesDir = filesDir,
                     audio = container.audioOutput,

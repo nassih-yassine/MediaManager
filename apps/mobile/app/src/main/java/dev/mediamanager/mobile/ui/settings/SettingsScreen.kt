@@ -73,6 +73,7 @@ fun SettingsScreen(
     )
     val wifiOnly by container.settings.wifiOnly.collectAsStateWithLifecycle(initialValue = false)
     val maxHeight by container.settings.maxHeight.collectAsStateWithLifecycle(initialValue = 1080)
+    val simultaneous by container.settings.concurrentDownloads.collectAsStateWithLifecycle(initialValue = 2)
     val libraryBytes by container.db.itemDao().observeTotalBytes().collectAsStateWithLifecycle(initialValue = 0L)
 
     BackHandler(onBack = onBack)
@@ -162,6 +163,23 @@ fun SettingsScreen(
                     options = heights.map { it to "${it}p" },
                     selected = maxHeight,
                     onSelect = { scope.launch { container.settings.setMaxHeight(it) } },
+                )
+            }
+            HorizontalDivider(color = colors.line)
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Simultaneous downloads", color = colors.ink)
+                    Text(
+                        "Each download already uses four connections; two jobs overlap cleanly.",
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                }
+                SelectMenu(
+                    label = "Jobs",
+                    options = listOf(1 to "1", 2 to "2", 3 to "3"),
+                    selected = simultaneous,
+                    onSelect = { scope.launch { container.settings.setConcurrentDownloads(it) } },
                 )
             }
         }

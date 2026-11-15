@@ -18,6 +18,7 @@ data class DownloadState(
     val stage: String? = null,
     val waitingForWifi: Boolean = false,
     val waitingForNetwork: Boolean = false,
+    val activeCount: Int = 0,
 )
 
 object QueueNotifications {
@@ -30,7 +31,9 @@ object QueueNotifications {
         state.waitingForWifi -> "Waiting for Wi-Fi"
         state.waitingForNetwork -> "Waiting for the network"
         state.activeJobId == null -> "Idle"
-        else -> "Downloading · ${activeTitle ?: "Media"} · ${(state.progress * 100).toInt()}%"
+        state.activeCount > 1 ->
+            "Downloading ${state.activeCount} items · ${(state.progress.coerceIn(0f, 1f) * 100).toInt()}%"
+        else -> "Downloading · ${activeTitle ?: "Media"} · ${(state.progress.coerceIn(0f, 1f) * 100).toInt()}%"
     }
 
     fun channel(context: Context) {
@@ -85,7 +88,7 @@ object QueueNotifications {
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setProgress(100, (state.progress * 100).toInt(), state.activeJobId == null)
+            .setProgress(100, (state.progress.coerceIn(0f, 1f) * 100).toInt(), state.activeJobId == null)
             .addAction(0, "Cancel", cancel)
             .build()
     }

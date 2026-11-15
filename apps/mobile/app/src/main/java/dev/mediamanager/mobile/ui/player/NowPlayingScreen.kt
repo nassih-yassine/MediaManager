@@ -64,15 +64,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
-import androidx.media3.ui.PlayerView
 import dev.mediamanager.mobile.media.AudioRoute
 import dev.mediamanager.mobile.media.AudioOutputMonitor
 import dev.mediamanager.mobile.media.VolumeControl
 import dev.mediamanager.mobile.playback.NowPlaying
-import dev.mediamanager.mobile.playback.PlaybackService
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.playback.playbackSpeeds
 import dev.mediamanager.mobile.playback.speedLabel
@@ -381,22 +378,6 @@ private fun Artwork(
         .aspectRatio(1f)
         .clip(RoundedCornerShape(20.dp))
         .background(placeholder)
-
-    if (current.isVideo) {
-        val exo = PlaybackService.currentPlayer
-        if (exo != null) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exo
-                        useController = false
-                    }
-                },
-                modifier = modifier,
-            )
-            return
-        }
-    }
 
     val cover = current.thumbPath?.let { File(filesDir, it) }
     Box(modifier, contentAlignment = Alignment.Center) {

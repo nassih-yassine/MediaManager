@@ -37,6 +37,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        (application as App).container.player.savePosition()
+        super.onStop()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

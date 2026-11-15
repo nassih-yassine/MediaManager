@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -79,6 +80,7 @@ fun AddScreen(
     }
     val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
     val activeJobs by container.db.jobDao().observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
+    val online by container.connectivity.observeOnline().collectAsStateWithLifecycle(initialValue = true)
     val active = activeJobs.firstOrNull { it.status == "running" } ?: activeJobs.firstOrNull()
 
     Column(
@@ -123,6 +125,26 @@ fun AddScreen(
                         tint = if (active != null) colors.accent else colors.muted,
                     )
                 }
+            }
+        }
+
+        if (!online && activeJobs.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.CloudOff,
+                    contentDescription = null,
+                    tint = colors.danger,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "You're offline. Downloads are paused and resume automatically.",
+                    color = colors.danger,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                )
             }
         }
 
@@ -208,10 +230,10 @@ fun AddScreen(
                     val result = container.jobQueue.enqueue(validated.url, validated.mode)
                     container.settings.addRecentUrl(validated.url)
                     DownloadService.start(container.appContext)
-                    message = if (result.duplicate) {
-                        "Already in the downloads"
-                    } else {
-                        "Queued. It keeps going in the background."
+                    message = when {
+                        result.inLibrary -> "Already in your library."
+                        result.duplicate -> "Already in the downloads."
+                        else -> "Queued. It keeps going in the background."
                     }
                     form = AddFormState(mode = validated.mode)
                 }
@@ -291,9 +313,7 @@ fun AddScreen(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             if (failed) {
-                                MmTextButton(
-                                    "Retry",
-                                    Icons.Default.Refresh,
+                                IconButton(
                                     onClick = {
                                         scope.launch {
                                             container.jobQueue.enqueue(
@@ -305,7 +325,13 @@ fun AddScreen(
                                             message = "Retrying"
                                         }
                                     },
-                                )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = "Retry download",
+                                        tint = colors.accent,
+                                    )
+                                }
                             }
                             MmTextButton(
                                 "Dismiss",
@@ -355,7 +381,11 @@ fun AddScreen(
                             val result = container.jobQueue.enqueue(sharedUrl, DownloadMode.AUDIO)
                             container.settings.addRecentUrl(sharedUrl)
                             DownloadService.start(container.appContext)
-                            message = if (result.duplicate) "Already in the downloads" else "Queued as audio"
+                            message = if (result.duplicate) {
+                                "Already in the downloads"
+                            } else {
+                                "Queued as audio"
+                            }
                             form = AddFormState(mode = DownloadMode.AUDIO)
                             sharedSheet = false
                             onSharedHandled()
@@ -370,7 +400,11 @@ fun AddScreen(
                             val result = container.jobQueue.enqueue(sharedUrl, DownloadMode.VIDEO)
                             container.settings.addRecentUrl(sharedUrl)
                             DownloadService.start(container.appContext)
-                            message = if (result.duplicate) "Already in the downloads" else "Queued as video"
+                            message = if (result.duplicate) {
+                                "Already in the downloads"
+                            } else {
+                                "Queued as video"
+                            }
                             form = AddFormState(mode = DownloadMode.VIDEO)
                             sharedSheet = false
                             onSharedHandled()

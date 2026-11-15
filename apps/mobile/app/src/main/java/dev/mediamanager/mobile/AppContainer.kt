@@ -35,7 +35,11 @@ class AppContainer(context: Context) {
 
     val connectivity: ConnectivityMonitor = ConnectivityMonitor(appContext)
 
-    val jobQueue: JobQueue = JobQueue(db.jobDao())
+    val jobQueue: JobQueue = JobQueue(
+        dao = db.jobDao(),
+        existsInLibrary = { url -> db.itemDao().existsBySourceUrl(url) },
+    )
+
 
     val itemRepository: ItemRepository = ItemRepository(db, paths)
 
@@ -46,7 +50,7 @@ class AppContainer(context: Context) {
     val audioOutput: AudioOutputMonitor = AudioOutputMonitor(appContext)
     val volume: VolumeControl = VolumeControl(appContext)
 
-    val player: PlayerRepository = PlayerRepository(appContext, db, paths)
+    val player: PlayerRepository = PlayerRepository(appContext, db, paths, settings)
 
     private val thumbnailer = Thumbnailer(paths)
 

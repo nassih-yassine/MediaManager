@@ -19,9 +19,14 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -212,6 +217,11 @@ fun Segmented(
     }
 }
 
+/**
+ * Confirmation sheet. Same anatomy as the playlist sheets: title, one line of
+ * context, then a ghost Cancel beside a filled primary action.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -219,22 +229,67 @@ fun ConfirmDialog(
     confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.DeleteOutline,
 ) {
     val colors = LocalAppColors.current
-    AlertDialog(
+    // Theme accent, not a fixed red: every other primary action in the app follows it.
+    val tint = colors.accent
+    val onTint = colors.accentInk
+
+    androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.panel,
-        title = { Text(title, color = colors.ink) },
-        text = { Text(body, color = colors.muted) },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(); onDismiss() }) {
-                Text(confirmLabel, color = colors.danger)
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(tint.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    title,
+                    color = colors.ink,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                )
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = colors.muted) }
-        },
-    )
+            Text(
+                body,
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                ) {
+                    Text("Cancel", color = colors.muted)
+                }
+                androidx.compose.material3.Button(
+                    onClick = { onConfirm(); onDismiss() },
+                    modifier = Modifier.weight(2f).height(48.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = tint,
+                        contentColor = onTint,
+                    ),
+                ) {
+                    Text(confirmLabel)
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
 }
 
 /** A text action with a leading glyph, at the 18 dp size the rest of the app uses. */
