@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Settings
@@ -46,7 +45,6 @@ import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Appearance
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.ui.add.AddScreen
-import dev.mediamanager.mobile.ui.downloads.DownloadsScreen
 import dev.mediamanager.mobile.ui.home.HomeScreen
 import dev.mediamanager.mobile.ui.library.LibraryFilter
 import dev.mediamanager.mobile.ui.library.LibraryScreen
@@ -63,7 +61,6 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     LIBRARY("Library", Icons.Default.LibraryMusic),
     ADD("Add", Icons.Default.AddCircle),
-    QUEUE("Queue", Icons.Default.Download),
     STORAGE("Storage", Icons.Default.Storage),
 }
 
@@ -176,8 +173,7 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                                 initialFilter = libraryFilter,
                             )
 
-                            Tab.ADD -> AddScreen(container)
-                            Tab.QUEUE -> DownloadsScreen(container, player)
+                            Tab.ADD -> AddScreen(container, player)
                             Tab.STORAGE -> StorageScreen(container, player)
                         }
                     }

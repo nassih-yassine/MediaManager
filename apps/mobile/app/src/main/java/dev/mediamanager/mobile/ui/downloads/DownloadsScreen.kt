@@ -41,7 +41,12 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
 @Composable
-fun DownloadsScreen(container: AppContainer, player: dev.mediamanager.mobile.playback.PlayerRepository) {
+fun DownloadsScreen(
+    container: AppContainer,
+    player: dev.mediamanager.mobile.playback.PlayerRepository,
+    onClose: () -> Unit,
+) {
+    androidx.activity.compose.BackHandler(onBack = onClose)
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     // Opening the queue is also the explicit "resume" gesture after a system kill.

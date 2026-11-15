@@ -24,6 +24,7 @@ object QueueNotifications {
 
     const val CHANNEL_ID = "downloads"
     const val NOTIFICATION_ID = 41
+    const val RESULT_NOTIFICATION_ID = 42
 
     fun summary(state: DownloadState, activeTitle: String?): String = when {
         state.waitingForWifi -> "Waiting for Wi-Fi"
@@ -42,6 +43,26 @@ object QueueNotifications {
                 },
             )
         }
+    }
+
+    /** One-shot result: tap opens the app, the row disappears when dismissed. */
+    fun buildResult(context: Context, title: String, text: String, failure: Boolean): Notification {
+        val open = PendingIntent.getActivity(
+            context,
+            2,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_logo_fg)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .setPriority(if (failure) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 
     fun build(context: Context, state: DownloadState, activeTitle: String?): Notification {

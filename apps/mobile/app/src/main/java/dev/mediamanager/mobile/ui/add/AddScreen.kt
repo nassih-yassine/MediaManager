@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -44,18 +45,26 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
 @Composable
-fun AddScreen(container: AppContainer) {
+fun AddScreen(
+    container: AppContainer,
+    player: dev.mediamanager.mobile.playback.PlayerRepository,
+) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
     var form by remember { mutableStateOf(AddFormState()) }
+    var showDownloads by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val recent by container.settings.recentUrls.collectAsStateWithLifecycle(initialValue = emptyList())
     val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text("Paste a link", color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("Paste a link", color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.weight(1f))
+            MmTextButton("Downloads", Icons.Default.Download, onClick = { showDownloads = true })
+        }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = form.url,
@@ -208,9 +217,29 @@ fun AddScreen(container: AppContainer) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Downloads run in the background. Wi-Fi-only is in Settings.",
+            "Downloads run in the background. You get a notification when one finishes or fails; Wi-Fi-only is in Settings.",
             color = colors.muted,
             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
         )
+    }
+
+    if (showDownloads) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showDownloads,
+            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }),
+            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }),
+        ) {
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(colors.canvas),
+            ) {
+                dev.mediamanager.mobile.ui.downloads.DownloadsScreen(
+                    container = container,
+                    player = player,
+                    onClose = { showDownloads = false },
+                )
+            }
+        }
     }
 }

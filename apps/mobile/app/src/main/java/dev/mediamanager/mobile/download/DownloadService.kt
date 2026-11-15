@@ -173,10 +173,26 @@ class DownloadService : Service() {
                     pathsCleanup(app, job.id)
                 } else {
                     when (result) {
-                        is DownloadPipeline.Result.Done -> app.jobQueue.finish(job.id, result.itemId)
+                        is DownloadPipeline.Result.Done -> {
+                            app.jobQueue.finish(job.id, result.itemId)
+                            val item = app.db.itemDao().get(result.itemId)
+                            notifyResult(
+                                title = item?.title ?: "Download finished",
+                                text = "Saved to your library",
+                                failure = false,
+                            )
+                        }
+
                         is DownloadPipeline.Result.Failed -> {
                             Log.w(TAG, "job ${job.id} failed: ${result.message} (retry=${result.retryable})")
-                            app.jobQueue.fail(job.id, result.message, permanent = !result.retryable)
+                            val willRetry = app.jobQueue.fail(job.id, result.message, permanent = !result.retryable)
+                            if (!willRetry) {
+                                notifyResult(
+                                    title = "Download failed",
+                                    text = result.message,
+                                    failure = true,
+                                )
+                            }
                         }
                         DownloadPipeline.Result.Cancelled -> {
                             app.jobQueue.cancel(job.id)
@@ -191,6 +207,21 @@ class DownloadService : Service() {
         } finally {
             _state.value = DownloadState()
             withContext(Dispatchers.Main) { stopForegroundCompatAndSelf() }
+        }
+    }
+
+    private fun notifyResult(title: String, text: String, failure: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        runCatching {
+            NotificationManagerCompat.from(this).notify(
+                QueueNotifications.RESULT_NOTIFICATION_ID,
+                QueueNotifications.buildResult(this, title, text, failure),
+            )
         }
     }
 
