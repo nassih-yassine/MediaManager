@@ -52,7 +52,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     LIBRARY("Library", Icons.Default.LibraryMusic),
     PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
     ADD("Add", Icons.Default.AddCircle),
-    DOWNLOADS("Downloads", Icons.Default.Download),
+    DOWNLOADS("Queue", Icons.Default.Download),
     STORAGE("Storage", Icons.Default.Storage),
 }
 

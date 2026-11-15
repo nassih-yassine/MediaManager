@@ -27,7 +27,7 @@ private val MmTypography = Typography(
     bodyLarge = TextStyle(fontFamily = SpaceGrotesk, fontSize = 16.sp),
     bodyMedium = TextStyle(fontFamily = SpaceGrotesk, fontSize = 14.sp),
     labelLarge = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 14.sp),
-    labelSmall = TextStyle(fontFamily = JetBrainsMono, fontSize = 11.sp),
+    labelSmall = TextStyle(fontFamily = SpaceGrotesk, fontSize = 11.sp),
 )
 
 fun isDark(colors: AppColors): Boolean = colors.ink.luminance() > 0.5f

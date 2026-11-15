@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -176,23 +179,39 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
 @Composable
 private fun BreakdownRow(label: String, bytes: Long, count: Int, whole: Long) {
     val colors = LocalAppColors.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.height(8.dp).fillMaxWidth(share(bytes, whole).coerceAtLeast(0.02f)).clip(RoundedCornerShape(4.dp)).background(colors.accent))
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
             color = colors.ink,
-            modifier = Modifier.padding(start = 10.dp),
+            modifier = Modifier.width(88.dp),
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
         )
-        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier
+                .weight(1f)
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(colors.panel2),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(share(bytes, whole).coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .background(colors.accent),
+            )
+        }
         Text(
             buildString {
                 append(formatBytes(bytes))
-                if (count > 0) append(" · $count")
+                if (count > 0) append(" · ").append(count)
                 append(" · ").append(formatShare(share(bytes, whole)))
             },
             color = colors.muted,
+            modifier = Modifier.width(124.dp).padding(start = 10.dp),
             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.End,
+            maxLines = 1,
         )
     }
 }
