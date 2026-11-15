@@ -15,20 +15,31 @@ data class MediaInfo(
 
 object YtDlpArgs {
 
-    fun audio(url: String, outDir: File, jsRuntime: String? = "quickjs"): List<String> =
-        (base(outDir, jsRuntime) + listOf(
+    fun audio(
+        url: String,
+        outDir: File,
+        jsRuntime: String? = "quickjs",
+        extractorArgs: String? = null,
+    ): List<String> =
+        (base(outDir, jsRuntime, extractorArgs) + listOf(
             "-x",
             "--audio-format", "mp3",
             "--audio-quality", "0",
         )) + url
 
-    fun video(url: String, outDir: File, maxHeight: Int, jsRuntime: String? = "quickjs"): List<String> =
-        (base(outDir, jsRuntime) + listOf(
+    fun video(
+        url: String,
+        outDir: File,
+        maxHeight: Int,
+        jsRuntime: String? = "quickjs",
+        extractorArgs: String? = null,
+    ): List<String> =
+        (base(outDir, jsRuntime, extractorArgs) + listOf(
             "-f", "bv*[height<=$maxHeight]+ba/b[height<=$maxHeight]",
             "--merge-output-format", "mp4",
         )) + url
 
-    private fun base(outDir: File, jsRuntime: String?): List<String> = buildList {
+    private fun base(outDir: File, jsRuntime: String?, extractorArgs: String?): List<String> = buildList {
         addAll(
             listOf(
                 "-o", File(outDir, "%(id)s.%(ext)s").path,
@@ -43,6 +54,7 @@ object YtDlpArgs {
             ),
         )
         if (jsRuntime != null) addAll(listOf("--js-runtimes", jsRuntime))
+        if (extractorArgs != null) addAll(listOf("--extractor-args", extractorArgs))
     }
 }
 

@@ -91,7 +91,7 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                 Text(
                     "${formatDuration(current.positionMs)} / ${formatDuration(current.durationMs)}",
                     color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
             }
             IconButton(onClick = { player.toggle() }) {

@@ -59,32 +59,58 @@ class YtDlpExtractor(
             init(context)
             val dir = paths.incomingDir(job.id).apply { mkdirs() }
             val mode = DownloadMode.from(job.mode)
-            val raw = when (mode) {
-                DownloadMode.AUDIO -> YtDlpArgs.audio(job.url, dir)
-                DownloadMode.VIDEO -> YtDlpArgs.video(job.url, dir, settings().maxHeight)
-            }
-            val args = raw.dropLast(1) // the url travels in the request, not as an option
-            val request = YoutubeDLRequest(job.url).apply { addFlatArgs(args) }
 
-            fun run(request: YoutubeDLRequest) = YoutubeDL.getInstance().execute(request, job.id) { progress, _, line ->
-                val parsed = parseProgress(line)
-                when {
-                    parsed != null -> onProgress(parsed)
-                    progress >= 0f -> onProgress((progress / 100f).coerceIn(0f, 1f))
+            fun argsFor(jsRuntime: String?, extractorArgs: String?): List<String> = when (mode) {
+                DownloadMode.AUDIO -> YtDlpArgs.audio(job.url, dir, jsRuntime, extractorArgs)
+                DownloadMode.VIDEO -> YtDlpArgs.video(job.url, dir, settings().maxHeight, jsRuntime, extractorArgs)
+            }
+
+            fun execute(args: List<String>) {
+                val request = YoutubeDLRequest(job.url).apply { addFlatArgs(args.dropLast(1)) }
+                YoutubeDL.getInstance().execute(request, job.id) { progress, _, line ->
+                    val parsed = parseProgress(line)
+                    when {
+                        parsed != null -> onProgress(parsed)
+                        progress >= 0f -> onProgress((progress / 100f).coerceIn(0f, 1f))
+                    }
                 }
             }
 
-            try {
-                run(request)
-            } catch (e: Exception) {
-                // An older bundled yt-dlp may not know --js-runtimes. Retry without it once.
-                if (e.message?.contains("js-runtimes", ignoreCase = true) != true) throw e
-                val retry = when (mode) {
-                    DownloadMode.AUDIO -> YtDlpArgs.audio(job.url, dir, jsRuntime = null)
-                    DownloadMode.VIDEO -> YtDlpArgs.video(job.url, dir, settings().maxHeight, jsRuntime = null)
-                }
-                run(YoutubeDLRequest(job.url).apply { addFlatArgs(retry.dropLast(1)) })
+            /*
+             * YouTube serves 403 on its media URLs when the signature cannot be solved.
+             * The phone has no Node, so the fallback is a client that still hands out
+             * unsigned formats: android_vr first, then tv. Non-YouTube URLs get one try.
+             */
+            val plans: List<Pair<String?, String?>> = if (job.url.contains("youtu", ignoreCase = true)) {
+                listOf(
+                    "quickjs" to null,
+                    "quickjs" to "youtube:player_client=android_vr",
+                    "quickjs" to "youtube:player_client=tv",
+                    null to "youtube:player_client=android_vr",
+                )
+            } else {
+                listOf("quickjs" to null, null to null)
             }
+
+            var lastError: Exception? = null
+            for ((jsRuntime, extractorArgs) in plans) {
+                try {
+                    execute(argsFor(jsRuntime, extractorArgs))
+                    lastError = null
+                    break
+                } catch (e: Exception) {
+                    lastError = e
+                    val recoverable = e.message?.let {
+                        it.contains("403", ignoreCase = true) ||
+                            it.contains("signature", ignoreCase = true) ||
+                            it.contains("js-runtimes", ignoreCase = true) ||
+                            it.contains("player response", ignoreCase = true)
+                    } ?: false
+                    if (!recoverable) throw e
+                    Log.w("YtDlp", "attempt failed (${jsRuntime ?: "no-js"}, $extractorArgs): ${e.message}")
+                }
+            }
+            lastError?.let { throw it }
 
             val infoJson = dir.listFiles()?.firstOrNull { it.name.endsWith(".info.json") }
             val info = infoJson?.readText()?.let(::parseInfo)

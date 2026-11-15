@@ -62,7 +62,7 @@ fun DownloadsScreen(container: AppContainer) {
                 Text(
                     "${job.mode} · ${job.stage ?: job.status} · ${(job.progress * 100).toInt()}%",
                     color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
                 LinearProgressIndicator(
                     progress = { job.progress.coerceIn(0f, 1f) },

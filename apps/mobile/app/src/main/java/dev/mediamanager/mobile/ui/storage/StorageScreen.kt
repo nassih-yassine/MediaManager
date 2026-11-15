@@ -89,7 +89,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                     "${formatBytes(snapshot.deviceTotal - snapshot.deviceFree)} used of " +
                         "${formatBytes(snapshot.deviceTotal)} · ${formatBytes(snapshot.deviceFree)} free",
                     color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
             }
         }
@@ -148,7 +148,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                         "${formatBytes(row.item.sizeBytes)} · ${formatShare(row.share)}" +
                             if (row.item.available) "" else " · missing",
                         color = if (row.item.available) colors.muted else colors.danger,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                     )
                 }
                 TextButton(onClick = { pendingDelete = row.item }) {
@@ -209,7 +209,7 @@ private fun BreakdownRow(label: String, bytes: Long, count: Int, whole: Long) {
             },
             color = colors.muted,
             modifier = Modifier.width(124.dp).padding(start = 10.dp),
-            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.End,
             maxLines = 1,
         )

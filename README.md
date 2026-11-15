@@ -5,8 +5,9 @@
 <h1 align="center">MediaManager</h1>
 
 <p align="center">
-  A private, self-hosted library for downloaded audio, video, pictures, galleries and books.
-  Rust API + SQLite on the server, one shared UI on the web and desktop.
+  A private library for downloaded audio, video, pictures, galleries and books.
+  Rust API + SQLite on the server with a shared web/desktop UI, plus a standalone
+  Android app that keeps everything on the phone.
 </p>
 
 ![Library](docs/screenshots/library.jpg)
@@ -29,6 +30,36 @@
   for user management. Another user's rows and files are `404`, not `403`.
 - **Live updates.** SSE refreshes lists and badges without reloading.
 - **Four themes** (Slate, Paper, Ocean, Moss) in light and dark, stored per account.
+
+## Android app
+
+`apps/mobile` is a standalone Kotlin/Compose app for the phone: no account, no
+server, no sync. It has its own Room database and its own library in app-private
+storage, and it is built around the same paste-a-link flow.
+
+- **Paste a link → Audio or Video.** Audio is mp3 with cover art, video is mp4 at
+  the height set in Settings. The extractor is bundled (`youtubedl-android`, yt-dlp
+  + Python + ffmpeg), so the APK is ~76 MB for arm64.
+- **Durable downloads.** The queue is a table; a foreground service works it, and
+  leaving the app or losing the process does not lose a job.
+- **Player, queue, playlists.** One ExoPlayer with a persistent bar, resume points
+  saved in SQLite, play next / add to queue, ordered playlists.
+- **Storage screen** — the reason it exists: library total, phone used/free from
+  `StatFs`, a breakdown by kind (Audio, Video, Thumbnails, Temp), and every item
+  ranked by size with its share and a delete that frees exactly that many bytes.
+- **Same themes, same type.** Slate, Paper, Ocean and Moss × light/dark from the
+  web tokens; Space Grotesk for text and JetBrains Mono for numbers.
+
+```sh
+make mobile        # assembleDebug
+make mobile-test   # unit + Robolectric tests
+```
+
+Device checklist and known limits live in [`apps/mobile/README.md`](apps/mobile/README.md).
+
+| Android library | Storage |
+|---|---|
+| ![Android library](docs/screenshots/android-library.png) | ![Android storage](docs/screenshots/android-storage.png) |
 
 ## Screenshots
 

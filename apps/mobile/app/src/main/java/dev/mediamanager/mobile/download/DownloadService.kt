@@ -47,6 +47,13 @@ class DownloadService : Service() {
     private val workerId = UUID.randomUUID().toString()
     private var activeJob: JobEntity? = null
 
+    /**
+     * One loop per service. Every `startService` (app open, Add, Wi-Fi return) would
+     * otherwise launch another loop; the first one to finish calls stopSelf and kills
+     * a download that is still running.
+     */
+    private var loop: kotlinx.coroutines.Job? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -61,7 +68,7 @@ class DownloadService : Service() {
             return START_NOT_STICKY
         }
         startForegroundCompat(QueueNotifications.build(this, _state.value, null))
-        scope.launch { runQueue() }
+        if (loop?.isActive != true) loop = scope.launch { runQueue() }
         return START_NOT_STICKY
     }
 

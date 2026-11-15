@@ -99,7 +99,13 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                                 selected = current == entry,
                                 onClick = { tab = entry.name },
                                 icon = { Icon(entry.icon, contentDescription = entry.label) },
-                                label = { Text(entry.label) },
+                                label = {
+                                    Text(
+                                        entry.label,
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                    )
+                                },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = colors.accentInk,
                                     selectedTextColor = colors.accent,

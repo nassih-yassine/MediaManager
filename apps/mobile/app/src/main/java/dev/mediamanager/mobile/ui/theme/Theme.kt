@@ -12,11 +12,31 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.unit.sp
 import dev.mediamanager.mobile.R
 
-val SpaceGrotesk = FontFamily(Font(R.font.space_grotesk, FontWeight.Normal))
+/**
+ * Space Grotesk ships as one variable font; each weight is pinned with a variation
+ * setting so 400/500/600/700 are real instances, not synthesized.
+ */
+@OptIn(ExperimentalTextApi::class)
+private fun spaceGrotesk(weight: Int, fontWeight: FontWeight) = Font(
+    resId = R.font.space_grotesk,
+    weight = fontWeight,
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+)
+
+val SpaceGrotesk = FontFamily(
+    spaceGrotesk(400, FontWeight.Normal),
+    spaceGrotesk(500, FontWeight.Medium),
+    spaceGrotesk(600, FontWeight.SemiBold),
+    spaceGrotesk(700, FontWeight.Bold),
+)
+
+/** Numbers and durations only, exactly like the web's numeric face. */
 val JetBrainsMono = FontFamily(Font(R.font.jetbrains_mono, FontWeight.Normal))
 
 private val MmTypography = Typography(
@@ -27,7 +47,9 @@ private val MmTypography = Typography(
     bodyLarge = TextStyle(fontFamily = SpaceGrotesk, fontSize = 16.sp),
     bodyMedium = TextStyle(fontFamily = SpaceGrotesk, fontSize = 14.sp),
     labelLarge = TextStyle(fontFamily = SpaceGrotesk, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+    labelMedium = TextStyle(fontFamily = JetBrainsMono, fontSize = 12.sp),
     labelSmall = TextStyle(fontFamily = SpaceGrotesk, fontSize = 11.sp),
+    bodySmall = TextStyle(fontFamily = SpaceGrotesk, fontSize = 12.sp),
 )
 
 fun isDark(colors: AppColors): Boolean = colors.ink.luminance() > 0.5f
