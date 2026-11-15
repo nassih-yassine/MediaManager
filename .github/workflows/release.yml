@@ -38,6 +38,33 @@ jobs:
           releaseDraft: true
           prerelease: false
 
+  android:
+    name: Android APK
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Build arm64 APK
+        run: |
+          cd apps/mobile
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          ./gradlew assembleDebug --no-daemon
+      - name: Collect APK
+        run: |
+          cp apps/mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk \
+            "MediaManager-${GITHUB_REF_NAME}-arm64.apk"
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MediaManager-${{ github.ref_name }}-arm64.apk
+          draft: true
+
   images:
     name: Container images
     runs-on: ubuntu-24.04
