@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
@@ -68,10 +69,10 @@ fun MmSurface(
     val colors = LocalAppColors.current
     Column(
         modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(colors.panel)
-            .border(1.dp, colors.line, RoundedCornerShape(14.dp))
-            .padding(14.dp),
+            .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+            .padding(16.dp),
         content = content,
     )
 }
@@ -86,7 +87,7 @@ fun Thumb(item: Item, filesDir: File, modifier: Modifier = Modifier) {
     }
     Box(
         modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(colors.panel2),
         contentAlignment = Alignment.Center,
     ) {
@@ -120,13 +121,33 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun EmptyState(title: String, body: String) {
+fun EmptyState(
+    title: String,
+    body: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     val colors = LocalAppColors.current
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(colors.accent.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.LibraryMusic,
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+        Spacer(Modifier.height(16.dp))
         Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, color = colors.ink)
         Spacer(Modifier.height(8.dp))
         Text(
@@ -134,6 +155,16 @@ fun EmptyState(title: String, body: String) {
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             color = colors.muted,
         )
+        if (actionLabel != null && onAction != null) {
+            Spacer(Modifier.height(24.dp))
+            androidx.compose.material3.Button(
+                onClick = onAction,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = colors.accentInk,
+                ),
+            ) { Text(actionLabel) }
+        }
     }
 }
 
@@ -151,8 +182,8 @@ fun <T> SelectMenu(
     Box(modifier) {
         Row(
             Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .border(1.dp, colors.line, RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.dp, colors.line, RoundedCornerShape(12.dp))
                 .clickable { open = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -190,10 +221,10 @@ fun Segmented(
     val colors = LocalAppColors.current
     Row(
         modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(colors.panel2)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         options.forEach { (value, text) ->
             val active = value == selected
@@ -202,7 +233,7 @@ fun Segmented(
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (active) colors.accent else colors.panel2)
                     .clickable { onSelect(value) }
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 Text(
                     text,
@@ -253,7 +284,7 @@ fun KeyValueRow(label: String, value: String, modifier: Modifier = Modifier) {
 fun ScreenHeader(title: String, actions: @Composable () -> Unit = {}) {
     val colors = LocalAppColors.current
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

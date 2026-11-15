@@ -31,6 +31,13 @@ class LibraryPaths(private val root: File) {
 
     fun thumbFile(id: String): File = File(root, thumbRelativePath(id))
 
+    fun coverRelativePath(id: String): String {
+        require(id.isNotBlank()) { "id must not be blank" }
+        return "covers/$id.jpg"
+    }
+
+    fun coverFile(id: String): File = File(root, coverRelativePath(id))
+
     fun incomingDir(jobId: String): File = File(incomingRoot, jobId)
 
     /** Returns the canonical file when it stays under [root], null for traversal or absolute paths. */

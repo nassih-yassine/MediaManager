@@ -72,7 +72,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
                 onSelect = { family -> scope.launch { container.settings.setAppearance(family, appearance.mode) } },
             )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         Segmented(
             options = listOf(
                 ThemeMode.LIGHT.name to "Light",
@@ -85,7 +85,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
             },
         )
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Downloads")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -101,7 +101,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
                 onCheckedChange = { scope.launch { container.settings.setWifiOnly(it) } },
             )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Max video height", color = colors.ink)
             Spacer(Modifier.weight(1f))
@@ -113,7 +113,7 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
             )
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Storage")
         Text(
             "The library reports its own size. Re-check lives on the Storage tab.",
@@ -121,11 +121,11 @@ fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
         )
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(16.dp))
         SectionTitle("About")
         KeyValueRow("Version", "0.1.0")
         KeyValueRow("Extractor", YtDlpExtractor.version() ?: "bundled")
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             "MediaManager is local only: no account, no server, no sync. " +
                 "Downloads use yt-dlp and ffmpeg (GPL-3.0).",

@@ -67,7 +67,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
 
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
             Column(Modifier.padding(top = 8.dp)) {
@@ -77,14 +77,14 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                     color = colors.ink,
                     style = androidx.compose.material3.MaterialTheme.typography.displaySmall,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 LinearProgressIndicator(
                     progress = { deviceUsedFraction },
                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                     color = colors.accent,
                     trackColor = colors.panel2,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     "${formatBytes(snapshot.deviceTotal - snapshot.deviceFree)} used of " +
                         "${formatBytes(snapshot.deviceTotal)} · ${formatBytes(snapshot.deviceFree)} free",
@@ -130,13 +130,13 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .padding(vertical = 8.dp)
                     .clickable { player.playItems(largest.map { it.item }, largest.indexOf(row)) },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Thumb(row.item, container.appContext.filesDir, Modifier.height(48.dp).fillMaxWidth(0.18f))
                 Spacer(Modifier.height(4.dp).fillMaxWidth(0.03f))
-                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(
                         row.item.title,
                         color = colors.ink,
@@ -156,7 +156,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                 }
             }
         }
-        item { Spacer(Modifier.height(30.dp)) }
+        item { Spacer(Modifier.height(32.dp)) }
     }
 
     pendingDelete?.let { item ->
@@ -179,7 +179,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
 @Composable
 private fun BreakdownRow(label: String, bytes: Long, count: Int, whole: Long) {
     val colors = LocalAppColors.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
             color = colors.ink,
@@ -208,7 +208,7 @@ private fun BreakdownRow(label: String, bytes: Long, count: Int, whole: Long) {
                 append(" · ").append(formatShare(share(bytes, whole)))
             },
             color = colors.muted,
-            modifier = Modifier.width(124.dp).padding(start = 10.dp),
+            modifier = Modifier.width(120.dp).padding(start = 12.dp),
             style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.End,
             maxLines = 1,

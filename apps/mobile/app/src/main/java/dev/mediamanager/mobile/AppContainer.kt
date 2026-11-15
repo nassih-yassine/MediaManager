@@ -3,6 +3,7 @@ package dev.mediamanager.mobile
 import android.content.Context
 import androidx.room.Room
 import dev.mediamanager.mobile.data.AppDatabase
+import dev.mediamanager.mobile.data.MIGRATION_1_2
 import dev.mediamanager.mobile.data.SettingsStore
 import dev.mediamanager.mobile.download.CompositeExtractor
 import dev.mediamanager.mobile.download.ConnectivityMonitor
@@ -13,6 +14,7 @@ import dev.mediamanager.mobile.download.Thumbnailer
 import dev.mediamanager.mobile.download.YoutubeNewPipeExtractor
 import dev.mediamanager.mobile.download.YtDlpExtractor
 import dev.mediamanager.mobile.media.ItemRepository
+import dev.mediamanager.mobile.media.PlaylistCoverStore
 import dev.mediamanager.mobile.media.LibraryPaths
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.storage.StorageRepository
@@ -23,6 +25,7 @@ class AppContainer(context: Context) {
     val paths: LibraryPaths = LibraryPaths(appContext.filesDir)
 
     val db: AppDatabase = Room.databaseBuilder(appContext, AppDatabase::class.java, "mm.db")
+        .addMigrations(MIGRATION_1_2)
         .build()
 
     val settings: SettingsStore = SettingsStore(appContext)
@@ -34,6 +37,8 @@ class AppContainer(context: Context) {
     val itemRepository: ItemRepository = ItemRepository(db, paths)
 
     val storage: StorageRepository = StorageRepository(db, paths)
+
+    val playlistCovers: PlaylistCoverStore = PlaylistCoverStore(appContext, paths, db.playlistDao())
 
     val player: PlayerRepository = PlayerRepository(appContext, db, paths)
 

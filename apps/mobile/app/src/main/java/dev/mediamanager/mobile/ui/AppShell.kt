@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,8 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
@@ -78,7 +81,7 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                         .fillMaxWidth()
                         .background(colors.canvas)
                         .statusBarsPadding()
-                        .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 4.dp),
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -100,7 +103,26 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                             NavigationBarItem(
                                 selected = current == entry,
                                 onClick = { tab = entry.name },
-                                icon = { Icon(entry.icon, contentDescription = entry.label) },
+                                icon = {
+                                    if (entry == Tab.ADD) {
+                                        androidx.compose.foundation.layout.Box(
+                                            Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(colors.accent),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(
+                                                entry.icon,
+                                                contentDescription = entry.label,
+                                                tint = colors.accentInk,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
+                                    } else {
+                                        Icon(entry.icon, contentDescription = entry.label)
+                                    }
+                                },
                                 label = {
                                     Text(
                                         entry.label,
@@ -122,12 +144,18 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
             },
         ) { padding ->
             Box(Modifier.padding(padding)) {
-                when (current) {
-                    Tab.LIBRARY -> LibraryScreen(container, player)
-                    Tab.PLAYLISTS -> PlaylistsScreen(container, player)
-                    Tab.ADD -> AddScreen(container)
-                    Tab.DOWNLOADS -> DownloadsScreen(container)
-                    Tab.STORAGE -> StorageScreen(container, player)
+                androidx.compose.animation.Crossfade(
+                    targetState = current,
+                    animationSpec = androidx.compose.animation.core.tween(180),
+                    label = "tab",
+                ) { tab2 ->
+                    when (tab2) {
+                        Tab.LIBRARY -> LibraryScreen(container, player, onAdd = { tab = Tab.ADD.name })
+                        Tab.PLAYLISTS -> PlaylistsScreen(container, player)
+                        Tab.ADD -> AddScreen(container)
+                        Tab.DOWNLOADS -> DownloadsScreen(container)
+                        Tab.STORAGE -> StorageScreen(container, player)
+                    }
                 }
             }
         }

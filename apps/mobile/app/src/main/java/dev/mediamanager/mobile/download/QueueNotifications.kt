@@ -15,6 +15,7 @@ data class DownloadState(
     val activeJobId: String? = null,
     val activeTitle: String? = null,
     val progress: Float = 0f,
+    val stage: String? = null,
     val waitingForWifi: Boolean = false,
     val waitingForNetwork: Boolean = false,
 )

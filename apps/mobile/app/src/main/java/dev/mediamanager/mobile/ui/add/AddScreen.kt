@@ -47,7 +47,7 @@ fun AddScreen(container: AppContainer) {
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Text("Paste a link", color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = form.url,
             onValueChange = { form = form.copy(url = it, error = null) },
@@ -66,7 +66,7 @@ fun AddScreen(container: AppContainer) {
             Spacer(Modifier.height(4.dp))
             Text(it, color = colors.danger, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Segmented(
                 options = listOf(
@@ -78,7 +78,7 @@ fun AddScreen(container: AppContainer) {
             )
             Spacer(Modifier.weight(1f))
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
         Button(
             onClick = {
                 val validated = form.validate()
@@ -100,12 +100,12 @@ fun AddScreen(container: AppContainer) {
         ) { Text(if (form.mode == DownloadMode.AUDIO) "Download audio" else "Download video") }
 
         message?.let {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Text(it, color = colors.accent)
         }
 
         if (finished.isNotEmpty()) {
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(24.dp))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 SectionTitle("Recent downloads")
                 Spacer(Modifier.weight(1f))
@@ -148,7 +148,7 @@ fun AddScreen(container: AppContainer) {
         }
 
         if (recent.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             SectionTitle("Recent links")
             recent.take(6).forEach { url ->
                 Row(
@@ -156,7 +156,7 @@ fun AddScreen(container: AppContainer) {
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { form = form.copy(url = url, error = null) }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 12.dp),
                 ) {
                     Text(
                         url,
@@ -170,7 +170,7 @@ fun AddScreen(container: AppContainer) {
             }
         }
 
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(24.dp))
         Text(
             "Audio keeps cover art and goes to mp3. Video keeps the picture and tops out " +
                 "at the height in Settings.",

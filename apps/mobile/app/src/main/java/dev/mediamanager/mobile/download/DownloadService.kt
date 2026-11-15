@@ -147,13 +147,20 @@ class DownloadService : Service() {
                 notify(_state.value, title)
 
                 val run = scope.async {
-                    app.pipeline.run(job) { progress ->
-                        _state.value = _state.value.copy(progress = progress)
-                        scope.launch {
-                            app.jobQueue.heartbeat(job.id, progress, "fetching")
-                            notify(_state.value, title)
-                        }
-                    }
+                    app.pipeline.run(
+                        job = job,
+                        onProgress = { progress ->
+                            _state.value = _state.value.copy(progress = progress)
+                            scope.launch {
+                                app.jobQueue.heartbeat(job.id, progress, _state.value.stage)
+                                notify(_state.value, title)
+                            }
+                        },
+                        onStage = { stage ->
+                            _state.value = _state.value.copy(stage = stage, progress = if (stage == "downloading") _state.value.progress else 0f)
+                            scope.launch { app.jobQueue.heartbeat(job.id, _state.value.progress, stage) }
+                        },
+                    )
                 }
                 activeRun = run
                 val result = runCatching { run.await() }

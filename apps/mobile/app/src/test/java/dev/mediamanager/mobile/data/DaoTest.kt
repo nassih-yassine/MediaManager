@@ -89,7 +89,7 @@ class DaoTest {
     fun `deleting an item drops playlist and queue rows`() = runTest {
         db.itemDao().insert(item("a1"))
         db.itemDao().insert(item("a2", createdAt = 2))
-        db.playlistDao().upsert(PlaylistEntity("p1", "Mix", 1, 1))
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
         db.playlistDao().addItems("p1", listOf("a1", "a2"), now = 1)
         db.queueDao().replaceAll(listOf("a1", "a2"))
 
@@ -105,7 +105,7 @@ class DaoTest {
         listOf("a1", "a2", "a3").forEachIndexed { index, id ->
             db.itemDao().insert(item(id, createdAt = index.toLong()))
         }
-        db.playlistDao().upsert(PlaylistEntity("p1", "Mix", 1, 1))
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
         db.playlistDao().addItems("p1", listOf("a1", "a2", "a3"), now = 1)
 
         db.playlistDao().reorder("p1", listOf("a3", "a2", "a1"))
@@ -117,7 +117,7 @@ class DaoTest {
     @Test
     fun `adding the same item to a playlist twice is a no-op`() = runTest {
         db.itemDao().insert(item("a1"))
-        db.playlistDao().upsert(PlaylistEntity("p1", "Mix", 1, 1))
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
         db.playlistDao().addItems("p1", listOf("a1"), now = 1)
         db.playlistDao().addItems("p1", listOf("a1"), now = 2)
         assertEquals(1, db.playlistDao().count("p1"))
@@ -135,9 +135,18 @@ class DaoTest {
     }
 
     @Test
+    fun `playlist cover path round-trips`() = runTest {
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
+        db.playlistDao().setCover("p1", "covers/p1.jpg", now = 2)
+        assertEquals("covers/p1.jpg", db.playlistDao().get("p1")!!.coverPath)
+        db.playlistDao().setCover("p1", null, now = 3)
+        assertNull(db.playlistDao().get("p1")!!.coverPath)
+    }
+
+    @Test
     fun `deleting a playlist keeps its items`() = runTest {
         db.itemDao().insert(item("a1"))
-        db.playlistDao().upsert(PlaylistEntity("p1", "Mix", 1, 1))
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
         db.playlistDao().addItems("p1", listOf("a1"), now = 1)
         db.playlistDao().delete("p1")
         assertEquals(1, db.itemDao().count())

@@ -37,9 +37,14 @@ class YoutubeNewPipeExtractor(
         }
     }
 
-    override suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit): FetchResult =
+    override suspend fun fetch(
+        job: JobEntity,
+        onProgress: (Float) -> Unit,
+        onStage: (String) -> Unit,
+    ): FetchResult =
         withContext(Dispatchers.IO) {
             ensureInit()
+            onStage("extracting")
             val url = normalizeUrl(job.url)
             val info = try {
                 StreamInfo.getInfo(ServiceList.YouTube, url)
@@ -54,12 +59,14 @@ class YoutubeNewPipeExtractor(
             if (DownloadMode.from(job.mode) == DownloadMode.AUDIO) {
                 val stream = bestAudio(info.audioStreams)
                     ?: throw IllegalStateException("ERROR: no audio stream available for this video")
+                onStage("downloading")
                 ext = stream.format?.suffix ?: "m4a"
                 media = File(dir, "$baseName.$ext")
                 download(stream.url ?: throw IllegalStateException("ERROR: no playable audio URL"), media, onProgress)
             } else {
                 val stream = bestVideo(info.videoStreams, maxVideoHeight())
                     ?: throw IllegalStateException("ERROR: no video stream available for this video")
+                onStage("downloading")
                 ext = stream.format?.suffix ?: "mp4"
                 media = File(dir, "$baseName.$ext")
                 download(stream.url ?: throw IllegalStateException("ERROR: no playable video URL"), media, onProgress)

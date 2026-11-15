@@ -35,6 +35,9 @@ data class NowPlaying(
     val hasNext: Boolean,
     val thumbPath: String?,
     val isVideo: Boolean,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val shuffle: Boolean = false,
+    val speed: Float = 1f,
 )
 
 class PlayerRepository(
@@ -160,6 +163,29 @@ class PlayerRepository(
         c.prepare()
     }
 
+    fun cycleRepeat() {
+        val c = controller ?: return
+        c.repeatMode = nextRepeatMode(c.repeatMode)
+        publish()
+    }
+
+    fun toggleShuffle() {
+        val c = controller ?: return
+        c.shuffleModeEnabled = !c.shuffleModeEnabled
+        publish()
+    }
+
+    fun setSpeed(speed: Float) {
+        controller?.setPlaybackSpeed(speed)
+        publish()
+    }
+
+    fun skipBy(deltaMs: Long) {
+        val c = controller ?: return
+        c.seekTo((c.currentPosition + deltaMs).coerceAtLeast(0))
+        publish()
+    }
+
     fun toggle() {
         val c = controller ?: return
         if (c.isPlaying) c.pause() else c.play()
@@ -234,6 +260,9 @@ class PlayerRepository(
             hasNext = c.hasNextMediaItem(),
             thumbPath = item.thumbPath,
             isVideo = item.isVideo,
+            repeatMode = c.repeatMode,
+            shuffle = c.shuffleModeEnabled,
+            speed = c.playbackParameters.speed,
         )
     }
 

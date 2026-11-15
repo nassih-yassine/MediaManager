@@ -42,7 +42,7 @@ class DownloadPipelineTest {
         var cancelled = false
         var deleteMedia = false
 
-        override suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit): FetchResult {
+        override suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit, onStage: (String) -> Unit): FetchResult {
             if (cancelled) throw kotlinx.coroutines.CancellationException("cancelled")
             failWith?.let { throw RuntimeException(it) }
             val dir = dirFor(job).apply { mkdirs() }

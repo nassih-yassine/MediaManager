@@ -28,6 +28,9 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET name = :name, updatedAt = :now WHERE id = :id")
     suspend fun rename(id: String, name: String, now: Long)
 
+    @Query("UPDATE playlists SET coverPath = :coverPath, updatedAt = :now WHERE id = :id")
+    suspend fun setCover(id: String, coverPath: String?, now: Long)
+
     @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY position ASC")
     fun observeItems(playlistId: String): Flow<List<PlaylistItemEntity>>
 

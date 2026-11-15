@@ -16,7 +16,11 @@ data class FetchResult(
 
 /** Downloads into `.incoming/<jobId>/` and returns what landed there. */
 interface Extractor {
-    suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit): FetchResult
+    suspend fun fetch(
+        job: JobEntity,
+        onProgress: (Float) -> Unit,
+        onStage: (String) -> Unit = {},
+    ): FetchResult
 }
 
 class Thumbnailer(private val paths: LibraryPaths) {
@@ -49,10 +53,14 @@ class DownloadPipeline(
         data object Cancelled : Result
     }
 
-    suspend fun run(job: JobEntity, onProgress: (Float) -> Unit = {}): Result {
+    suspend fun run(
+        job: JobEntity,
+        onProgress: (Float) -> Unit = {},
+        onStage: (String) -> Unit = {},
+    ): Result {
         val incoming = paths.incomingDir(job.id)
         val fetched = try {
-            extractor.fetch(job, onProgress)
+            extractor.fetch(job, onProgress, onStage)
         } catch (c: CancellationException) {
             paths.deleteRecursively(incoming)
             return Result.Cancelled
@@ -82,6 +90,7 @@ class DownloadPipeline(
             SpaceVerdict.Fits -> Unit
         }
 
+        onStage("finalizing")
         val itemId = newId()
         val kind = job.mode
         val ext = fetched.mediaFile.extension.ifBlank { "bin" }

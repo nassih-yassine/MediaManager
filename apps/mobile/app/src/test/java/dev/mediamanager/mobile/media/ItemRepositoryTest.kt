@@ -78,7 +78,7 @@ class ItemRepositoryTest {
     @Test
     fun `delete removes row, file, thumb and memberships`() = runTest {
         seed("ab12cd")
-        db.playlistDao().upsert(PlaylistEntity("p1", "Mix", 1, 1))
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
         db.playlistDao().addItems("p1", listOf("ab12cd"), now = 1)
         db.queueDao().replaceAll(listOf("ab12cd"))
 

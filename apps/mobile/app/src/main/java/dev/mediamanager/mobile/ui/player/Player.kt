@@ -18,8 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -45,6 +50,10 @@ import androidx.media3.ui.PlayerView
 import dev.mediamanager.mobile.playback.NowPlaying
 import dev.mediamanager.mobile.playback.PlaybackService
 import dev.mediamanager.mobile.playback.PlayerRepository
+import androidx.media3.common.Player
+import dev.mediamanager.mobile.playback.playbackSpeeds
+import dev.mediamanager.mobile.playback.speedLabel
+import dev.mediamanager.mobile.ui.components.SelectMenu
 import dev.mediamanager.mobile.ui.components.Thumb
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
@@ -81,7 +90,7 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                 filesDir = filesDir,
                 modifier = Modifier.size(40.dp),
             )
-            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(
                     current.title,
                     color = colors.ink,
@@ -167,12 +176,42 @@ fun NowPlayingSheet(player: PlayerRepository, filesDir: File, onClose: () -> Uni
                 Text(formatDuration(current.durationMs), color = colors.muted)
             }
             Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { player.toggleShuffle() }) {
+                    Icon(
+                        Icons.Default.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (current.shuffle) colors.accent else colors.muted,
+                    )
+                }
+                IconButton(onClick = { player.cycleRepeat() }) {
+                    Icon(
+                        if (current.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        contentDescription = "Repeat",
+                        tint = if (current.repeatMode == Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
+                    )
+                }
+                SelectMenu(
+                    label = "Speed",
+                    options = playbackSpeeds.map { it to speedLabel(it) },
+                    selected = current.speed,
+                    onSelect = { player.setSpeed(it) },
+                )
+            }
+
+            Row(
                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { player.previous() }) {
                     Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = colors.ink)
+                }
+                IconButton(onClick = { player.skipBy(-10_000) }) {
+                    Icon(Icons.Default.Replay10, contentDescription = "Back 10 seconds", tint = colors.ink)
                 }
                 IconButton(onClick = { player.toggle() }) {
                     Icon(
@@ -181,6 +220,9 @@ fun NowPlayingSheet(player: PlayerRepository, filesDir: File, onClose: () -> Uni
                         tint = colors.accent,
                         modifier = Modifier.size(40.dp),
                     )
+                }
+                IconButton(onClick = { player.skipBy(10_000) }) {
+                    Icon(Icons.Default.Forward10, contentDescription = "Forward 10 seconds", tint = colors.ink)
                 }
                 IconButton(onClick = { player.next() }) {
                     Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
@@ -203,7 +245,7 @@ fun NowPlayingSheet(player: PlayerRepository, filesDir: File, onClose: () -> Uni
             LazyColumn(Modifier.height(220.dp)) {
                 itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
@@ -216,7 +258,7 @@ fun NowPlayingSheet(player: PlayerRepository, filesDir: File, onClose: () -> Uni
                             item.title,
                             color = if (item.id == current.itemId) colors.accent else colors.ink,
                             maxLines = 1,
-                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                         )
                         IconButton(onClick = {

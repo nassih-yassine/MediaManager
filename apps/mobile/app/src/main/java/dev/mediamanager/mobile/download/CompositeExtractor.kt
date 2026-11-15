@@ -8,8 +8,15 @@ class CompositeExtractor(
     private val ytDlp: YtDlpExtractor,
 ) : Extractor {
 
-    override suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit): FetchResult =
-        if (isYouTubeUrl(job.url)) newPipe.fetch(job, onProgress) else ytDlp.fetch(job, onProgress)
+    override suspend fun fetch(
+        job: JobEntity,
+        onProgress: (Float) -> Unit,
+        onStage: (String) -> Unit,
+    ): FetchResult = if (isYouTubeUrl(job.url)) {
+        newPipe.fetch(job, onProgress, onStage)
+    } else {
+        ytDlp.fetch(job, onProgress, onStage)
+    }
 
     fun cancel(jobId: String) = ytDlp.cancel(jobId)
 }

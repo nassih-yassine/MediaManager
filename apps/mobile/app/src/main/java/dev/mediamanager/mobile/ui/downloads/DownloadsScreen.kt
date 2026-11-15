@@ -71,12 +71,22 @@ fun DownloadsScreen(container: AppContainer) {
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                     maxLines = 3,
                 )
-                LinearProgressIndicator(
-                    progress = { job.progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    color = colors.accent,
-                    trackColor = colors.panel2,
-                )
+                if (job.stage == "downloading" && job.progress <= 0f) {
+                    // YouTube often sends no Content-Length; an indeterminate bar is
+                    // honest, a frozen 0% looks broken.
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        color = colors.accent,
+                        trackColor = colors.panel2,
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { job.progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        color = colors.accent,
+                        trackColor = colors.panel2,
+                    )
+                }
             }
         }
 
@@ -110,7 +120,7 @@ fun DownloadsScreen(container: AppContainer) {
 private fun FinishedRow(container: AppContainer, job: JobEntity) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
                 job.url.substringAfterLast('/').ifBlank { job.url },

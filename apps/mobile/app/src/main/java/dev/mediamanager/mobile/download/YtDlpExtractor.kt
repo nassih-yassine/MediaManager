@@ -54,9 +54,14 @@ class YtDlpExtractor(
         fun version(): String? = runCatching { YoutubeDL.getInstance().version(null) }.getOrNull()
     }
 
-    override suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit): FetchResult =
+    override suspend fun fetch(
+        job: JobEntity,
+        onProgress: (Float) -> Unit,
+        onStage: (String) -> Unit,
+    ): FetchResult =
         withContext(Dispatchers.IO) {
             init(context)
+            onStage("extracting")
             val dir = paths.incomingDir(job.id).apply { mkdirs() }
             val mode = DownloadMode.from(job.mode)
 
@@ -69,6 +74,7 @@ class YtDlpExtractor(
             fun execute(args: List<String>) {
                 val request = YoutubeDLRequest(args.last()).apply { addFlatArgs(args.dropLast(1)) }
                 YoutubeDL.getInstance().execute(request, job.id) { progress, _, line ->
+                    if (line.contains("[download]")) onStage("downloading")
                     val parsed = parseProgress(line)
                     when {
                         parsed != null -> onProgress(parsed)

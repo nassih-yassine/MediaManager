@@ -58,6 +58,7 @@ data class JobEntity(
 data class PlaylistEntity(
     @PrimaryKey val id: String,
     val name: String,
+    val coverPath: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )
