@@ -17,6 +17,8 @@ make test-web   # vitest only
 make e2e        # real Chromium smoke test; needs `make dev` running
 make check      # cargo check + tsc --noEmit
 make lint       # eslint
+make mobile     # Android APK (apps/mobile)
+make mobile-test  # Android unit tests
 cd apps/web && npm run build   # works with the backend down
 ```
 
@@ -143,6 +145,34 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 - Keyboard: Space play/pause, ←/→ seek 5s, N/P next/prev, M mute, Q queue drawer,
   `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`. Escape
   leaves library/gallery selection mode (both bars also have an explicit Cancel).
+
+## Android app (`apps/mobile`)
+
+- **Standalone Kotlin app, not a client.** Own Room DB, own library under
+  `filesDir/library/`, no auth, no server, no sync. Never add `/api` calls or a
+  login screen here; the point is that it works with nothing else running.
+- Compose + Room + Media3 + DataStore. One `AppContainer` built in `App`; no Hilt.
+  Single activity, screens are composables over DAO `Flow`s.
+- Downloads: `youtubedl-android` 0.18.1 (bundled yt-dlp + Python + ffmpeg) runs in
+  `DownloadService` (FGS `dataSync`) over a durable `jobs` table. Same rules as the
+  server worker: claim increments attempts, heartbeat every 15 s, stale leases
+  re-queued on service start, finalize order move → insert → done.
+- `RETURNING` is banned: `minSdk 26` ships SQLite 3.18. Claim/reorder are
+  `@Transaction` select-then-update.
+- Playback is one ExoPlayer in `PlaybackService` (`MediaSessionService`); the queue
+  is `queue_items` plus the index in DataStore, restored paused.
+- **Storage tab is the feature people ask for**: library total, `StatFs` device bar,
+  breakdown by kind, thumbnails, measured temp, and items ranked by size. Sizes come
+  from the DB, not from walking the tree.
+- Android 15+ caps `dataSync` foreground services at 6 h/day, and there is no boot
+  receiver: the queue resumes when the app is opened. Both are deliberate.
+- Bundled yt-dlp makes the app GPL-3.0. Keep the licence notice in Settings → About.
+- Build: `make mobile` / `make mobile-test`. JDK and SDK paths are pinned in
+  `apps/mobile/gradle.properties` and `apps/mobile/local.properties` (git-ignored).
+- Regression tests that matter: `DownloadRulesTest` (error classification, resume
+  threshold, space check), `JobQueueTest` (backoff, lease reaping, dedupe),
+  `DownloadPipelineTest` (finalize order, no orphan file on insert failure),
+  `StorageRepositoryTest` (aggregates and share math), `DaoTest` (cascades).
 
 ## Local install (systemd user services)
 

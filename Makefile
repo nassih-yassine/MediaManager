@@ -8,7 +8,7 @@ WEB_DIR := apps/web
 CARGO_RUN := cargo run --manifest-path $(API_DIR)/Cargo.toml
 ENGINE ?= podman
 
-.PHONY: help install dev api worker web build test check lint fmt clean images setup
+.PHONY: help install dev api worker web build test check lint fmt clean images setup mobile mobile-test
 
 help:
 	@echo "make install   install web deps + fetch rust deps"
@@ -23,6 +23,14 @@ help:
 	@echo "make lint      eslint"
 	@echo "make images    build api + web images with $(ENGINE)"
 	@echo "make setup     create the first admin (interactive)"
+	@echo "make mobile    build the Android APK"
+	@echo "make mobile-test  Android unit tests"
+
+mobile:
+	cd apps/mobile && ./gradlew assembleDebug
+
+mobile-test:
+	cd apps/mobile && ./gradlew testDebugUnitTest
 
 install:
 	cd $(WEB_DIR) && npm install

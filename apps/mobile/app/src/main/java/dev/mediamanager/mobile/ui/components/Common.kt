@@ -1,0 +1,267 @@
+package dev.mediamanager.mobile.ui.components
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.LruCache
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import dev.mediamanager.mobile.data.Item
+import dev.mediamanager.mobile.ui.theme.LocalAppColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
+private val thumbCache = LruCache<String, Bitmap>(96)
+
+suspend fun loadThumb(file: File?): Bitmap? = withContext(Dispatchers.IO) {
+    if (file == null || !file.exists()) return@withContext null
+    thumbCache.get(file.path)?.let { return@withContext it }
+    val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply {
+        inSampleSize = 2
+    }) ?: return@withContext null
+    thumbCache.put(file.path, bitmap)
+    bitmap
+}
+
+@Composable
+fun MmSurface(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScopeAlias.() -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.panel)
+            .border(1.dp, colors.line, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        content = content,
+    )
+}
+
+typealias ColumnScopeAlias = androidx.compose.foundation.layout.ColumnScope
+
+@Composable
+fun Thumb(item: Item, filesDir: File, modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+    val bitmap by produceState<Bitmap?>(null, item.thumbPath) {
+        value = loadThumb(item.thumbPath?.let { File(filesDir, it) })
+    }
+    Box(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.panel2),
+        contentAlignment = Alignment.Center,
+    ) {
+        val bmp = bitmap
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                imageVector = if (item.isAudio) Icons.Default.MusicNote else Icons.Default.Videocam,
+                contentDescription = null,
+                tint = colors.muted,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+    }
+}
+
+@Composable
+fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text.uppercase(),
+        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+        color = LocalAppColors.current.muted,
+        modifier = modifier.padding(vertical = 8.dp),
+    )
+}
+
+@Composable
+fun EmptyState(title: String, body: String) {
+    val colors = LocalAppColors.current
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleLarge, color = colors.ink)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            body,
+            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            color = colors.muted,
+        )
+    }
+}
+
+@Composable
+fun <T> SelectMenu(
+    label: String,
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalAppColors.current
+    var open by remember { mutableStateOf(false) }
+    val selectedLabel = options.firstOrNull { it.first == selected }?.second ?: label
+    Box(modifier) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, colors.line, RoundedCornerShape(10.dp))
+                .clickable { open = true }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(selectedLabel, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = colors.muted)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (value, text) ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text,
+                            color = if (value == selected) colors.accent else colors.ink,
+                            fontWeight = if (value == selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = {
+                        onSelect(value)
+                        open = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun Segmented(
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalAppColors.current
+    Row(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.panel2)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        options.forEach { (value, text) ->
+            val active = value == selected
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (active) colors.accent else colors.panel2)
+                    .clickable { onSelect(value) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    text,
+                    color = if (active) colors.accentInk else colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ConfirmDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = LocalAppColors.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.panel,
+        title = { Text(title, color = colors.ink) },
+        text = { Text(body, color = colors.muted) },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(); onDismiss() }) {
+                Text(confirmLabel, color = colors.danger)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = colors.muted) }
+        },
+    )
+}
+
+@Composable
+fun KeyValueRow(label: String, value: String, modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = colors.muted, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.weight(1f))
+        Text(value, color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+fun ScreenHeader(title: String, actions: @Composable () -> Unit = {}) {
+    val colors = LocalAppColors.current
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+            color = colors.ink,
+        )
+        Spacer(Modifier.weight(1f))
+        actions()
+    }
+}

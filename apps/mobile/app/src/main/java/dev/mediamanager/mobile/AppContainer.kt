@@ -1,0 +1,54 @@
+package dev.mediamanager.mobile
+
+import android.content.Context
+import androidx.room.Room
+import dev.mediamanager.mobile.data.AppDatabase
+import dev.mediamanager.mobile.data.SettingsStore
+import dev.mediamanager.mobile.download.ConnectivityMonitor
+import dev.mediamanager.mobile.download.DownloadPipeline
+import dev.mediamanager.mobile.download.DownloadSettings
+import dev.mediamanager.mobile.download.JobQueue
+import dev.mediamanager.mobile.download.Thumbnailer
+import dev.mediamanager.mobile.download.YtDlpExtractor
+import dev.mediamanager.mobile.media.ItemRepository
+import dev.mediamanager.mobile.media.LibraryPaths
+import dev.mediamanager.mobile.playback.PlayerRepository
+import dev.mediamanager.mobile.storage.StorageRepository
+
+class AppContainer(context: Context) {
+    val appContext: Context = context.applicationContext
+
+    val paths: LibraryPaths = LibraryPaths(appContext.filesDir)
+
+    val db: AppDatabase = Room.databaseBuilder(appContext, AppDatabase::class.java, "mm.db")
+        .build()
+
+    val settings: SettingsStore = SettingsStore(appContext)
+
+    val connectivity: ConnectivityMonitor = ConnectivityMonitor(appContext)
+
+    val jobQueue: JobQueue = JobQueue(db.jobDao())
+
+    val itemRepository: ItemRepository = ItemRepository(db, paths)
+
+    val storage: StorageRepository = StorageRepository(db, paths)
+
+    val player: PlayerRepository = PlayerRepository(appContext, db, paths)
+
+    private val thumbnailer = Thumbnailer(paths)
+
+    /** Kept in memory and refreshed by [App]; the extractor runs on an IO thread. */
+    @Volatile
+    var downloadSettings: DownloadSettings = DownloadSettings()
+
+    val extractor: YtDlpExtractor =
+        YtDlpExtractor(appContext, paths) { downloadSettings }
+
+    val pipeline: DownloadPipeline = DownloadPipeline(
+        extractor = extractor,
+        paths = paths,
+        db = db,
+        thumbnailer = thumbnailer,
+        freeBytes = { paths.usableBytes() },
+    )
+}

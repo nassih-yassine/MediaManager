@@ -55,6 +55,16 @@ npm run dev              # native window
 
 ## Mobile
 
-PWA first: the same web UI, installable, with an IndexedDB metadata cache and
-queued mutations. Expo/React Native only if native share targets, background
-audio/downloads, or push notifications become requirements.
+`apps/mobile` is a **standalone Kotlin app**, not a client of the server and not a
+PWA. It has its own Room database and its own library under app-private storage, no
+accounts, and no network call except the download itself. Downloads use the bundled
+yt-dlp + ffmpeg via `youtubedl-android`, so Audio is mp3 with cover art and Video is
+mp4 at the height set in Settings.
+
+The server stays the source of truth only for the web and desktop clients. Do not
+add sync, login, or an API client to the Android app without reversing this on
+purpose: the point is that it works on a phone with nothing else running.
+
+The Storage screen is the app's own answer to "what is eating my phone": library
+total, device free/used from `StatFs`, a breakdown by kind, thumbnails, temp, and
+every item ranked by size with a delete that reports the exact bytes freed.

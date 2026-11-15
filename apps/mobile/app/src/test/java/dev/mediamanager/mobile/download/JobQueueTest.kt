@@ -1,0 +1,146 @@
+package dev.mediamanager.mobile.download
+
+import android.app.Application
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import dev.mediamanager.mobile.data.AppDatabase
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+class JobQueueTest {
+
+    private lateinit var db: AppDatabase
+    private var now = 1_000_000L
+    private lateinit var queue: JobQueue
+
+    @Before
+    fun setUp() {
+        db = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        queue = JobQueue(db.jobDao(), clock = { now })
+    }
+
+    @After
+    fun tearDown() = db.close()
+
+    @Test
+    fun `claim takes the oldest queued job and increments attempts`() = runTest {
+        val first = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        now += 1
+        val second = queue.enqueue("https://youtu.be/b", DownloadMode.AUDIO).job
+        val claimed = queue.claim("w1")!!
+        assertEquals(first.id, claimed.id)
+        assertEquals(1, claimed.attempts)
+        assertEquals("running", db.jobDao().get(first.id)!!.status)
+        assertEquals("queued", db.jobDao().get(second.id)!!.status)
+    }
+
+    @Test
+    fun `claim skips jobs scheduled in the future`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        db.jobDao().requeue(job.id, now + 60_000, 1, now)
+        assertNull(queue.claim("w1"))
+        now += 60_000
+        assertEquals(job.id, queue.claim("w1")!!.id)
+    }
+
+    @Test
+    fun `duplicate active url returns the existing job flagged`() = runTest {
+        val first = queue.enqueue("https://youtu.be/x", DownloadMode.AUDIO)
+        val second = queue.enqueue("  https://youtu.be/x  ", DownloadMode.AUDIO)
+        assertFalse(first.duplicate)
+        assertTrue(second.duplicate)
+        assertEquals(first.job.id, second.job.id)
+    }
+
+    @Test
+    fun `same url different mode is a new job`() = runTest {
+        queue.enqueue("https://youtu.be/x", DownloadMode.AUDIO)
+        val video = queue.enqueue("https://youtu.be/x", DownloadMode.VIDEO)
+        assertFalse(video.duplicate)
+    }
+
+    @Test
+    fun `retryable failure backs off and stays queued`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.claim("w1")
+        val willRetry = queue.fail(job.id, "timed out", permanent = false)
+        assertTrue(willRetry)
+        val stored = db.jobDao().get(job.id)!!
+        assertEquals("queued", stored.status)
+        assertEquals(now + 60_000, stored.scheduledAt)
+        assertEquals(1, stored.attempts)
+    }
+
+    @Test
+    fun `permanent failure fails immediately`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.claim("w1")
+        assertFalse(queue.fail(job.id, "Video unavailable", permanent = true))
+        val stored = db.jobDao().get(job.id)!!
+        assertEquals("failed", stored.status)
+        assertEquals("Video unavailable", stored.error)
+    }
+
+    @Test
+    fun `third retryable failure becomes failed`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        repeat(2) {
+            queue.claim("w1")
+            assertTrue(queue.fail(job.id, "timed out", permanent = false))
+            now += 600_000
+        }
+        queue.claim("w1")
+        assertFalse(queue.fail(job.id, "timed out", permanent = false))
+        assertEquals("failed", db.jobDao().get(job.id)!!.status)
+        assertEquals(3, db.jobDao().get(job.id)!!.attempts)
+    }
+
+    @Test
+    fun `reap only requeues stale running jobs`() = runTest {
+        val stale = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.claim("w1")
+        now += 61_000
+        val fresh = queue.enqueue("https://youtu.be/b", DownloadMode.AUDIO).job
+        queue.claim("w2")
+
+        val reaped = queue.reapExpired()
+
+        assertEquals(1, reaped)
+        assertEquals("queued", db.jobDao().get(stale.id)!!.status)
+        assertEquals(1, db.jobDao().get(stale.id)!!.attempts)
+        assertEquals("running", db.jobDao().get(fresh.id)!!.status)
+    }
+
+    @Test
+    fun `cancel marks cancelled and a cancelled job is never claimed`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.cancel(job.id)
+        assertNull(queue.claim("w1"))
+        assertEquals("cancelled", db.jobDao().get(job.id)!!.status)
+    }
+
+    @Test
+    fun `requeue keeps the attempt count`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.claim("w1")
+        queue.requeue(job.id, stage = "waiting for Wi-Fi")
+        val stored = db.jobDao().get(job.id)!!
+        assertEquals("queued", stored.status)
+        assertEquals("waiting for Wi-Fi", stored.stage)
+        assertEquals(1, stored.attempts)
+    }
+}
