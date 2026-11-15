@@ -103,10 +103,6 @@ class DaoTest {
             db.itemDao().observeRecentlyPlayed(10).first().map { it.id },
         )
         assertEquals(
-            listOf("a1"),
-            db.itemDao().observeInProgress(10).first().map { it.id },
-        )
-        assertEquals(
             listOf("a4", "a3", "a2"),
             db.itemDao().observeRecentlyAdded(3).first().map { it.id },
         )

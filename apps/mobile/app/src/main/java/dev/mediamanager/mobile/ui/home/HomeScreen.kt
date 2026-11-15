@@ -54,8 +54,6 @@ fun HomeScreen(
     val colors = LocalAppColors.current
     val filesDir = container.appContext.filesDir
 
-    val inProgress by container.db.itemDao().observeInProgress(12)
-        .collectAsStateWithLifecycle(initialValue = emptyList())
     val recentlyPlayed by container.db.itemDao().observeRecentlyPlayed(12)
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val recentlyAdded by container.db.itemDao().observeRecentlyAdded(20)
@@ -63,13 +61,7 @@ fun HomeScreen(
     val playlists by container.db.playlistDao().observePlaylists()
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
-    val inProgressItems = remember(inProgress) { inProgress.map { it.toItem() } }
-    // The same item should not appear twice above the fold: it is either in
-    // "Continue listening" or in "Recently played", never both.
-    val playedItems = remember(recentlyPlayed, inProgress) {
-        val resumed = inProgress.map { it.id }.toSet()
-        recentlyPlayed.map { it.toItem() }.filterNot { it.id in resumed }
-    }
+    val playedItems = remember(recentlyPlayed) { recentlyPlayed.map { it.toItem() } }
     val addedItems = remember(recentlyAdded) { recentlyAdded.map { it.toItem() } }
 
     if (addedItems.isEmpty()) {
@@ -99,17 +91,6 @@ fun HomeScreen(
                         "${playlists.size} playlist${if (playlists.size == 1) "" else "s"}",
                     color = colors.muted,
                     style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-
-        if (inProgressItems.isNotEmpty()) {
-            item {
-                Shelf(
-                    title = "Continue listening",
-                    items = inProgressItems,
-                    filesDir = filesDir,
-                    onItem = { item -> player.playItems(inProgressItems, inProgressItems.indexOf(item)) },
                 )
             }
         }

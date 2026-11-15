@@ -24,12 +24,6 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC LIMIT :limit")
     fun observeRecentlyPlayed(limit: Int): Flow<List<ItemEntity>>
 
-    @Query(
-        "SELECT * FROM items WHERE positionMs > 3000 AND durationMs IS NOT NULL " +
-            "AND durationMs - positionMs > 5000 ORDER BY COALESCE(lastPlayedAt, createdAt) DESC LIMIT :limit",
-    )
-    fun observeInProgress(limit: Int): Flow<List<ItemEntity>>
-
     @Query("SELECT * FROM items ORDER BY createdAt DESC LIMIT :limit")
     fun observeRecentlyAdded(limit: Int): Flow<List<ItemEntity>>
 
