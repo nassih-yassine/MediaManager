@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 # next.config.ts bakes the rewrite target at build time, so the API URL must be
 # present here rather than only at runtime.
