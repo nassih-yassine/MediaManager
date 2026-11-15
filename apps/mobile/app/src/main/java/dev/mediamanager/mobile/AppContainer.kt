@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.MIGRATION_1_2
+import dev.mediamanager.mobile.data.MIGRATION_2_3
 import dev.mediamanager.mobile.data.SettingsStore
 import dev.mediamanager.mobile.download.CompositeExtractor
 import dev.mediamanager.mobile.download.ConnectivityMonitor
@@ -27,7 +28,7 @@ class AppContainer(context: Context) {
     val paths: LibraryPaths = LibraryPaths(appContext.filesDir)
 
     val db: AppDatabase = Room.databaseBuilder(appContext, AppDatabase::class.java, "mm.db")
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
 
     val settings: SettingsStore = SettingsStore(appContext)

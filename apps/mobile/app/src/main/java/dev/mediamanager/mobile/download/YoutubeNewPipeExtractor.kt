@@ -41,6 +41,7 @@ class YoutubeNewPipeExtractor(
         job: JobEntity,
         onProgress: (Float) -> Unit,
         onStage: (String) -> Unit,
+        onMeta: (String, Long?, File?) -> Unit,
     ): FetchResult =
         withContext(Dispatchers.IO) {
             ensureInit()
@@ -53,6 +54,13 @@ class YoutubeNewPipeExtractor(
             }
             val dir = paths.incomingDir(job.id).apply { mkdirs() }
             val baseName = info.id ?: job.id
+
+            // Thumbnail first: the row shows title, duration and art while it downloads.
+            val previewThumb = info.thumbnails.maxByOrNull { it.height }?.let { image ->
+                val file = File(dir, "$baseName.jpg")
+                runCatching { download(image.url, file) {}; file }.getOrNull()
+            }
+            onMeta(info.name ?: "YouTube video", info.duration.takeIf { it > 0 }?.times(1000), previewThumb)
 
             val media: File
             val ext: String
@@ -72,11 +80,6 @@ class YoutubeNewPipeExtractor(
                 download(stream.url ?: throw IllegalStateException("ERROR: no playable video URL"), media, onProgress)
             }
 
-            val thumb = info.thumbnails.maxByOrNull { it.height }?.let { image ->
-                val file = File(dir, "$baseName.jpg")
-                runCatching { download(image.url, file) {}; file }.getOrNull()
-            }
-
             FetchResult(
                 info = MediaInfo(
                     title = info.name ?: "YouTube video",
@@ -87,7 +90,7 @@ class YoutubeNewPipeExtractor(
                     approxBytes = media.length().takeIf { it > 0 },
                 ),
                 mediaFile = media,
-                thumbFile = thumb,
+                thumbFile = previewThumb,
             )
         }
 

@@ -20,6 +20,7 @@ interface Extractor {
         job: JobEntity,
         onProgress: (Float) -> Unit,
         onStage: (String) -> Unit = {},
+        onMeta: (title: String, durationMs: Long?, thumbFile: File?) -> Unit = { _, _, _ -> },
     ): FetchResult
 }
 
@@ -57,10 +58,11 @@ class DownloadPipeline(
         job: JobEntity,
         onProgress: (Float) -> Unit = {},
         onStage: (String) -> Unit = {},
+        onMeta: (title: String, durationMs: Long?, thumbFile: File?) -> Unit = { _, _, _ -> },
     ): Result {
         val incoming = paths.incomingDir(job.id)
         val fetched = try {
-            extractor.fetch(job, onProgress, onStage)
+            extractor.fetch(job, onProgress, onStage, onMeta)
         } catch (c: CancellationException) {
             paths.deleteRecursively(incoming)
             return Result.Cancelled

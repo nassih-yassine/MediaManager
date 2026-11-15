@@ -42,13 +42,19 @@ class DownloadPipelineTest {
         var cancelled = false
         var deleteMedia = false
 
-        override suspend fun fetch(job: JobEntity, onProgress: (Float) -> Unit, onStage: (String) -> Unit): FetchResult {
+        override suspend fun fetch(
+            job: JobEntity,
+            onProgress: (Float) -> Unit,
+            onStage: (String) -> Unit,
+            onMeta: (String, Long?, File?) -> Unit,
+        ): FetchResult {
             if (cancelled) throw kotlinx.coroutines.CancellationException("cancelled")
             failWith?.let { throw RuntimeException(it) }
             val dir = dirFor(job).apply { mkdirs() }
             val media = File(dir, "abc.$ext").apply { writeBytes(ByteArray(mediaBytes)) }
             if (deleteMedia) media.delete()
             val thumb: File? = if (writeThumb) File(dir, "abc.jpg").apply { writeBytes(ByteArray(40_000)) } else null
+            onMeta("Long mix", 222_000, thumb)
             onProgress(1f)
             return FetchResult(
                 info = MediaInfo("Long mix", 222_000, ext, 1920, 1080, 1_000),

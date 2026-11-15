@@ -11,6 +11,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE jobs ADD COLUMN metaTitle TEXT")
+        db.execSQL("ALTER TABLE jobs ADD COLUMN metaDurationMs INTEGER")
+        db.execSQL("ALTER TABLE jobs ADD COLUMN metaThumbPath TEXT")
+    }
+}
+
 @Database(
     entities = [
         ItemEntity::class,
@@ -19,7 +27,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         PlaylistItemEntity::class,
         QueueItemEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 

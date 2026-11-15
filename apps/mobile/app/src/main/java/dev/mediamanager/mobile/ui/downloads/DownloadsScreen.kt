@@ -5,13 +5,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -85,47 +91,71 @@ fun DownloadsScreen(
             Text("Nothing downloading.", color = colors.muted)
         }
         active.forEach { job ->
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val thumb = job.metaThumbPath?.let { java.io.File(container.appContext.filesDir, it) }
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .background(colors.panel2),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (thumb != null && thumb.exists()) {
+                        coil.compose.AsyncImage(
+                            model = thumb,
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.Download,
+                            contentDescription = null,
+                            tint = colors.muted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(
-                        job.url.substringAfterLast('/').ifBlank { job.url },
+                        job.metaTitle ?: dev.mediamanager.mobile.ui.jobLabel(job.url),
                         color = colors.ink,
-                        modifier = Modifier.weight(1f),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                     )
-                    MmTextButton(
-                        "Cancel",
-                        Icons.Default.Close,
-                        color = colors.danger,
-                        onClick = {
-                            DownloadService.cancel(container.appContext)
-                            scope.launch { container.jobQueue.cancel(job.id) }
+                    Text(
+                        buildString {
+                            append(job.mode)
+                            job.metaDurationMs?.let { append(" · ").append(dev.mediamanager.mobile.ui.format.formatDuration(it)) }
+                            append(" · ").append(job.stage ?: job.status)
+                            if (job.progress > 0f) append(" · ").append((job.progress * 100).toInt()).append("%")
+                            if (job.status == "queued" && job.error != null) append(" · retrying")
                         },
+                        color = colors.muted,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                    dev.mediamanager.mobile.ui.components.MmProgressBar(
+                        progress = if (job.stage == "downloading" && job.progress <= 0f) null else job.progress,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        trackColor = colors.panel2,
+                        fillColor = colors.accent,
                     )
                 }
-                Text(
-                    "${job.mode} · ${job.stage ?: job.status} · ${(job.progress * 100).toInt()}%" +
-                        (job.error?.let { " · $it" } ?: ""),
-                    color = if (job.error != null) colors.danger else colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                    maxLines = 3,
+                MmTextButton(
+                    "Cancel",
+                    Icons.Default.Close,
+                    color = colors.danger,
+                    onClick = {
+                        DownloadService.cancel(container.appContext)
+                        scope.launch { container.jobQueue.cancel(job.id) }
+                    },
                 )
-                if (job.stage == "downloading" && job.progress <= 0f) {
-                    // YouTube often sends no Content-Length; an indeterminate bar is
-                    // honest, a frozen 0% looks broken.
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        color = colors.accent,
-                        trackColor = colors.panel2,
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        progress = { job.progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        color = colors.accent,
-                        trackColor = colors.panel2,
-                    )
-                }
             }
         }
 

@@ -156,6 +156,22 @@ class DownloadService : Service() {
                                 notify(_state.value, title)
                             }
                         },
+                        onMeta = { title, durationMs, thumb ->
+                            val relative = thumb?.let { file ->
+                                ".incoming/${job.id}/${file.name}"
+                            }
+                            _state.value = _state.value.copy(activeTitle = title)
+                            scope.launch {
+                                app.db.jobDao().setMeta(
+                                    job.id,
+                                    title,
+                                    durationMs,
+                                    relative,
+                                    System.currentTimeMillis(),
+                                )
+                                notify(_state.value, title)
+                            }
+                        },
                         onStage = { stage ->
                             _state.value = _state.value.copy(stage = stage, progress = if (stage == "downloading") _state.value.progress else 0f)
                             scope.launch { app.jobQueue.heartbeat(job.id, _state.value.progress, stage) }

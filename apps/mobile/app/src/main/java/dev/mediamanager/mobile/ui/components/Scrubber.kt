@@ -86,3 +86,41 @@ fun Scrubber(
         )
     }
 }
+
+/**
+ * A plain track-and-fill bar. Material's LinearProgressIndicator adds a stop dot at
+ * the end, which showed up as a stray dot beside the fill.
+ */
+@Composable
+fun MmProgressBar(
+    progress: Float?,
+    modifier: Modifier = Modifier,
+    height: androidx.compose.ui.unit.Dp = 4.dp,
+    trackColor: androidx.compose.ui.graphics.Color,
+    fillColor: androidx.compose.ui.graphics.Color,
+) {
+    Box(
+        modifier
+            .height(height)
+            .clip(RoundedCornerShape(height / 2))
+            .background(trackColor),
+    ) {
+        val fraction = progress?.coerceIn(0f, 1f)
+        if (fraction != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
+                    .height(height)
+                    .background(fillColor),
+            )
+        } else {
+            // Waiting for the first byte: a faint full track reads better than a frozen 0%.
+            Box(
+                Modifier
+                    .fillMaxWidth(0.35f)
+                    .height(height)
+                    .background(fillColor.copy(alpha = 0.55f)),
+            )
+        }
+    }
+}

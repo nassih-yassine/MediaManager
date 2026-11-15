@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -130,11 +129,12 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
         }
 
         val fraction = if (current.durationMs > 0) current.positionMs.toFloat() / current.durationMs else 0f
-        LinearProgressIndicator(
-            progress = { fraction.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(2.dp).padding(vertical = 8.dp),
-            color = colors.accent,
+        dev.mediamanager.mobile.ui.components.MmProgressBar(
+            progress = fraction.coerceIn(0f, 1f),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            height = 3.dp,
             trackColor = colors.panel2,
+            fillColor = colors.accent,
         )
 
         Row(

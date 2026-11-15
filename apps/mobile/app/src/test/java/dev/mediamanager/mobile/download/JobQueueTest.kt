@@ -109,6 +109,18 @@ class JobQueueTest {
     }
 
     @Test
+    fun `claiming again clears the previous error`() = runTest {
+        val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
+        queue.claim("w1")
+        queue.fail(job.id, "ERROR: something nobody has seen before", permanent = false)
+        assertEquals("ERROR: something nobody has seen before", db.jobDao().get(job.id)!!.error)
+
+        now += 120_000
+        queue.claim("w1")
+        assertNull(db.jobDao().get(job.id)!!.error)
+    }
+
+    @Test
     fun `permanent failure fails immediately`() = runTest {
         val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
         queue.claim("w1")

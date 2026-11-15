@@ -58,6 +58,7 @@ class YtDlpExtractor(
         job: JobEntity,
         onProgress: (Float) -> Unit,
         onStage: (String) -> Unit,
+        onMeta: (String, Long?, File?) -> Unit,
     ): FetchResult =
         withContext(Dispatchers.IO) {
             init(context)

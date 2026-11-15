@@ -27,7 +27,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -212,11 +211,12 @@ private fun LibraryCard(snapshot: StorageSnapshot) {
             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(16.dp))
-        LinearProgressIndicator(
-            progress = { fraction },
-            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-            color = colors.accent,
+        dev.mediamanager.mobile.ui.components.MmProgressBar(
+            progress = fraction,
+            modifier = Modifier.fillMaxWidth(),
+            height = 8.dp,
             trackColor = colors.panel2,
+            fillColor = colors.accent,
         )
         Spacer(Modifier.height(8.dp))
         Text(
