@@ -498,36 +498,54 @@ fun PlaylistDetailScreen(
     }
 
     if (renameOpen) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { renameOpen = false },
-            containerColor = colors.panel,
-            title = { Text("Rename playlist", color = colors.ink) },
-            text = {
+        ModalBottomSheet(onDismissRequest = { renameOpen = false }, containerColor = colors.panel) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text(
+                    "Rename playlist",
+                    color = colors.ink,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = renameValue,
                     onValueChange = { renameValue = it },
                     singleLine = true,
                     label = { Text("Name") },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val name = renameValue.trim()
-                        if (name.isNotEmpty()) {
-                            scope.launch {
-                                dao.rename(playlistId, name, System.currentTimeMillis())
-                                playlist = dao.get(playlistId)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { renameOpen = false }, modifier = Modifier.weight(1f)) {
+                        Text("Cancel", color = colors.muted)
+                    }
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            val name = renameValue.trim()
+                            if (name.isNotEmpty()) {
+                                scope.launch {
+                                    dao.rename(playlistId, name, System.currentTimeMillis())
+                                    playlist = dao.get(playlistId)
+                                }
                             }
-                        }
-                        renameOpen = false
-                    },
-                ) { Text("Save", color = colors.accent) }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameOpen = false }) { Text("Cancel", color = colors.muted) }
-            },
-        )
+                            renameOpen = false
+                        },
+                        enabled = renameValue.isNotBlank(),
+                        modifier = Modifier.weight(2f).height(48.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                            contentColor = colors.accentInk,
+                        ),
+                    ) { Text("Save") }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
     }
 
     if (coverSheet) {
