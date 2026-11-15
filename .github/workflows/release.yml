@@ -53,6 +53,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lowercase image prefix
+        id: image
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: API image
         uses: docker/build-push-action@v6
         with:
@@ -61,8 +64,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository }}/api:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}/api:latest
+            ${{ steps.image.outputs.prefix }}/api:${{ github.ref_name }}
+            ${{ steps.image.outputs.prefix }}/api:latest
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
       - name: Web image
@@ -75,7 +78,7 @@ jobs:
           build-args: |
             MM_API_URL=http://api:8787
           tags: |
-            ghcr.io/${{ github.repository }}/web:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}/web:latest
+            ${{ steps.image.outputs.prefix }}/web:${{ github.ref_name }}
+            ${{ steps.image.outputs.prefix }}/web:latest
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
