@@ -122,14 +122,14 @@ fun NowPlayingScreen(
                 model = backdrop,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().blur(48.dp).graphicsLayer { alpha = 0.55f },
+                modifier = Modifier.fillMaxSize().blur(64.dp).graphicsLayer { alpha = 0.85f },
             )
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(
-                        0f to colors.canvas.copy(alpha = 0.10f),
-                        0.5f to colors.canvas.copy(alpha = 0.55f),
-                        1f to colors.canvas.copy(alpha = 0.9f),
+                        0f to colors.canvas.copy(alpha = 0.05f),
+                        0.45f to colors.canvas.copy(alpha = 0.30f),
+                        1f to colors.canvas.copy(alpha = 0.65f),
                     ),
                 ),
             )
@@ -187,10 +187,10 @@ fun NowPlayingScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(colors.panel.copy(alpha = 0.55f))
+                    .background(colors.panel.copy(alpha = 0.38f))
                     .border(
                         width = 0.5.dp,
-                        color = colors.line.copy(alpha = 0.7f),
+                        color = colors.line.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     )
                     .padding(horizontal = 16.dp, vertical = 12.dp),

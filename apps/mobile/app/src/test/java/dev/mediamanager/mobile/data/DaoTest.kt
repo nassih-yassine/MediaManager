@@ -99,10 +99,6 @@ class DaoTest {
         db.itemDao().insert(item("a4", createdAt = 4))
 
         assertEquals(
-            listOf("a2", "a1", "a3"),
-            db.itemDao().observeRecentlyPlayed(10).first().map { it.id },
-        )
-        assertEquals(
             listOf("a4", "a3", "a2"),
             db.itemDao().observeRecentlyAdded(3).first().map { it.id },
         )

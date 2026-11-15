@@ -65,6 +65,8 @@ fun AddScreen(
     var form by remember { mutableStateOf(AddFormState()) }
     var message by remember { mutableStateOf<String?>(null) }
     val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
+    val activeJobs by container.db.jobDao().observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
+    val active = activeJobs.firstOrNull { it.status == "running" } ?: activeJobs.firstOrNull()
 
     Column(
         Modifier
@@ -82,12 +84,49 @@ fun AddScreen(
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 )
             }
-            IconButton(onClick = onOpenDownloads) {
-                Icon(Icons.Default.Download, contentDescription = "Downloads", tint = colors.muted)
+            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                if (active != null) {
+                    if (active.progress > 0f) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            progress = { active.progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.size(42.dp),
+                            color = colors.accent,
+                            trackColor = colors.panel2,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(42.dp),
+                            color = colors.accent,
+                            trackColor = colors.panel2,
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                }
+                IconButton(onClick = onOpenDownloads) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = "Downloads",
+                        tint = if (active != null) colors.accent else colors.muted,
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        if (active != null) {
+            Text(
+                buildString {
+                    append("Downloading")
+                    active.stage?.let { append(" · ").append(it) }
+                    if (active.progress > 0f) append(" · ").append((active.progress * 100).toInt()).append("%")
+                },
+                color = colors.accent,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
         MmSurface(Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = form.url,

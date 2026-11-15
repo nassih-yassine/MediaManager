@@ -21,9 +21,6 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE id = :id")
     suspend fun get(id: String): ItemEntity?
 
-    @Query("SELECT * FROM items WHERE lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC LIMIT :limit")
-    fun observeRecentlyPlayed(limit: Int): Flow<List<ItemEntity>>
-
     @Query("SELECT * FROM items ORDER BY createdAt DESC LIMIT :limit")
     fun observeRecentlyAdded(limit: Int): Flow<List<ItemEntity>>
 

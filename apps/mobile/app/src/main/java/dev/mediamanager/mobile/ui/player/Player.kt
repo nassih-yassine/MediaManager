@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,11 +84,19 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(colors.panel.copy(alpha = 0.88f))
+            .shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                clip = false,
+                ambientColor = colors.accent.copy(alpha = 0.16f),
+                spotColor = colors.accent.copy(alpha = 0.22f),
+            )
+            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            .background(colors.panel.copy(alpha = 0.72f))
             .border(
                 width = 0.5.dp,
-                color = colors.line.copy(alpha = 0.7f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                color = colors.line.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
             )
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
@@ -123,13 +132,13 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
         val fraction = if (current.durationMs > 0) current.positionMs.toFloat() / current.durationMs else 0f
         LinearProgressIndicator(
             progress = { fraction.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(2.dp).padding(top = 2.dp),
+            modifier = Modifier.fillMaxWidth().height(2.dp).padding(vertical = 8.dp),
             color = colors.accent,
             trackColor = colors.panel2,
         )
 
         Row(
-            Modifier.fillMaxWidth().padding(top = 2.dp),
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {

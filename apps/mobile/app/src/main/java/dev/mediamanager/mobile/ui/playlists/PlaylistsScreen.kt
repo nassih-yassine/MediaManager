@@ -20,7 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -86,14 +87,18 @@ fun PlaylistsTab(container: AppContainer, player: PlayerRepository) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     val id = selectedId
     if (id == null) {
-        PlaylistListContent(container, onOpen = { selectedId = it })
+        PlaylistListContent(container, player, onOpen = { selectedId = it })
     } else {
         PlaylistDetailScreen(container, player, playlistId = id, onBack = { selectedId = null })
     }
 }
 
 @Composable
-fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
+fun PlaylistListContent(
+    container: AppContainer,
+    player: PlayerRepository,
+    onOpen: (String) -> Unit,
+) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val playlists by container.db.playlistDao().observePlaylists()
@@ -101,11 +106,13 @@ fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
-    val previews by produceState(emptyMap<String, List<Item>>(), playlists) {
-        val map = mutableMapOf<String, List<Item>>()
+    data class Row(val preview: List<Item>, val count: Int, val all: List<Item>)
+    val rows by produceState(emptyMap<String, Row>(), playlists) {
+        val map = mutableMapOf<String, Row>()
         playlists.forEach { playlist ->
-            val ids = container.db.playlistDao().items(playlist.id).take(4).map { it.itemId }
-            map[playlist.id] = ids.mapNotNull { container.db.itemDao().get(it)?.toItem() }
+            val entries = container.db.playlistDao().items(playlist.id)
+            val all = entries.mapNotNull { container.db.itemDao().get(it.itemId)?.toItem() }
+            map[playlist.id] = Row(all.take(4), all.size, all)
         }
         value = map
     }
@@ -131,41 +138,51 @@ fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
                 Spacer(Modifier.weight(1f))
                 MmTextButton("New", Icons.Default.Add, onClick = { creating = true })
             }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(playlists, key = { it.id }) { playlist ->
-                    Column(
+            LazyColumn(Modifier.fillMaxSize()) {
+                listItems(playlists, key = { it.id }) { playlist ->
+                    val row = rows[playlist.id]
+                    Row(
                         Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(colors.panel)
-                            .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+                            .fillMaxWidth()
                             .clickable { onOpen(playlist.id) }
-                            .padding(10.dp),
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         PlaylistCover(
                             coverPath = playlist.coverPath,
-                            items = previews[playlist.id].orEmpty(),
+                            items = row?.preview.orEmpty(),
                             filesDir = container.appContext.filesDir,
-                            size = 150.dp,
+                            size = 48.dp,
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            playlist.name,
-                            color = colors.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            "${previews[playlist.id]?.size ?: 0} shown",
-                            color = colors.muted,
-                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        )
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(
+                                playlist.name,
+                                color = colors.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "${row?.count ?: 0} item${if ((row?.count ?: 0) == 1) "" else "s"}",
+                                color = colors.muted,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                val items = row?.all.orEmpty()
+                                if (items.isNotEmpty()) player.playItems(items, 0)
+                            },
+                            enabled = (row?.count ?: 0) > 0,
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Play all",
+                                tint = if ((row?.count ?: 0) > 0) colors.accent else colors.muted,
+                            )
+                        }
                     }
+                    androidx.compose.material3.HorizontalDivider(color = colors.line)
                 }
             }
         }
@@ -530,7 +547,7 @@ fun PlaylistDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(items, key = { it.id }) { item ->
+                    gridItems(items, key = { it.id }) { item ->
                         Thumb(
                             item = item,
                             filesDir = container.appContext.filesDir,

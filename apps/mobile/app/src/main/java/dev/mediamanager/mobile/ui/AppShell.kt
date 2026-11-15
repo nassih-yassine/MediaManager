@@ -173,7 +173,6 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                                 container = container,
                                 player = player,
                                 onAdd = { tab = Tab.ADD.name },
-                                onOpenPlaylists = { tab = Tab.PLAYLISTS.name },
                             )
 
                             Tab.LIBRARY -> LibraryScreen(
