@@ -54,13 +54,15 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val temp = remember { MutableStateFlow(0L) }
-    val snapshot by container.storage.observe(temp).collectAsStateWithLifecycle(initialValue = StorageSnapshot())
+    val covers = remember { MutableStateFlow(0L) }
+    val snapshot by container.storage.observe(temp, covers).collectAsStateWithLifecycle(initialValue = StorageSnapshot())
     val largest by container.storage.largestItems(50).collectAsStateWithLifecycle(initialValue = emptyList<SizeRow>())
     var pendingDelete by remember { mutableStateOf<Item?>(null) }
     var recheckMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(snapshot.tempBytes) {
+    LaunchedEffect(snapshot.tempBytes, snapshot.coversBytes) {
         temp.value = container.storage.measureTemp()
+        covers.value = container.storage.measureCovers()
     }
 
     val deviceUsedFraction = usedFraction(snapshot.deviceTotal, snapshot.deviceFree)
@@ -99,6 +101,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
             BreakdownRow("Audio", snapshot.audioBytes, snapshot.audioCount, snapshot.libraryBytes)
             BreakdownRow("Video", snapshot.videoBytes, snapshot.videoCount, snapshot.libraryBytes)
             BreakdownRow("Thumbnails", snapshot.thumbBytes, 0, snapshot.libraryBytes)
+            BreakdownRow("Covers", snapshot.coversBytes, 0, snapshot.libraryBytes)
             BreakdownRow("Temp", snapshot.tempBytes, 0, snapshot.libraryBytes)
         }
 
@@ -110,6 +113,7 @@ fun StorageScreen(container: AppContainer, player: PlayerRepository) {
                     scope.launch {
                         val result = container.itemRepository.recheck()
                         temp.value = container.storage.measureTemp()
+                        covers.value = container.storage.measureCovers()
                         recheckMessage = when {
                             result.missing.isEmpty() && result.resized.isEmpty() -> "Everything checks out"
                             result.missing.isEmpty() -> "${result.resized.size} file sizes corrected"
@@ -183,7 +187,7 @@ private fun BreakdownRow(label: String, bytes: Long, count: Int, whole: Long) {
         Text(
             label,
             color = colors.ink,
-            modifier = Modifier.width(88.dp),
+            modifier = Modifier.width(80.dp),
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             maxLines = 1,
         )

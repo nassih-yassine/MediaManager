@@ -12,6 +12,7 @@ class LibraryPaths(private val root: File) {
     val libraryDir: File get() = File(root, "library")
     val thumbsDir: File get() = File(root, "thumbs")
     val incomingRoot: File get() = File(root, ".incoming")
+    val coversDir: File get() = File(root, "covers")
 
     fun itemRelativePath(kind: String, id: String, ext: String): String {
         require(id.length >= 2) { "id must have at least two characters" }

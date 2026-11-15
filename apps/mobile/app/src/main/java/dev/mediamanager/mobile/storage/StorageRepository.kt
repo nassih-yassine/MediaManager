@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -20,6 +21,7 @@ data class StorageSnapshot(
     val audioBytes: Long = 0,
     val videoBytes: Long = 0,
     val thumbBytes: Long = 0,
+    val coversBytes: Long = 0,
     val tempBytes: Long = 0,
     val itemCount: Int = 0,
     val audioCount: Int = 0,
@@ -27,7 +29,7 @@ data class StorageSnapshot(
     val deviceTotal: Long = 0,
     val deviceFree: Long = 0,
 ) {
-    val libraryBytes: Long get() = mediaBytes + thumbBytes + tempBytes
+    val libraryBytes: Long get() = mediaBytes + thumbBytes + coversBytes + tempBytes
 }
 
 data class SizeRow(val item: Item, val share: Float)
@@ -44,11 +46,14 @@ class StorageRepository(
     private val stats: () -> FileStats = { deviceStats(paths) },
 ) {
 
-    fun observe(tempBytes: StateFlow<Long>): Flow<StorageSnapshot> = combine(
+    fun observe(
+        tempBytes: StateFlow<Long>,
+        coversBytes: StateFlow<Long> = MutableStateFlow(0L),
+    ): Flow<StorageSnapshot> = combine(
         db.itemDao().observeTotalsByKind(),
         db.itemDao().observeThumbBytes(),
-        tempBytes,
-    ) { totals, thumbs, temp ->
+        combine(tempBytes, coversBytes) { temp, covers -> temp to covers },
+    ) { totals, thumbs, sizes ->
         val audio = totals.firstOrNull { it.kind == "audio" }
         val video = totals.firstOrNull { it.kind == "video" }
         val media = totals.sumOf { it.bytes }
@@ -58,13 +63,19 @@ class StorageRepository(
             audioBytes = audio?.bytes ?: 0,
             videoBytes = video?.bytes ?: 0,
             thumbBytes = thumbs,
-            tempBytes = temp,
+            coversBytes = sizes.second,
+            tempBytes = sizes.first,
             itemCount = totals.sumOf { it.count },
             audioCount = audio?.count ?: 0,
             videoCount = video?.count ?: 0,
             deviceTotal = fileStats.totalBytes,
             deviceFree = fileStats.freeBytes,
         )
+    }
+
+    /** Cover files are outside `items`, so they get their own small measurement. */
+    suspend fun measureCovers(): Long = withContext(Dispatchers.IO) {
+        paths.coversDir.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
     }
 
     /** One directory level, bounded by the queue length. Never walks the library. */

@@ -153,7 +153,7 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                         Tab.LIBRARY -> LibraryScreen(container, player, onAdd = { tab = Tab.ADD.name })
                         Tab.PLAYLISTS -> PlaylistsScreen(container, player)
                         Tab.ADD -> AddScreen(container)
-                        Tab.DOWNLOADS -> DownloadsScreen(container)
+                        Tab.DOWNLOADS -> DownloadsScreen(container, player)
                         Tab.STORAGE -> StorageScreen(container, player)
                     }
                 }

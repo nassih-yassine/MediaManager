@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,6 +40,7 @@ private val heights = listOf(720, 1080, 1440, 2160)
 fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
+    BackHandler(onBack = onClose)
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
         initialValue = dev.mediamanager.mobile.data.Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
     )

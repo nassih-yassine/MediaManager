@@ -92,6 +92,19 @@ class StorageRepositoryTest {
     }
 
     @Test
+    fun `covers are measured and counted in the library total`() = runTest {
+        paths.coversDir.mkdirs()
+        paths.coverFile("p1").writeBytes(ByteArray(20_000))
+        paths.coverFile("p2").writeBytes(ByteArray(5_000))
+        assertEquals(25_000L, repo.measureCovers())
+
+        val covers = MutableStateFlow(repo.measureCovers())
+        val snap = repo.observe(temp, covers).first()
+        assertEquals(25_000L, snap.coversBytes)
+        assertEquals(25_000L, snap.libraryBytes)
+    }
+
+    @Test
     fun `temp is the sum of incoming job dirs`() = runTest {
         val a = paths.incomingDir("j1").apply { mkdirs() }
         a.resolve("a.mp4").writeBytes(ByteArray(100))

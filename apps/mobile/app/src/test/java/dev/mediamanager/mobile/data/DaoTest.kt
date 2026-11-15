@@ -135,6 +135,16 @@ class DaoTest {
     }
 
     @Test
+    fun `renaming a playlist keeps its items`() = runTest {
+        db.itemDao().insert(item("a1"))
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Old", createdAt = 1, updatedAt = 1))
+        db.playlistDao().addItems("p1", listOf("a1"), now = 1)
+        db.playlistDao().rename("p1", "New", now = 2)
+        assertEquals("New", db.playlistDao().get("p1")!!.name)
+        assertEquals(1, db.playlistDao().count("p1"))
+    }
+
+    @Test
     fun `playlist cover path round-trips`() = runTest {
         db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = 1, updatedAt = 1))
         db.playlistDao().setCover("p1", "covers/p1.jpg", now = 2)

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.JobEntity
+import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.download.DownloadMode
 import dev.mediamanager.mobile.download.DownloadService
 import dev.mediamanager.mobile.ui.components.ConfirmDialog
@@ -34,7 +35,7 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
 @Composable
-fun DownloadsScreen(container: AppContainer) {
+fun DownloadsScreen(container: AppContainer, player: dev.mediamanager.mobile.playback.PlayerRepository) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     // Opening the queue is also the explicit "resume" gesture after a system kill.
@@ -101,7 +102,7 @@ fun DownloadsScreen(container: AppContainer) {
         if (finished.isEmpty()) {
             Text("Finished downloads land in the library.", color = colors.muted)
         }
-        finished.forEach { job -> FinishedRow(container, job) }
+        finished.forEach { job -> FinishedRow(container, job, player) }
         Spacer(Modifier.height(40.dp))
     }
 
@@ -117,7 +118,11 @@ fun DownloadsScreen(container: AppContainer) {
 }
 
 @Composable
-private fun FinishedRow(container: AppContainer, job: JobEntity) {
+private fun FinishedRow(
+    container: AppContainer,
+    job: JobEntity,
+    player: dev.mediamanager.mobile.playback.PlayerRepository,
+) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -138,6 +143,17 @@ private fun FinishedRow(container: AppContainer, job: JobEntity) {
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                 maxLines = 2,
             )
+        }
+        if (job.status == "done") {
+            TextButton(onClick = {
+                scope.launch {
+                    job.itemId?.let { id ->
+                        container.db.itemDao().get(id)?.let { item ->
+                            player.playItems(listOf(item.toItem()), 0)
+                        }
+                    }
+                }
+            }) { Text("Open", color = colors.accent) }
         }
         if (job.status == "failed") {
             TextButton(onClick = {

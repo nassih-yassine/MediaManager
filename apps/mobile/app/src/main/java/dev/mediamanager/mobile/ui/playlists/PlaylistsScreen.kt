@@ -1,6 +1,7 @@
 package dev.mediamanager.mobile.ui.playlists
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -169,6 +170,7 @@ private fun PlaylistDetail(
 ) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
+    BackHandler(onBack = onBack)
     val dao = container.db.playlistDao()
     val entries by dao.observeItems(playlistId).collectAsStateWithLifecycle(initialValue = emptyList())
     val items by produceState(emptyList<Item>(), entries) {
@@ -179,6 +181,8 @@ private fun PlaylistDetail(
 
     var coverSheet by remember { mutableStateOf(false) }
     var itemPicker by remember { mutableStateOf(false) }
+    var renameOpen by remember { mutableStateOf(false) }
+    var renameValue by remember { mutableStateOf("") }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
@@ -220,8 +224,14 @@ private fun PlaylistDetail(
                     color = colors.muted,
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
-                TextButton(onClick = { coverSheet = true }) {
-                    Text("Change cover", color = colors.accent)
+                Row {
+                    TextButton(onClick = {
+                        renameValue = playlist?.name.orEmpty()
+                        renameOpen = true
+                    }) { Text("Rename", color = colors.accent) }
+                    TextButton(onClick = { coverSheet = true }) {
+                        Text("Change cover", color = colors.accent)
+                    }
                 }
             }
         }
@@ -267,6 +277,39 @@ private fun PlaylistDetail(
             scope.launch { dao.delete(playlistId) }
             onBack()
         }) { Text("Delete playlist", color = colors.danger) }
+    }
+
+    if (renameOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { renameOpen = false },
+            containerColor = colors.panel,
+            title = { Text("Rename playlist", color = colors.ink) },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    singleLine = true,
+                    label = { Text("Name") },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = renameValue.trim()
+                        if (name.isNotEmpty()) {
+                            scope.launch {
+                                dao.rename(playlistId, name, System.currentTimeMillis())
+                                playlist = dao.get(playlistId)
+                            }
+                        }
+                        renameOpen = false
+                    },
+                ) { Text("Save", color = colors.accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameOpen = false }) { Text("Cancel", color = colors.muted) }
+            },
+        )
     }
 
     if (coverSheet) {
