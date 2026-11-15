@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -33,9 +34,8 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -146,23 +146,51 @@ fun PlaylistListContent(
                 Spacer(Modifier.weight(1f))
                 MmTextButton("New", Icons.Default.Add, onClick = { creating = true })
             }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
-            ) {
-                gridItems(playlists, key = { it.id }) { playlist ->
-                    PlaylistCard(
-                        playlist = playlist,
-                        preview = rows[playlist.id]?.preview.orEmpty(),
-                        items = rows[playlist.id]?.all.orEmpty(),
-                        filesDir = container.appContext.filesDir,
-                        onOpen = { onOpen(playlist.id) },
-                        onPlay = { player.playItems(rows[playlist.id]?.all.orEmpty(), 0) },
-                        onShuffle = { player.playItems(rows[playlist.id]?.all.orEmpty().shuffled(), 0) },
-                    )
+            LazyColumn(Modifier.fillMaxSize()) {
+                listItems(playlists, key = { it.id }) { playlist ->
+                    val row = rows[playlist.id]
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpen(playlist.id) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PlaylistCover(
+                            coverPath = playlist.coverPath,
+                            items = row?.preview.orEmpty(),
+                            filesDir = container.appContext.filesDir,
+                            size = 48.dp,
+                        )
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(
+                                playlist.name,
+                                color = colors.ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "${row?.count ?: 0} item${if ((row?.count ?: 0) == 1) "" else "s"}",
+                                color = colors.muted,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                val items = row?.all.orEmpty()
+                                if (items.isNotEmpty()) player.playItems(items, 0)
+                            },
+                            enabled = (row?.count ?: 0) > 0,
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Play all",
+                                tint = if ((row?.count ?: 0) > 0) colors.accent else colors.muted,
+                            )
+                        }
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = colors.line)
                 }
             }
         }
@@ -316,40 +344,56 @@ fun PlaylistDetailScreen(
                         }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.layout.BoxWithConstraints(
+                        Modifier.fillMaxWidth().aspectRatio(1.45f),
+                    ) {
                         PlaylistCover(
                             coverPath = playlist?.coverPath,
                             items = items.take(4),
                             filesDir = container.appContext.filesDir,
-                            size = 128.dp,
+                            size = maxWidth,
                         )
-                        Spacer(Modifier.size(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                playlist?.name ?: "Playlist",
-                                color = colors.ink,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        playlist?.name ?: "Playlist",
+                        color = colors.ink,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        buildString {
+                            append(items.size).append(if (items.size == 1) " item" else " items")
+                            val total = formatDuration(items.sumOf { it.durationMs ?: 0L })
+                            if (total.isNotEmpty()) append(" · ").append(total)
+                        },
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { if (items.isNotEmpty()) player.playItems(items, 0) },
+                            enabled = items.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Play all",
+                                tint = if (items.isNotEmpty()) colors.accent else colors.muted,
+                                modifier = Modifier.size(28.dp),
                             )
-                            Text(
-                                "${items.size} item${if (items.size == 1) "" else "s"}",
-                                color = colors.muted,
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        }
+                        IconButton(
+                            onClick = { if (items.isNotEmpty()) player.playItems(items.shuffled(), 0) },
+                            enabled = items.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.Default.Shuffle,
+                                contentDescription = "Shuffle play",
+                                tint = if (items.isNotEmpty()) colors.muted else colors.lineStrong,
+                                modifier = Modifier.size(20.dp),
                             )
-                            Spacer(Modifier.height(8.dp))
-                            androidx.compose.material3.Button(
-                                onClick = { if (items.isNotEmpty()) player.playItems(items, 0) },
-                                enabled = items.isNotEmpty(),
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = colors.accent,
-                                    contentColor = colors.accentInk,
-                                ),
-                            ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.size(8.dp))
-                                Text("Play all")
-                            }
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -634,92 +678,6 @@ private fun SheetAction(
  * Custom cover first; otherwise the Spotify-style 2x2 mosaic from the first four
  * items; otherwise a glyph. The mosaic is rendered from item thumbs, never stored.
  */
-/**
- * A playlist as a tile: square collage on top, name underneath, and two icon-only
- * actions. Anything more competes with the art, which is the point of the screen.
- */
-@Composable
-private fun PlaylistCard(
-    playlist: PlaylistEntity,
-    preview: List<Item>,
-    items: List<Item>,
-    filesDir: File,
-    onOpen: () -> Unit,
-    onPlay: () -> Unit,
-    onShuffle: () -> Unit,
-) {
-    val colors = LocalAppColors.current
-    val count = items.size
-    val totalMs = items.sumOf { it.durationMs ?: 0L }
-
-    Column(
-        Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(colors.panel)
-            .border(1.dp, colors.line, RoundedCornerShape(18.dp))
-            .clickable(onClick = onOpen)
-            .padding(8.dp),
-    ) {
-        androidx.compose.foundation.layout.BoxWithConstraints(
-            Modifier.fillMaxWidth().aspectRatio(1f),
-        ) {
-            PlaylistCover(
-                coverPath = playlist.coverPath,
-                items = preview,
-                filesDir = filesDir,
-                size = maxWidth,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            playlist.name,
-            color = colors.ink,
-            maxLines = 2,
-            minLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        Text(
-            buildString {
-                append(count).append(if (count == 1) " item" else " items")
-                val duration = formatDuration(totalMs)
-                if (duration.isNotEmpty()) append(" · ").append(duration)
-            },
-            color = colors.muted,
-            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPlay, enabled = count > 0) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Play all",
-                    tint = if (count > 0) colors.accent else colors.muted,
-                    modifier = Modifier.size(26.dp),
-                )
-            }
-            IconButton(onClick = onShuffle, enabled = count > 0) {
-                Icon(
-                    Icons.Default.Shuffle,
-                    contentDescription = "Shuffle play",
-                    tint = if (count > 0) colors.muted else colors.lineStrong,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onOpen) {
-                Icon(
-                    Icons.Default.MoreVert,
-                    contentDescription = "Open playlist",
-                    tint = colors.muted,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun PlaylistCover(
     coverPath: String?,
