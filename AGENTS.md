@@ -136,8 +136,10 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
   `--accent`, `--accent-ink`, `--danger` for four families × light/dark. To add a
   theme: two CSS blocks plus a swatch in `ThemePicker.tsx`. `data-theme`/`data-mode`
   are set by the inline script in `layout.tsx` before paint.
-- Typography is Space Grotesk (installed locally) with JetBrains Mono for numbers.
-  No webfont download; keep it that way so builds work offline.
+- Typography is Space Grotesk (installed locally) with JetBrains Mono for numbers,
+  and **Noto Sans Arabic UI** bundled as woff2 (`apps/web/public/fonts`) for Arabic
+  titles; WebKitGTK otherwise picks a poor fallback. Latin still uses Space Grotesk.
+  No webfont download at runtime; keep it that way so builds work offline.
 - Keyboard: Space play/pause, ←/→ seek 5s, N/P next/prev, M mute, Q queue drawer,
   `/` focus search. These are wired in `PlayerBar.tsx` and `Library.tsx`. Escape
   leaves library/gallery selection mode (both bars also have an explicit Cancel).

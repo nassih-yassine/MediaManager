@@ -53,6 +53,7 @@ WorkingDirectory=$ROOT/apps/web
 ExecStart=$NODE $ROOT/apps/web/node_modules/next/dist/bin/next start -p 3001
 Environment=NODE_ENV=production
 Environment=PORT=3001
+TimeoutStopSec=10
 Restart=on-failure
 RestartSec=3
 
