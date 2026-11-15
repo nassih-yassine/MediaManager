@@ -14,12 +14,13 @@ class JobQueue(
 
     suspend fun enqueue(url: String, mode: DownloadMode): EnqueueResult {
         val now = clock()
-        val key = dedupeKey(url, mode)
+        val cleanUrl = normalizeUrl(url)
+        val key = dedupeKey(cleanUrl, mode)
         dao.activeByDedupeKey(key)?.let { return EnqueueResult(it, duplicate = true) }
         val job = JobEntity(
             id = newId(),
             dedupeKey = key,
-            url = url.trim(),
+            url = cleanUrl,
             mode = mode.dbValue,
             status = "queued",
             progress = 0f,

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Download
@@ -76,7 +77,8 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                     Modifier
                         .fillMaxWidth()
                         .background(colors.canvas)
-                        .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 4.dp),
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(

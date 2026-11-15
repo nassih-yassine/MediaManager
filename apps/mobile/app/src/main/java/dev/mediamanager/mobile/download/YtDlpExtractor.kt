@@ -60,13 +60,14 @@ class YtDlpExtractor(
             val dir = paths.incomingDir(job.id).apply { mkdirs() }
             val mode = DownloadMode.from(job.mode)
 
+            val target = normalizeUrl(job.url)
             fun argsFor(jsRuntime: String?, extractorArgs: String?): List<String> = when (mode) {
-                DownloadMode.AUDIO -> YtDlpArgs.audio(job.url, dir, jsRuntime, extractorArgs)
-                DownloadMode.VIDEO -> YtDlpArgs.video(job.url, dir, settings().maxHeight, jsRuntime, extractorArgs)
+                DownloadMode.AUDIO -> YtDlpArgs.audio(target, dir, jsRuntime, extractorArgs)
+                DownloadMode.VIDEO -> YtDlpArgs.video(target, dir, settings().maxHeight, jsRuntime, extractorArgs)
             }
 
             fun execute(args: List<String>) {
-                val request = YoutubeDLRequest(job.url).apply { addFlatArgs(args.dropLast(1)) }
+                val request = YoutubeDLRequest(args.last()).apply { addFlatArgs(args.dropLast(1)) }
                 YoutubeDL.getInstance().execute(request, job.id) { progress, _, line ->
                     val parsed = parseProgress(line)
                     when {
