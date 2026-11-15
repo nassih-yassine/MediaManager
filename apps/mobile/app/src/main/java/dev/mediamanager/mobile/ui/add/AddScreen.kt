@@ -18,6 +18,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -255,42 +257,65 @@ fun AddScreen(
             MmSurface(Modifier.fillMaxWidth()) {
                 finished.take(4).forEachIndexed { index, job ->
                     val failed = job.status == "failed"
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Icon(
-                            if (failed) Icons.Default.ErrorOutline else Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = if (failed) colors.danger else colors.accent,
-                            modifier = Modifier.size(18.dp).padding(top = 2.dp),
-                        )
-                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                            Text(
-                                dev.mediamanager.mobile.ui.jobLabel(job.url),
-                                color = colors.ink,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                if (failed) Icons.Default.ErrorOutline else Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = if (failed) colors.danger else colors.accent,
+                                modifier = Modifier.size(18.dp).padding(top = 2.dp),
                             )
-                            Text(
-                                when {
-                                    failed -> job.error ?: "Failed"
-                                    job.status == "done" -> "Downloaded · " + job.mode
-                                    else -> "Cancelled"
+                            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                Text(
+                                    dev.mediamanager.mobile.ui.jobLabel(job.url),
+                                    color = colors.ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    when {
+                                        failed -> job.error ?: "Failed"
+                                        job.status == "done" -> "Downloaded · " + job.mode
+                                        else -> "Cancelled"
+                                    },
+                                    color = if (failed) colors.danger else colors.muted,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 28.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            if (failed) {
+                                MmTextButton(
+                                    "Retry",
+                                    Icons.Default.Refresh,
+                                    onClick = {
+                                        scope.launch {
+                                            container.jobQueue.enqueue(
+                                                job.url,
+                                                DownloadMode.from(job.mode),
+                                            )
+                                            container.db.jobDao().deleteFinished(job.id)
+                                            DownloadService.start(container.appContext)
+                                            message = "Retrying"
+                                        }
+                                    },
+                                )
+                            }
+                            MmTextButton(
+                                "Dismiss",
+                                Icons.Default.Close,
+                                color = colors.muted,
+                                onClick = {
+                                    scope.launch { container.db.jobDao().deleteFinished(job.id) }
                                 },
-                                color = if (failed) colors.danger else colors.muted,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             )
                         }
-                        MmTextButton(
-                            "Dismiss",
-                            Icons.Default.ErrorOutline,
-                            color = colors.muted,
-                            onClick = { scope.launch { container.db.jobDao().deleteFinished(job.id) } },
-                        )
                     }
                     if (index != finished.take(4).lastIndex) {
                         HorizontalDivider(color = colors.line, modifier = Modifier.padding(start = 28.dp))

@@ -54,11 +54,25 @@ jobs:
         run: |
           cd apps/mobile
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          ./gradlew assembleDebug --no-daemon
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/mm-release.keystore
+            ./gradlew assembleRelease --no-daemon \
+              -PMM_STORE_FILE=/tmp/mm-release.keystore \
+              -PMM_STORE_PASSWORD="${{ secrets.ANDROID_STORE_PASSWORD }}" \
+              -PMM_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}" \
+              -PMM_KEY_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
+          else
+            echo "::warning::No release keystore secret; building a debug-signed APK."
+            ./gradlew assembleDebug --no-daemon
+          fi
       - name: Collect APK
         run: |
-          cp apps/mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk \
-            "MediaManager-${GITHUB_REF_NAME}-arm64.apk"
+          if [ -f apps/mobile/app/build/outputs/apk/release/app-arm64-v8a-release.apk ]; then
+            SRC=apps/mobile/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          else
+            SRC=apps/mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          fi
+          cp "$SRC" "MediaManager-${GITHUB_REF_NAME}-arm64.apk"
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:

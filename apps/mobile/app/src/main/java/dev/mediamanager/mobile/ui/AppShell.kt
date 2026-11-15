@@ -72,6 +72,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
+@androidx.compose.material3.ExperimentalMaterial3Api
 @Composable
 fun AppShell(
     container: AppContainer,
