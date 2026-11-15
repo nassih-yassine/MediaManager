@@ -5,31 +5,39 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
-import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -45,7 +53,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,8 +64,10 @@ import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.data.PlaylistEntity
 import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.playback.PlayerRepository
+import dev.mediamanager.mobile.ui.components.EmptyState
 import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.Thumb
+import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 import java.io.File
@@ -78,10 +90,9 @@ fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val playlists by container.db.playlistDao().observePlaylists()
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val itemsByPlaylist = remember(playlists) { mutableMapOf<String, List<Item>>() }
+    var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
-    // Previews are cheap: the first four entries drive the mosaic.
     val previews by produceState(emptyMap<String, List<Item>>(), playlists) {
         val map = mutableMapOf<String, List<Item>>()
         playlists.forEach { playlist ->
@@ -90,76 +101,107 @@ fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
         }
         value = map
     }
-    itemsByPlaylist.putAll(previews)
 
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                label = { Text("New playlist") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Button(
-                onClick = {
-                    val name = newName.trim()
-                    if (name.isEmpty()) return@Button
-                    scope.launch {
-                        val now = System.currentTimeMillis()
-                        container.db.playlistDao().upsert(
-                            PlaylistEntity(
+    if (playlists.isEmpty()) {
+        EmptyState(
+            title = "No playlists yet",
+            body = "A playlist holds any mix of audio and video. Create one, then add items from the library.",
+            actionLabel = "New playlist",
+            onAction = { creating = true },
+        )
+    } else {
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${playlists.size} playlist${if (playlists.size == 1) "" else "s"}",
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
+                Spacer(Modifier.weight(1f))
+                MmTextButton("New", Icons.Default.Add, onClick = { creating = true })
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(playlists, key = { it.id }) { playlist ->
+                    Column(
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(colors.panel)
+                            .border(1.dp, colors.line, RoundedCornerShape(16.dp))
+                            .clickable { onOpen(playlist.id) }
+                            .padding(10.dp),
+                    ) {
+                        PlaylistCover(
+                            coverPath = playlist.coverPath,
+                            items = previews[playlist.id].orEmpty(),
+                            filesDir = container.appContext.filesDir,
+                            size = 150.dp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            playlist.name,
+                            color = colors.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "${previews[playlist.id]?.size ?: 0} shown",
+                            color = colors.muted,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (creating) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { creating = false },
+            containerColor = colors.panel,
+            title = { Text("New playlist", color = colors.ink) },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    singleLine = true,
+                    label = { Text("Name") },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newName.trim()
+                        if (name.isEmpty()) return@TextButton
+                        scope.launch {
+                            val now = System.currentTimeMillis()
+                            val playlist = PlaylistEntity(
                                 id = UUID.randomUUID().toString(),
                                 name = name,
                                 createdAt = now,
                                 updatedAt = now,
-                            ),
-                        )
-                        newName = ""
-                    }
-                },
-                enabled = newName.isNotBlank(),
-                modifier = Modifier.padding(start = 8.dp),
-            ) { Text("Create") }
-        }
-        Spacer(Modifier.height(12.dp))
-        if (playlists.isEmpty()) {
-            Text(
-                "Playlists hold any mix of audio and video. Create one, then add items from the library.",
-                color = colors.muted,
-                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-            )
-        }
-        playlists.forEach { playlist ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpen(playlist.id) }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PlaylistCover(
-                    coverPath = playlist.coverPath,
-                    items = itemsByPlaylist[playlist.id].orEmpty(),
-                    filesDir = container.appContext.filesDir,
-                    size = 56.dp,
-                )
-                Spacer(Modifier.size(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        playlist.name,
-                        color = colors.ink,
-                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "${itemsByPlaylist[playlist.id]?.size ?: 0} shown · tap to open",
-                        color = colors.muted,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                    )
-                }
-                Text("Open", color = colors.accent, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
-            }
-        }
+                            )
+                            container.db.playlistDao().upsert(playlist)
+                            newName = ""
+                            creating = false
+                            onOpen(playlist.id)
+                        }
+                    },
+                    enabled = newName.isNotBlank(),
+                ) { Text("Create", color = colors.accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { creating = false }) { Text("Cancel", color = colors.muted) }
+            },
+        )
     }
 }
 
@@ -182,6 +224,7 @@ fun PlaylistDetailScreen(
     var playlist by remember { mutableStateOf<PlaylistEntity?>(null) }
     LaunchedEffect(playlistId) { playlist = dao.get(playlistId) }
 
+    var menu by remember { mutableStateOf(false) }
     var coverSheet by remember { mutableStateOf(false) }
     var itemPicker by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
@@ -194,98 +237,155 @@ fun PlaylistDetailScreen(
         }
     }
 
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MmTextButton("Back", Icons.Default.ArrowBack, onClick = onBack, color = colors.muted)
-            Spacer(Modifier.weight(1f))
-            MmTextButton(
-                "Play all",
-                Icons.Default.PlayArrow,
-                onClick = { if (items.isNotEmpty()) player.playItems(items, 0) },
-                enabled = items.isNotEmpty(),
-            )
-        }
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MmTextButton("Back", Icons.Default.ArrowBack, color = colors.muted, onClick = onBack)
+                        Spacer(Modifier.weight(1f))
+                        Box {
+                            IconButton(onClick = { menu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Playlist actions", tint = colors.muted)
+                            }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                    onClick = {
+                                        renameValue = playlist?.name.orEmpty()
+                                        renameOpen = true
+                                        menu = false
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Change cover") },
+                                    leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, contentDescription = null) },
+                                    onClick = { coverSheet = true; menu = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete", color = colors.danger) },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.danger) },
+                                    onClick = {
+                                        menu = false
+                                        scope.launch { dao.delete(playlistId) }
+                                        onBack()
+                                    },
+                                )
+                            }
+                        }
+                    }
 
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.clickable { coverSheet = true }) {
-                PlaylistCover(
-                    coverPath = playlist?.coverPath,
-                    items = items.take(4),
-                    filesDir = container.appContext.filesDir,
-                    size = 96.dp,
-                )
-            }
-            Spacer(Modifier.size(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    playlist?.name ?: "Playlist",
-                    color = colors.ink,
-                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                )
-                Text(
-                    "${items.size} items",
-                    color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                )
-                Row {
-                    MmTextButton("Rename", Icons.Default.Edit, onClick = {
-                        renameValue = playlist?.name.orEmpty()
-                        renameOpen = true
-                    })
-                    MmTextButton("Cover", Icons.Default.AddPhotoAlternate, onClick = { coverSheet = true })
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PlaylistCover(
+                            coverPath = playlist?.coverPath,
+                            items = items.take(4),
+                            filesDir = container.appContext.filesDir,
+                            size = 128.dp,
+                        )
+                        Spacer(Modifier.size(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                playlist?.name ?: "Playlist",
+                                color = colors.ink,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                "${items.size} item${if (items.size == 1) "" else "s"}",
+                                color = colors.muted,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            androidx.compose.material3.Button(
+                                onClick = { if (items.isNotEmpty()) player.playItems(items, 0) },
+                                enabled = items.isNotEmpty(),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = colors.accent,
+                                    contentColor = colors.accentInk,
+                                ),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.size(8.dp))
+                                Text("Play all")
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
-        }
 
-        if (items.isEmpty()) {
-            Text("Empty. Add items from the library.", color = colors.muted)
-        }
-        items.forEachIndexed { index, item ->
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Thumb(item, container.appContext.filesDir, Modifier.size(40.dp))
-                Text(
-                    item.title,
-                    color = colors.ink,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp).clickable {
-                        player.playItems(items, index)
-                    },
-                    maxLines = 1,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = {
-                    if (index == 0) return@TextButton
-                    val ids = items.map { it.id }.toMutableList()
-                    ids.add(index - 1, ids.removeAt(index))
-                    scope.launch { dao.reorder(playlistId, ids) }
-                }) { Text("↑", color = colors.muted) }
-                TextButton(onClick = {
-                    if (index == items.lastIndex) return@TextButton
-                    val ids = items.map { it.id }.toMutableList()
-                    ids.add(index + 1, ids.removeAt(index))
-                    scope.launch { dao.reorder(playlistId, ids) }
-                }) { Text("↓", color = colors.muted) }
-                TextButton(onClick = { scope.launch { dao.removeItem(playlistId, item.id) } }) {
-                    Text("✕", color = colors.danger)
+            if (items.isEmpty()) {
+                item {
+                    Text(
+                        "Empty. Add items from the library with \"Add to playlist\".",
+                        color = colors.muted,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
+
+            itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { player.playItems(items, index) }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Thumb(item, container.appContext.filesDir, Modifier.size(44.dp))
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(
+                            item.title,
+                            color = colors.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "${if (item.isAudio) "Audio" else "Video"} · ${formatDuration(item.durationMs)}",
+                            color = colors.muted,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    IconButton(onClick = {
+                        if (index == 0) return@IconButton
+                        val ids = items.map { it.id }.toMutableList()
+                        ids.add(index - 1, ids.removeAt(index))
+                        scope.launch { dao.reorder(playlistId, ids) }
+                    }) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.ArrowBack,
+                            contentDescription = "Move up",
+                            tint = colors.muted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    IconButton(onClick = {
+                        if (index == items.lastIndex) return@IconButton
+                        val ids = items.map { it.id }.toMutableList()
+                        ids.add(index + 1, ids.removeAt(index))
+                        scope.launch { dao.reorder(playlistId, ids) }
+                    }) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.ArrowBack,
+                            contentDescription = "Move down",
+                            tint = colors.muted,
+                            modifier = Modifier.size(18.dp).rotate(180f),
+                        )
+                    }
+                    IconButton(onClick = { scope.launch { dao.removeItem(playlistId, item.id) } }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Remove", tint = colors.danger, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
         }
-        Spacer(Modifier.height(16.dp))
-        MmTextButton(
-            "Delete playlist",
-            Icons.Default.Delete,
-            color = colors.danger,
-            onClick = {
-                scope.launch { dao.delete(playlistId) }
-                onBack()
-            },
-        )
     }
 
     if (renameOpen) {
@@ -322,10 +422,7 @@ fun PlaylistDetailScreen(
     }
 
     if (coverSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { coverSheet = false },
-            containerColor = colors.panel,
-        ) {
+        ModalBottomSheet(onDismissRequest = { coverSheet = false }, containerColor = colors.panel) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 Text(
                     "Playlist cover",
@@ -362,10 +459,7 @@ fun PlaylistDetailScreen(
     }
 
     if (itemPicker) {
-        ModalBottomSheet(
-            onDismissRequest = { itemPicker = false },
-            containerColor = colors.panel,
-        ) {
+        ModalBottomSheet(onDismissRequest = { itemPicker = false }, containerColor = colors.panel) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 Text(
                     "Choose from this playlist",

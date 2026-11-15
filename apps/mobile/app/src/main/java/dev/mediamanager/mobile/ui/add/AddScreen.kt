@@ -136,7 +136,7 @@ fun AddScreen(
             ModeCard(
                 icon = Icons.Default.Videocam,
                 title = "Video",
-                subtitle = "mp4, height from Settings",
+                subtitle = "mp4",
                 selected = form.mode == DownloadMode.VIDEO,
                 modifier = Modifier.weight(1f),
                 onClick = { form = form.copy(mode = DownloadMode.VIDEO) },

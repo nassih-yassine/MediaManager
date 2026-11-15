@@ -109,7 +109,8 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                     style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "${formatDuration(current.positionMs)} / ${formatDuration(current.durationMs)}",
+                    "${formatDuration(current.positionMs).ifEmpty { "0:00" }} / " +
+                        formatDuration(current.durationMs).ifEmpty { "--:--" },
                     color = colors.muted,
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )

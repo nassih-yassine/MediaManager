@@ -199,21 +199,9 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
         SettingsCard("About", Icons.Default.Info) {
-            KeyValueRow("Version", "0.1.0")
-            KeyValueRow("Extractor", YtDlpExtractor.version() ?: "bundled")
-            Text(
-                "Local only: no account, no server, no sync. YouTube goes through NewPipe, other sites through the bundled yt-dlp and ffmpeg.",
-                color = colors.muted,
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            Text(
-                "GPL-3.0 · github.com/nassih-yassine/MediaManager",
-                color = colors.muted,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            KeyValueRow("Version", "0.1.0", Modifier.padding(vertical = 12.dp))
         }
+
         Spacer(Modifier.height(24.dp))
     }
 }

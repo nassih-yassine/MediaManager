@@ -97,12 +97,33 @@ fun HomeScreen(
 
         if (playedItems.isNotEmpty()) {
             item {
-                Shelf(
-                    title = "Recently played",
-                    items = playedItems,
-                    filesDir = filesDir,
-                    onItem = { item -> player.playItems(playedItems, playedItems.indexOf(item)) },
-                )
+                Column(Modifier.padding(top = 12.dp)) {
+                    Text(
+                        "Jump back in",
+                        color = colors.ink,
+                        style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    playedItems.chunked(2).take(2).forEach { row ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEach { item ->
+                                JumpCard(
+                                    item = item,
+                                    filesDir = filesDir,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        player.playItems(playedItems, playedItems.indexOf(item))
+                                    },
+                                )
+                            }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         }
 
@@ -285,6 +306,41 @@ private fun PlaylistShelf(
                     )
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+private fun JumpCard(
+    item: Item,
+    filesDir: java.io.File,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Row(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.panel)
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Thumb(item, filesDir, Modifier.size(48.dp))
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(
+                item.title,
+                color = colors.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                if (item.isAudio) "Audio" else "Video",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }

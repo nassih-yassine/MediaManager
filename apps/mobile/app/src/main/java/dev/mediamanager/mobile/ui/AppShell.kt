@@ -64,8 +64,8 @@ import dev.mediamanager.mobile.ui.theme.ThemeMode
 private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     LIBRARY("Library", Icons.Default.LibraryMusic),
-    PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
     ADD("Add", Icons.Default.AddCircle),
+    PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
