@@ -95,12 +95,18 @@ jobs:
       - name: Seed a playable item
         run: |
           ffmpeg -nostdin -f lavfi -i "sine=frequency=440:duration=60" -q:a 9 "$RUNNER_TEMP/seed.mp3"
+          ffmpeg -nostdin -f lavfi -i "sine=frequency=660:duration=60" -q:a 9 "$RUNNER_TEMP/seed2.mp3"
           curl -sf -c "$RUNNER_TEMP/cookies" -X POST http://127.0.0.1:8787/api/auth/login \
             -H 'content-type: application/json' \
             -d '{"email":"ci@example.com","password":"ci-password"}'
-          curl -sf -b "$RUNNER_TEMP/cookies" \
-            -F "file=@$RUNNER_TEMP/seed.mp3;type=audio/mpeg" \
-            "http://127.0.0.1:8787/api/uploads?kind=music&title=CI%20Track"
+          # Two tracks: resume uses the first, the queue test adds the second.
+          for n in 1 2; do
+            file="$RUNNER_TEMP/seed.mp3"
+            [ "$n" = "2" ] && file="$RUNNER_TEMP/seed2.mp3"
+            curl -sf -b "$RUNNER_TEMP/cookies" \
+              -F "file=@$file;type=audio/mpeg" \
+              "http://127.0.0.1:8787/api/uploads?kind=music&title=CI%20Track%20$n"
+          done
       - name: Start web
         working-directory: apps/web
         run: |
