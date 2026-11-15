@@ -1,27 +1,26 @@
 package dev.mediamanager.mobile.ui.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -30,9 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
+import dev.mediamanager.mobile.data.Appearance
 import dev.mediamanager.mobile.download.YtDlpExtractor
 import dev.mediamanager.mobile.ui.components.KeyValueRow
-import dev.mediamanager.mobile.ui.components.MmTextButton
+import dev.mediamanager.mobile.ui.components.MmSurface
 import dev.mediamanager.mobile.ui.components.SectionTitle
 import dev.mediamanager.mobile.ui.components.Segmented
 import dev.mediamanager.mobile.ui.components.SelectMenu
@@ -44,109 +44,137 @@ import kotlinx.coroutines.launch
 private val heights = listOf(720, 1080, 1440, 2160)
 
 @Composable
-fun SettingsScreen(container: AppContainer, onClose: () -> Unit) {
+fun SettingsScreen(
+    container: AppContainer,
+    onBack: () -> Unit = {},
+) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
-    BackHandler(onBack = onClose)
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
-        initialValue = dev.mediamanager.mobile.data.Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
+        initialValue = Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
     )
     val wifiOnly by container.settings.wifiOnly.collectAsStateWithLifecycle(initialValue = false)
     val maxHeight by container.settings.maxHeight.collectAsStateWithLifecycle(initialValue = 1080)
 
+    BackHandler(onBack = onBack)
+
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.canvas)
-            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Settings", color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
-            MmTextButton("Done", Icons.Default.Check, onClick = onClose)
-        }
-
-        SectionTitle("Appearance", Icons.Default.Palette)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Theme", color = colors.ink)
-            Spacer(Modifier.weight(1f))
-            SelectMenu(
-                label = "Theme",
-                options = ThemeFamily.entries.map { family ->
-                    family to family.key.replaceFirstChar { c -> c.uppercase() }
-                },
-                selected = appearance.family,
-                onSelect = { family -> scope.launch { container.settings.setAppearance(family, appearance.mode) } },
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Segmented(
-            options = listOf(
-                ThemeMode.LIGHT.name to "Light",
-                ThemeMode.DARK.name to "Dark",
-                ThemeMode.SYSTEM.name to "System",
-            ),
-            selected = appearance.mode.name,
-            onSelect = { mode ->
-                scope.launch { container.settings.setAppearance(appearance.family, ThemeMode.valueOf(mode)) }
-            },
-        )
-
-        Spacer(Modifier.height(16.dp))
-        SectionTitle("Downloads", Icons.Default.Download)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Wi-Fi only", color = colors.ink)
-                Text(
-                    "Jobs wait, without spending an attempt, until Wi-Fi is back.",
-                    color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+        SettingsCard("Appearance", Icons.Default.Palette) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Theme", color = colors.ink, modifier = Modifier.weight(1f))
+                SelectMenu(
+                    label = "Theme",
+                    options = ThemeFamily.entries.map { family ->
+                        family to family.key.replaceFirstChar { it.uppercase() }
+                    },
+                    selected = appearance.family,
+                    onSelect = { family -> scope.launch { container.settings.setAppearance(family, appearance.mode) } },
                 )
             }
-            Switch(
-                checked = wifiOnly,
-                onCheckedChange = { scope.launch { container.settings.setWifiOnly(it) } },
-            )
+            HorizontalDivider(color = colors.line)
+            Column(Modifier.padding(vertical = 12.dp)) {
+                Text(
+                    "Mode",
+                    color = colors.ink,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Segmented(
+                    options = listOf(
+                        ThemeMode.LIGHT.name to "Light",
+                        ThemeMode.DARK.name to "Dark",
+                        ThemeMode.SYSTEM.name to "System",
+                    ),
+                    selected = appearance.mode.name,
+                    onSelect = { mode ->
+                        scope.launch { container.settings.setAppearance(appearance.family, ThemeMode.valueOf(mode)) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
+
         Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Max video height", color = colors.ink)
-            Spacer(Modifier.weight(1f))
-            SelectMenu(
-                label = "Height",
-                options = heights.map { it to "${it}p" },
-                selected = maxHeight,
-                onSelect = { scope.launch { container.settings.setMaxHeight(it) } },
+        SettingsCard("Downloads", Icons.Default.Download) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Wi-Fi only", color = colors.ink)
+                    Text(
+                        "Jobs wait, without spending an attempt, until Wi-Fi is back.",
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = wifiOnly,
+                    onCheckedChange = { scope.launch { container.settings.setWifiOnly(it) } },
+                )
+            }
+            HorizontalDivider(color = colors.line)
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Max video height", color = colors.ink)
+                    Text(
+                        "Anything taller is scaled down when downloading.",
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                }
+                SelectMenu(
+                    label = "Height",
+                    options = heights.map { it to "${it}p" },
+                    selected = maxHeight,
+                    onSelect = { scope.launch { container.settings.setMaxHeight(it) } },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        SettingsCard("Storage", Icons.Default.Storage) {
+            Text(
+                "The library reports its own size on the Storage tab, including thumbnails, playlist covers and temporary files.",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 12.dp),
             )
         }
 
-        Spacer(Modifier.height(16.dp))
-        SectionTitle("Storage", Icons.Default.Storage)
-        Text(
-            "The library reports its own size. Re-check lives on the Storage tab.",
-            color = colors.muted,
-            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-        )
-
-        Spacer(Modifier.height(16.dp))
-        SectionTitle("About", Icons.Default.Info)
-        KeyValueRow("Version", "0.1.0")
-        KeyValueRow("Extractor", YtDlpExtractor.version() ?: "bundled")
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "MediaManager is local only: no account, no server, no sync. " +
-                "Downloads use yt-dlp and ffmpeg (GPL-3.0).",
-            color = colors.muted,
-            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Licensed under GPL-3.0. Source: github.com/iomi/MediaManager",
-            color = colors.muted,
-            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-        )
+        Spacer(Modifier.height(12.dp))
+        SettingsCard("About", Icons.Default.Info) {
+            KeyValueRow("Version", "0.1.0")
+            KeyValueRow("Extractor", YtDlpExtractor.version() ?: "bundled")
+            Text(
+                "Local only: no account, no server, no sync. YouTube goes through NewPipe, other sites through the bundled yt-dlp and ffmpeg.",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                "GPL-3.0 · github.com/nassih-yassine/MediaManager",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SettingsCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Column(Modifier.fillMaxWidth()) {
+        SectionTitle(title, icon)
+        MmSurface(Modifier.fillMaxWidth()) {
+            content()
+        }
     }
 }

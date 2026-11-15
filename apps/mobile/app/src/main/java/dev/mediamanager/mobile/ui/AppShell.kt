@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -62,6 +61,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     LIBRARY("Library", Icons.Default.LibraryMusic),
     ADD("Add", Icons.Default.AddCircle),
     STORAGE("Storage", Icons.Default.Storage),
+    SETTINGS("Settings", Icons.Default.Settings),
 }
 
 @Composable
@@ -71,7 +71,6 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
     )
     MmTheme(appearance.family, appearance.mode) {
         var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
-        var settingsOpen by remember { mutableStateOf(false) }
         var nowPlayingOpen by remember { mutableStateOf(false) }
         var libraryFilter by remember { mutableStateOf(LibraryFilter.ALL) }
         val colors = LocalAppColors.current
@@ -96,9 +95,6 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                             style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
                         )
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { settingsOpen = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = colors.muted)
-                        }
                     }
                 },
                 bottomBar = {
@@ -175,13 +171,13 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
 
                             Tab.ADD -> AddScreen(container, player)
                             Tab.STORAGE -> StorageScreen(container, player)
+                            Tab.SETTINGS -> SettingsScreen(
+                                container = container,
+                                onBack = { tab = Tab.HOME.name },
+                            )
                         }
                     }
                 }
-            }
-
-            if (settingsOpen) {
-                SettingsScreen(container, onClose = { settingsOpen = false })
             }
 
             AnimatedVisibility(

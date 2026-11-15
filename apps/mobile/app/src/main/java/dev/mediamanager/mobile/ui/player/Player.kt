@@ -110,8 +110,26 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
                     tint = colors.ink,
                 )
             }
+            IconButton(onClick = { player.cycleRepeat() }) {
+                Icon(
+                    if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) {
+                        Icons.Default.RepeatOne
+                    } else {
+                        Icons.Default.Repeat
+                    },
+                    contentDescription = "Repeat",
+                    tint = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) {
+                        colors.muted
+                    } else {
+                        colors.accent
+                    },
+                )
+            }
             IconButton(onClick = { player.next() }) {
                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
+            }
+            IconButton(onClick = { player.stop() }) {
+                Icon(Icons.Default.Close, contentDescription = "Stop and close player", tint = colors.muted)
             }
         }
         val fraction = if (current.durationMs > 0) current.positionMs.toFloat() / current.durationMs else 0f
