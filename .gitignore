@@ -26,3 +26,6 @@ library/
 .idea/
 .vscode/
 .superpowers/
+
+# local planning docs (kept on disk, not in the repo)
+docs/superpowers/
