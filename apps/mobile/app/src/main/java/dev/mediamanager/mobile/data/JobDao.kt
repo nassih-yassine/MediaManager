@@ -51,13 +51,17 @@ interface JobDao {
     @Query("UPDATE jobs SET status = :status, error = :error, stage = NULL, claimedBy = NULL, updatedAt = :now WHERE id = :id")
     suspend fun markFailed(id: String, status: String, error: String?, now: Long)
 
-    @Query("UPDATE jobs SET status = 'queued', claimedBy = NULL, heartbeatAt = NULL, scheduledAt = :scheduledAt, attempts = :attempts, updatedAt = :now WHERE id = :id")
-    suspend fun requeue(id: String, scheduledAt: Long, attempts: Int, now: Long)
+    @Query("UPDATE jobs SET status = 'queued', claimedBy = NULL, heartbeatAt = NULL, scheduledAt = :scheduledAt, attempts = :attempts, error = :error, updatedAt = :now WHERE id = :id")
+    suspend fun requeue(id: String, scheduledAt: Long, attempts: Int, error: String?, now: Long)
 
     @Query("UPDATE jobs SET status = 'queued', stage = :stage, claimedBy = NULL, heartbeatAt = NULL, updatedAt = :now WHERE id = :id")
     suspend fun park(id: String, stage: String, now: Long)
 
-    @Query("UPDATE jobs SET status = 'queued', claimedBy = NULL, heartbeatAt = NULL, updatedAt = :now WHERE status = 'running' AND (heartbeatAt IS NULL OR heartbeatAt < :threshold)")
+    /**
+     * A lease expires because the process was killed, not because the download failed,
+     * so the attempt is given back. Otherwise three app switches fail a healthy job.
+     */
+    @Query("UPDATE jobs SET status = 'queued', claimedBy = NULL, heartbeatAt = NULL, attempts = MAX(attempts - 1, 0), updatedAt = :now WHERE status = 'running' AND (heartbeatAt IS NULL OR heartbeatAt < :threshold)")
     suspend fun requeueStale(threshold: Long, now: Long): Int
 
     @Query("UPDATE jobs SET status = 'cancelled', stage = NULL, claimedBy = NULL, updatedAt = :now WHERE id = :id AND status IN ('queued','running')")

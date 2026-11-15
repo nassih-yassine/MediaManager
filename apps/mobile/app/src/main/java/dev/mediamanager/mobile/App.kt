@@ -6,6 +6,7 @@ import dev.mediamanager.mobile.download.DownloadSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -30,8 +31,15 @@ class App : Application() {
                 if (unmetered && hasQueuedWork()) DownloadService.start(this@App)
             }
         }
+        // The service can be killed while the process survives (OEM battery managers).
+        // Whenever queued work exists, try to bring it back; if the app is in the
+        // background Android rejects the start and the next open retries.
         scope.launch {
-            if (hasQueuedWork()) DownloadService.start(this@App)
+            container.db.jobDao().observeActive().collect { jobs ->
+                if (jobs.any { it.status == "queued" || it.status == "running" }) {
+                    runCatching { DownloadService.start(this@App) }
+                }
+            }
         }
     }
 

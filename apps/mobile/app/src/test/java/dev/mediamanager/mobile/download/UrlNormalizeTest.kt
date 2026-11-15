@@ -1,6 +1,7 @@
 package dev.mediamanager.mobile.download
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,6 +25,24 @@ class UrlNormalizeTest {
     fun `short and shorts links become canonical watch links`() {
         assertEquals("https://www.youtube.com/watch?v=xyz", normalizeUrl("https://youtu.be/xyz?t=10"))
         assertEquals("https://www.youtube.com/watch?v=sh1", normalizeUrl("https://www.youtube.com/shorts/sh1"))
+    }
+
+    @Test
+    fun `radio playlist seeds become the seed video`() {
+        assertEquals(
+            "https://www.youtube.com/watch?v=4TrZAaFMpts",
+            normalizeUrl("https://youtube.com/playlist?list=RD4TrZAaFMpts&playnext=1&start_radio=1"),
+        )
+    }
+
+    @Test
+    fun `a plain playlist is rejected with a readable message`() {
+        assertEquals(
+            "That is a playlist. Paste a video link instead.",
+            playlistRejection("https://www.youtube.com/playlist?list=PLabc123"),
+        )
+        assertNull(playlistRejection("https://www.youtube.com/watch?v=4TrZAaFMpts&list=PLabc123"))
+        assertNull(playlistRejection("https://youtu.be/4TrZAaFMpts"))
     }
 
     @Test

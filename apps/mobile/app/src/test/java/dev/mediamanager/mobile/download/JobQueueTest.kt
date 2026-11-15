@@ -51,7 +51,7 @@ class JobQueueTest {
     @Test
     fun `claim skips jobs scheduled in the future`() = runTest {
         val job = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job
-        db.jobDao().requeue(job.id, now + 60_000, 1, now)
+        db.jobDao().requeue(job.id, now + 60_000, 1, null, now)
         assertNull(queue.claim("w1"))
         now += 60_000
         assertEquals(job.id, queue.claim("w1")!!.id)
@@ -121,7 +121,8 @@ class JobQueueTest {
 
         assertEquals(1, reaped)
         assertEquals("queued", db.jobDao().get(stale.id)!!.status)
-        assertEquals(1, db.jobDao().get(stale.id)!!.attempts)
+        // The attempt was cut short by a killed process, so it is given back.
+        assertEquals(0, db.jobDao().get(stale.id)!!.attempts)
         assertEquals("running", db.jobDao().get(fresh.id)!!.status)
     }
 

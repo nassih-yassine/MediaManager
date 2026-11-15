@@ -13,6 +13,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,10 @@ import kotlinx.coroutines.launch
 fun DownloadsScreen(container: AppContainer) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
+    // Opening the queue is also the explicit "resume" gesture after a system kill.
+    LaunchedEffect(Unit) {
+        if (container.db.jobDao().activeJobs().isNotEmpty()) DownloadService.start(container.appContext)
+    }
     val active by container.db.jobDao().observeActive().collectAsStateWithLifecycle(initialValue = emptyList())
     val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
     var confirmClear by remember { mutableStateOf(false) }
@@ -60,9 +65,11 @@ fun DownloadsScreen(container: AppContainer) {
                     }) { Text("Cancel", color = colors.danger) }
                 }
                 Text(
-                    "${job.mode} · ${job.stage ?: job.status} · ${(job.progress * 100).toInt()}%",
-                    color = colors.muted,
+                    "${job.mode} · ${job.stage ?: job.status} · ${(job.progress * 100).toInt()}%" +
+                        (job.error?.let { " · $it" } ?: ""),
+                    color = if (job.error != null) colors.danger else colors.muted,
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    maxLines = 3,
                 )
                 LinearProgressIndicator(
                     progress = { job.progress.coerceIn(0f, 1f) },

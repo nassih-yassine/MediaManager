@@ -1,6 +1,7 @@
 package dev.mediamanager.mobile.ui.add
 
 import dev.mediamanager.mobile.download.DownloadMode
+import dev.mediamanager.mobile.download.playlistRejection
 
 data class AddFormState(
     val url: String = "",
@@ -14,6 +15,7 @@ data class AddFormState(
         val problem = when {
             trimmed.isEmpty() -> "Paste a link first"
             !(trimmed.startsWith("http://") || trimmed.startsWith("https://")) -> "That is not a link"
+            playlistRejection(trimmed) != null -> playlistRejection(trimmed)
             else -> null
         }
         return copy(error = problem, url = trimmed)

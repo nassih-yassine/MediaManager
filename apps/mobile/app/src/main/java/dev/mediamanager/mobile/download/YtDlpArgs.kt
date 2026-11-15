@@ -44,6 +44,7 @@ object YtDlpArgs {
             listOf(
                 "-o", File(outDir, "%(id)s.%(ext)s").path,
                 "--no-playlist",
+                "--playlist-items", "1",
                 "--newline",
                 "--no-warnings",
                 "--socket-timeout", "20",

@@ -11,11 +11,14 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import dev.mediamanager.mobile.App
+import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.JobEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +57,9 @@ class DownloadService : Service() {
      */
     private var loop: kotlinx.coroutines.Job? = null
 
+    /** The pipeline run for the active job, so Cancel can actually stop it. */
+    private var activeRun: kotlinx.coroutines.Job? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -64,7 +70,11 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
             val job = activeJob
-            if (job != null) scope.launch { container().jobQueue.cancel(job.id) }
+            if (job != null) {
+                activeRun?.cancel()
+                runCatching { container().extractor.cancel(job.id) }
+                scope.launch { container().jobQueue.cancel(job.id) }
+            }
             return START_NOT_STICKY
         }
         startForegroundCompat(QueueNotifications.build(this, _state.value, null))
@@ -73,6 +83,10 @@ class DownloadService : Service() {
     }
 
     private fun container() = (application as App).container
+
+    private fun pathsCleanup(app: AppContainer, jobId: String) {
+        runCatching { app.paths.deleteRecursively(app.paths.incomingDir(jobId)) }
+    }
 
     private fun startForegroundCompat(notification: android.app.Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -107,19 +121,36 @@ class DownloadService : Service() {
                 )
                 notify(_state.value, title)
 
-                val result = app.pipeline.run(job) { progress ->
-                    _state.value = _state.value.copy(progress = progress)
-                    scope.launch {
-                        app.jobQueue.heartbeat(job.id, progress, "fetching")
-                        notify(_state.value, title)
+                val run = scope.async {
+                    app.pipeline.run(job) { progress ->
+                        _state.value = _state.value.copy(progress = progress)
+                        scope.launch {
+                            app.jobQueue.heartbeat(job.id, progress, "fetching")
+                            notify(_state.value, title)
+                        }
                     }
                 }
-                when (result) {
-                    is DownloadPipeline.Result.Done -> app.jobQueue.finish(job.id, result.itemId)
-                    is DownloadPipeline.Result.Failed -> {
-                        app.jobQueue.fail(job.id, result.message, permanent = !result.retryable)
+                activeRun = run
+                val result = runCatching { run.await() }
+                    .getOrElse { DownloadPipeline.Result.Cancelled }
+                activeRun = null
+
+                // The user may have cancelled while the extractor was busy; a cancelled
+                // row must not be flipped to done or failed afterwards.
+                if (app.db.jobDao().get(job.id)?.status == "cancelled") {
+                    pathsCleanup(app, job.id)
+                } else {
+                    when (result) {
+                        is DownloadPipeline.Result.Done -> app.jobQueue.finish(job.id, result.itemId)
+                        is DownloadPipeline.Result.Failed -> {
+                            Log.w(TAG, "job ${job.id} failed: ${result.message} (retry=${result.retryable})")
+                            app.jobQueue.fail(job.id, result.message, permanent = !result.retryable)
+                        }
+                        DownloadPipeline.Result.Cancelled -> {
+                            app.jobQueue.cancel(job.id)
+                            pathsCleanup(app, job.id)
+                        }
                     }
-                    DownloadPipeline.Result.Cancelled -> app.jobQueue.cancel(job.id)
                 }
                 activeJob = null
             }

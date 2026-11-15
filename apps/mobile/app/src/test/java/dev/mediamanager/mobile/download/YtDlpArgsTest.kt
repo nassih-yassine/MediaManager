@@ -20,7 +20,7 @@ class YtDlpArgsTest {
         val args = YtDlpArgs.audio("https://youtu.be/x", dir)
         assertTrue(args.containsAll(listOf("-x", "--audio-format", "mp3", "--audio-quality", "0")))
         assertTrue(args.containsAll(listOf("--write-info-json", "--write-thumbnail", "--convert-thumbnails", "jpg")))
-        assertTrue(args.containsAll(listOf("--no-playlist", "--js-runtimes", "quickjs")))
+        assertTrue(args.containsAll(listOf("--no-playlist", "--playlist-items", "1", "--js-runtimes", "quickjs")))
         assertTrue(args.containsAll(listOf("-o", File(dir, "%(id)s.%(ext)s").path)))
         assertEquals("https://youtu.be/x", args.last())
     }

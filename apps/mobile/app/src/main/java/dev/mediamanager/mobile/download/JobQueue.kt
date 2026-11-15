@@ -48,7 +48,8 @@ class JobQueue(
             return false
         }
         val backoff = 60_000L shl (job.attempts - 1).coerceIn(0, 5)
-        dao.requeue(id, now + backoff, job.attempts, now)
+        // Keep the reason visible on the row: a retry that says nothing is undebuggable.
+        dao.requeue(id, now + backoff, job.attempts, message, now)
         return true
     }
 
@@ -57,7 +58,7 @@ class JobQueue(
         val job = dao.get(id) ?: return
         val now = clock()
         if (stage != null) dao.park(id, stage, now)
-        else dao.requeue(id, now, job.attempts, now)
+        else dao.requeue(id, now, job.attempts, job.error, now)
     }
 
     suspend fun cancel(id: String) = dao.cancel(id, clock())
