@@ -1,11 +1,9 @@
 package dev.mediamanager.mobile.ui.playlists
 
-import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,25 +56,13 @@ import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.Thumb
-import dev.mediamanager.mobile.ui.components.loadThumb
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
 
 @Composable
-fun PlaylistsScreen(container: AppContainer, player: PlayerRepository) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    val id = selectedId
-    if (id == null) {
-        PlaylistList(container, onOpen = { selectedId = it })
-    } else {
-        PlaylistDetail(container, player, playlistId = id, onBack = { selectedId = null })
-    }
-}
-
-@Composable
-private fun PlaylistList(container: AppContainer, onOpen: (String) -> Unit) {
+fun PlaylistListContent(container: AppContainer, onOpen: (String) -> Unit) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val playlists by container.db.playlistDao().observePlaylists()
@@ -169,7 +154,7 @@ private fun PlaylistList(container: AppContainer, onOpen: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlaylistDetail(
+fun PlaylistDetailScreen(
     container: AppContainer,
     player: PlayerRepository,
     playlistId: String,
@@ -440,7 +425,7 @@ private fun SheetAction(
 }
 
 /**
- * Custom cover first; otherwise the Spotify-style 2×2 mosaic from the first four
+ * Custom cover first; otherwise the Spotify-style 2x2 mosaic from the first four
  * items; otherwise a glyph. The mosaic is rendered from item thumbs, never stored.
  */
 @Composable
@@ -451,13 +436,6 @@ private fun PlaylistCover(
     size: Dp,
 ) {
     val colors = LocalAppColors.current
-    val custom by produceState<Bitmap?>(null, coverPath) {
-        value = coverPath?.let { loadThumb(File(filesDir, it)) }
-    }
-    val mosaic by produceState<List<Bitmap>>(emptyList(), items.map { it.thumbPath }) {
-        value = items.mapNotNull { item -> item.thumbPath?.let { loadThumb(File(filesDir, it)) } }
-    }
-
     Box(
         Modifier
             .size(size)
@@ -465,16 +443,16 @@ private fun PlaylistCover(
             .background(colors.panel2),
         contentAlignment = Alignment.Center,
     ) {
-        val cover = custom
+        val thumbFiles = items.mapNotNull { it.thumbPath }.map { File(filesDir, it) }.filter { it.exists() }
         when {
-            cover != null -> Image(
-                bitmap = cover.asImageBitmap(),
+            coverPath != null && File(filesDir, coverPath).exists() -> coil.compose.AsyncImage(
+                model = File(filesDir, coverPath),
                 contentDescription = "Playlist cover",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(size),
             )
 
-            mosaic.isNotEmpty() -> Mosaic(mosaic, size)
+            thumbFiles.isNotEmpty() -> Mosaic(thumbFiles, size)
 
             else -> Icon(
                 Icons.Default.PlaylistPlay,
@@ -487,27 +465,27 @@ private fun PlaylistCover(
 }
 
 @Composable
-private fun Mosaic(bitmaps: List<Bitmap>, size: Dp) {
+private fun Mosaic(files: List<File>, size: Dp) {
     val colors = LocalAppColors.current
     val cell = size / 2
     Column(Modifier.size(size)) {
         Row {
-            MosaicCell(bitmaps.getOrNull(0), cell, colors.panel2)
-            MosaicCell(bitmaps.getOrNull(1), cell, colors.panel2)
+            MosaicCell(files.getOrNull(0), cell, colors.panel2)
+            MosaicCell(files.getOrNull(1), cell, colors.panel2)
         }
         Row {
-            MosaicCell(bitmaps.getOrNull(2), cell, colors.panel2)
-            MosaicCell(bitmaps.getOrNull(3), cell, colors.panel2)
+            MosaicCell(files.getOrNull(2), cell, colors.panel2)
+            MosaicCell(files.getOrNull(3), cell, colors.panel2)
         }
     }
 }
 
 @Composable
-private fun MosaicCell(bitmap: Bitmap?, size: Dp, placeholder: androidx.compose.ui.graphics.Color) {
+private fun MosaicCell(file: File?, size: Dp, placeholder: androidx.compose.ui.graphics.Color) {
     Box(Modifier.size(size).background(placeholder)) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
+        if (file != null) {
+            coil.compose.AsyncImage(
+                model = file,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(size),

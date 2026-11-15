@@ -201,11 +201,12 @@ private fun BreakdownRow(
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, tint = colors.muted, modifier = Modifier.size(16.dp).padding(end = 6.dp))
         Text(
-            label,
+            if (count > 0) "$label ($count)" else label,
             color = colors.ink,
-            modifier = Modifier.width(74.dp),
+            modifier = Modifier.width(104.dp),
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Box(
             Modifier

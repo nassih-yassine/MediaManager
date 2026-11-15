@@ -13,6 +13,7 @@ data class Item(
     val mime: String,
     val sourceUrl: String?,
     val createdAt: Long,
+    val lastPlayedAt: Long? = null,
 ) {
     val isAudio: Boolean get() = kind == "audio"
     val isVideo: Boolean get() = kind == "video"
@@ -31,4 +32,5 @@ fun ItemEntity.toItem(): Item = Item(
     mime = mime,
     sourceUrl = sourceUrl,
     createdAt = createdAt,
+    lastPlayedAt = lastPlayedAt,
 )

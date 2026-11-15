@@ -20,6 +20,7 @@ class App : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.player.connect()
+        container.audioOutput.start()
 
         scope.launch {
             combine(container.settings.wifiOnly, container.settings.maxHeight) { wifi, height ->

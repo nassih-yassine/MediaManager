@@ -13,11 +13,13 @@ import dev.mediamanager.mobile.download.JobQueue
 import dev.mediamanager.mobile.download.Thumbnailer
 import dev.mediamanager.mobile.download.YoutubeNewPipeExtractor
 import dev.mediamanager.mobile.download.YtDlpExtractor
+import dev.mediamanager.mobile.media.AudioOutputMonitor
 import dev.mediamanager.mobile.media.ItemRepository
 import dev.mediamanager.mobile.media.PlaylistCoverStore
 import dev.mediamanager.mobile.media.LibraryPaths
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.storage.StorageRepository
+import dev.mediamanager.mobile.media.VolumeControl
 
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
@@ -39,6 +41,9 @@ class AppContainer(context: Context) {
     val storage: StorageRepository = StorageRepository(db, paths)
 
     val playlistCovers: PlaylistCoverStore = PlaylistCoverStore(appContext, paths, db.playlistDao())
+
+    val audioOutput: AudioOutputMonitor = AudioOutputMonitor(appContext)
+    val volume: VolumeControl = VolumeControl(appContext)
 
     val player: PlayerRepository = PlayerRepository(appContext, db, paths)
 

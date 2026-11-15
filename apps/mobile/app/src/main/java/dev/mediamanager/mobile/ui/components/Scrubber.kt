@@ -1,0 +1,88 @@
+package dev.mediamanager.mobile.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import dev.mediamanager.mobile.ui.theme.LocalAppColors
+import kotlin.math.roundToInt
+
+/**
+ * A thin, Spotify-shaped progress bar with tap-to-seek and drag-to-scrub.
+ * Material's Slider draws a stop dot and a chunky thumb; this keeps the row honest.
+ */
+@Composable
+fun Scrubber(
+    value: Float,
+    onScrub: (Float) -> Unit,
+    onCommit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalAppColors.current
+    var width by remember { mutableFloatStateOf(1f) }
+    val clamped = value.coerceIn(0f, 1f)
+
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    onScrub((offset.x / width).coerceIn(0f, 1f))
+                    onCommit()
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { offset -> onScrub((offset.x / width).coerceIn(0f, 1f)) },
+                    onHorizontalDrag = { change, _ ->
+                        onScrub((change.position.x / width).coerceIn(0f, 1f))
+                    },
+                    onDragEnd = { onCommit() },
+                    onDragCancel = { onCommit() },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(colors.panel2),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(clamped)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(colors.accent),
+        )
+        Box(
+            Modifier
+                .offset { IntOffset(((clamped * width) - 6.dp.toPx()).roundToInt(), 0) }
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(colors.accent),
+        )
+    }
+}

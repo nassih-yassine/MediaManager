@@ -37,6 +37,12 @@ cd apps/web && npx vitest run src/lib/player-utils.test.ts
 Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 `dotenvy` picks up the root `.env`.
 
+## Background execution
+
+Builds, tests, installs, emulator/ADB waits and downloads run in the background by
+default; only fast reads and checks block. Wait for the completion notification rather
+than polling the output file.
+
 ## Architecture rules that are not obvious from the tree
 
 - **Rust owns SQLite and the library files.** The Next app must never write the

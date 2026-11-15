@@ -1,9 +1,5 @@
 package dev.mediamanager.mobile.ui.components
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.LruCache
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,34 +28,18 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
-
-private val thumbCache = LruCache<String, Bitmap>(96)
-
-suspend fun loadThumb(file: File?): Bitmap? = withContext(Dispatchers.IO) {
-    if (file == null || !file.exists()) return@withContext null
-    thumbCache.get(file.path)?.let { return@withContext it }
-    val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply {
-        inSampleSize = 2
-    }) ?: return@withContext null
-    thumbCache.put(file.path, bitmap)
-    bitmap
-}
 
 @Composable
 fun MmSurface(
@@ -82,19 +62,16 @@ typealias ColumnScopeAlias = androidx.compose.foundation.layout.ColumnScope
 @Composable
 fun Thumb(item: Item, filesDir: File, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
-    val bitmap by produceState<Bitmap?>(null, item.thumbPath) {
-        value = loadThumb(item.thumbPath?.let { File(filesDir, it) })
-    }
+    val file = item.thumbPath?.let { File(filesDir, it) }
     Box(
         modifier
             .clip(RoundedCornerShape(12.dp))
             .background(colors.panel2),
         contentAlignment = Alignment.Center,
     ) {
-        val bmp = bitmap
-        if (bmp != null) {
-            Image(
-                bitmap = bmp.asImageBitmap(),
+        if (file != null && file.exists()) {
+            coil.compose.AsyncImage(
+                model = file,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

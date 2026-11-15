@@ -1,0 +1,341 @@
+package dev.mediamanager.mobile.ui.player
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.VolumeDown
+import androidx.compose.material.icons.filled.VolumeMute
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
+import androidx.media3.ui.PlayerView
+import dev.mediamanager.mobile.playback.NowPlaying
+import dev.mediamanager.mobile.playback.PlaybackService
+import dev.mediamanager.mobile.playback.PlayerRepository
+import dev.mediamanager.mobile.playback.playbackSpeeds
+import dev.mediamanager.mobile.playback.speedLabel
+import dev.mediamanager.mobile.ui.components.SelectMenu
+import dev.mediamanager.mobile.ui.format.formatDuration
+import dev.mediamanager.mobile.ui.theme.LocalAppColors
+import java.io.File
+
+/**
+ * Full-screen now playing. Artwork and transport take the top half, the up-next
+ * queue the bottom half, so the thing you came for is one tap away.
+ */
+@Composable
+fun NowPlayingScreen(
+    player: PlayerRepository,
+    filesDir: File,
+    audio: dev.mediamanager.mobile.media.AudioOutputMonitor,
+    volume: dev.mediamanager.mobile.media.VolumeControl,
+    onClose: () -> Unit,
+) {
+    val colors = LocalAppColors.current
+    val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
+    val queue by player.queue.collectAsStateWithLifecycle(initialValue = emptyList())
+    var scrubbing by remember { mutableStateOf<Float?>(null) }
+    val route by audio.route.collectAsStateWithLifecycle()
+    var volumeLevel by remember { mutableIntStateOf(volume.current) }
+
+    BackHandler(onBack = onClose)
+    // The state starts null for one frame; never close the screen on that frame.
+    val current = now ?: return
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(colors.canvas)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Close player", tint = colors.muted)
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Now playing",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+            )
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.size(48.dp))
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Artwork(current, filesDir, colors.panel2, colors.muted)
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            current.title,
+            color = colors.ink,
+            maxLines = 2,
+            style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            if (current.isVideo) "Video" else "Audio",
+            color = colors.muted,
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+        )
+
+        val duration = current.durationMs.coerceAtLeast(1)
+        dev.mediamanager.mobile.ui.components.Scrubber(
+            value = scrubbing ?: (current.positionMs.toFloat() / duration).coerceIn(0f, 1f),
+            onScrub = { scrubbing = it },
+            onCommit = {
+                scrubbing?.let { player.seekTo((it * duration).toLong()) }
+                scrubbing = null
+            },
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                formatDuration(scrubbing?.times(duration)?.toLong() ?: current.positionMs).ifEmpty { "0:00" },
+                color = colors.muted,
+            )
+            Text(formatDuration(current.durationMs).ifEmpty { "--:--" }, color = colors.muted)
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { player.toggleShuffle() }) {
+                Icon(
+                    Icons.Default.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = if (current.shuffle) colors.accent else colors.muted,
+                )
+            }
+            IconButton(onClick = { player.previous() }) {
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = colors.ink)
+            }
+            IconButton(onClick = { player.skipBy(-10_000) }) {
+                Icon(Icons.Default.Replay10, contentDescription = "Back 10 seconds", tint = colors.ink)
+            }
+            IconButton(onClick = { player.toggle() }) {
+                Icon(
+                    if (current.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (current.isPlaying) "Pause" else "Play",
+                    tint = colors.accentInk,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(colors.accent)
+                        .padding(14.dp),
+                )
+            }
+            IconButton(onClick = { player.skipBy(10_000) }) {
+                Icon(Icons.Default.Forward10, contentDescription = "Forward 10 seconds", tint = colors.ink)
+            }
+            IconButton(onClick = { player.next() }) {
+                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
+            }
+            IconButton(onClick = { player.cycleRepeat() }) {
+                Icon(
+                    if (current.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                    contentDescription = "Repeat",
+                    tint = if (current.repeatMode == Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
+                )
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                when {
+                    volumeLevel == 0 -> Icons.Default.VolumeMute
+                    volumeLevel < volume.max / 2 -> Icons.Default.VolumeDown
+                    else -> Icons.Default.VolumeUp
+                },
+                contentDescription = "Volume",
+                tint = colors.muted,
+                modifier = Modifier.size(20.dp),
+            )
+            dev.mediamanager.mobile.ui.components.Scrubber(
+                value = volumeLevel.toFloat() / volume.max,
+                onScrub = { fraction ->
+                    volumeLevel = (fraction * volume.max).toInt().coerceIn(0, volume.max)
+                    volume.set(volumeLevel)
+                },
+                onCommit = { volume.set(volumeLevel) },
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            Icon(
+                when (route) {
+                    dev.mediamanager.mobile.media.AudioRoute.BLUETOOTH -> Icons.Default.Bluetooth
+                    dev.mediamanager.mobile.media.AudioRoute.HEADPHONES -> Icons.Default.Headphones
+                    dev.mediamanager.mobile.media.AudioRoute.USB -> Icons.Default.Usb
+                    else -> Icons.Default.PhoneAndroid
+                },
+                contentDescription = route.label,
+                tint = if (route == dev.mediamanager.mobile.media.AudioRoute.SPEAKER) colors.muted else colors.accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                when (route) {
+                    dev.mediamanager.mobile.media.AudioRoute.SPEAKER -> "Speaker"
+                    dev.mediamanager.mobile.media.AudioRoute.BLUETOOTH -> "Bluetooth"
+                    dev.mediamanager.mobile.media.AudioRoute.HEADPHONES -> "Headphones"
+                    dev.mediamanager.mobile.media.AudioRoute.USB -> "USB"
+                    dev.mediamanager.mobile.media.AudioRoute.UNKNOWN -> "Output"
+                },
+                color = colors.muted,
+                modifier = Modifier.padding(start = 6.dp),
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+            )
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Up next · ${queue.size}",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+            )
+            Spacer(Modifier.weight(1f))
+            SelectMenu(
+                label = "Speed",
+                options = playbackSpeeds.map { it to speedLabel(it) },
+                selected = current.speed,
+                onSelect = { player.setSpeed(it) },
+            )
+        }
+
+        LazyColumn(Modifier.weight(1f)) {
+            itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
+                val active = item.id == current.itemId
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { player.playItems(queue, index) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (active) colors.accent else colors.panel2),
+                    )
+                    Text(
+                        item.title,
+                        color = if (active) colors.accent else colors.ink,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        formatDuration(item.durationMs),
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Artwork(
+    current: NowPlaying,
+    filesDir: File,
+    placeholder: androidx.compose.ui.graphics.Color,
+    glyphTint: androidx.compose.ui.graphics.Color,
+) {
+    val modifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(1f)
+        .clip(RoundedCornerShape(20.dp))
+        .background(placeholder)
+
+    if (current.isVideo) {
+        val exo = PlaybackService.currentPlayer
+        if (exo != null) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exo
+                        useController = false
+                    }
+                },
+                modifier = modifier,
+            )
+            return
+        }
+    }
+
+    val cover = current.thumbPath?.let { File(filesDir, it) }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (cover != null && cover.exists()) {
+            coil.compose.AsyncImage(
+                model = cover,
+                contentDescription = current.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                if (current.isVideo) Icons.Default.Videocam else Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = glyphTint,
+                modifier = Modifier.size(64.dp),
+            )
+        }
+    }
+}

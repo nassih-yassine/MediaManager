@@ -38,6 +38,9 @@ class DaoTest {
         title: String = "Item $id",
         bytes: Long = 1_000,
         createdAt: Long = 1,
+        positionMs: Long = 0,
+        durationMs: Long? = null,
+        lastPlayedAt: Long? = null,
     ) = ItemEntity(
         id = id,
         kind = kind,
@@ -45,6 +48,9 @@ class DaoTest {
         path = "library/$kind/${id.take(2)}/$id.mp3",
         mime = if (kind == "audio") "audio/mpeg" else "video/mp4",
         bytes = bytes,
+        positionMs = positionMs,
+        durationMs = durationMs,
+        lastPlayedAt = lastPlayedAt,
         createdAt = createdAt,
         updatedAt = createdAt,
     )
@@ -83,6 +89,27 @@ class DaoTest {
         assertEquals(2, totals.getValue("audio").count)
         assertEquals(5_000L, totals.getValue("video").bytes)
         assertEquals(8_000L, db.itemDao().observeTotalBytes().first())
+    }
+
+    @Test
+    fun `home shelves pick the right rows`() = runTest {
+        db.itemDao().insert(item("a1", createdAt = 1, positionMs = 4_000, durationMs = 100_000, lastPlayedAt = 100))
+        db.itemDao().insert(item("a2", createdAt = 2, positionMs = 1_000, durationMs = 100_000, lastPlayedAt = 200))
+        db.itemDao().insert(item("a3", createdAt = 3, positionMs = 98_000, durationMs = 100_000, lastPlayedAt = 50))
+        db.itemDao().insert(item("a4", createdAt = 4))
+
+        assertEquals(
+            listOf("a2", "a1", "a3"),
+            db.itemDao().observeRecentlyPlayed(10).first().map { it.id },
+        )
+        assertEquals(
+            listOf("a1"),
+            db.itemDao().observeInProgress(10).first().map { it.id },
+        )
+        assertEquals(
+            listOf("a4", "a3", "a2"),
+            db.itemDao().observeRecentlyAdded(3).first().map { it.id },
+        )
     }
 
     @Test
