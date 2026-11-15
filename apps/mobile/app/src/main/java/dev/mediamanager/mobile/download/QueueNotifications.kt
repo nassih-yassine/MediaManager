@@ -16,6 +16,7 @@ data class DownloadState(
     val activeTitle: String? = null,
     val progress: Float = 0f,
     val waitingForWifi: Boolean = false,
+    val waitingForNetwork: Boolean = false,
 )
 
 object QueueNotifications {
@@ -25,6 +26,7 @@ object QueueNotifications {
 
     fun summary(state: DownloadState, activeTitle: String?): String = when {
         state.waitingForWifi -> "Waiting for Wi-Fi"
+        state.waitingForNetwork -> "Waiting for the network"
         state.activeJobId == null -> "Idle"
         else -> "Downloading · ${activeTitle ?: "Media"} · ${(state.progress * 100).toInt()}%"
     }

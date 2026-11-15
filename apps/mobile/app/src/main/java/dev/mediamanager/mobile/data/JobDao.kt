@@ -76,6 +76,13 @@ interface JobDao {
     @Query("SELECT * FROM jobs WHERE status IN ('queued','running') ORDER BY createdAt ASC")
     suspend fun activeJobs(): List<JobEntity>
 
+    @Query("SELECT COUNT(*) FROM jobs WHERE status = 'queued'")
+    suspend fun queuedCount(): Int
+
+    /** Backoff is meaningless once the network is back: run the job now. */
+    @Query("UPDATE jobs SET scheduledAt = :now, updatedAt = :now WHERE status = 'queued' AND scheduledAt > :now")
+    suspend fun pullForward(now: Long): Int
+
     @Query("DELETE FROM jobs WHERE status IN ('done','failed','cancelled')")
     suspend fun clearFinished(): Int
 

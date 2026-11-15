@@ -1,6 +1,8 @@
 package dev.mediamanager.mobile.download
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +45,14 @@ class UrlNormalizeTest {
         )
         assertNull(playlistRejection("https://www.youtube.com/watch?v=4TrZAaFMpts&list=PLabc123"))
         assertNull(playlistRejection("https://youtu.be/4TrZAaFMpts"))
+    }
+
+    @Test
+    fun `youtube hosts route to the newpipe extractor`() {
+        assertTrue(isYouTubeUrl("https://youtu.be/xyz"))
+        assertTrue(isYouTubeUrl("https://m.youtube.com/watch?v=abc"))
+        assertFalse(isYouTubeUrl("https://vimeo.com/1"))
+        assertFalse(isYouTubeUrl("not a url"))
     }
 
     @Test

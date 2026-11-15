@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.SettingsStore
+import dev.mediamanager.mobile.download.CompositeExtractor
 import dev.mediamanager.mobile.download.ConnectivityMonitor
 import dev.mediamanager.mobile.download.DownloadPipeline
 import dev.mediamanager.mobile.download.DownloadSettings
 import dev.mediamanager.mobile.download.JobQueue
 import dev.mediamanager.mobile.download.Thumbnailer
+import dev.mediamanager.mobile.download.YoutubeNewPipeExtractor
 import dev.mediamanager.mobile.download.YtDlpExtractor
 import dev.mediamanager.mobile.media.ItemRepository
 import dev.mediamanager.mobile.media.LibraryPaths
@@ -41,8 +43,13 @@ class AppContainer(context: Context) {
     @Volatile
     var downloadSettings: DownloadSettings = DownloadSettings()
 
-    val extractor: YtDlpExtractor =
+    private val ytDlpExtractor: YtDlpExtractor =
         YtDlpExtractor(appContext, paths) { downloadSettings }
+
+    val extractor: CompositeExtractor = CompositeExtractor(
+        newPipe = YoutubeNewPipeExtractor(paths) { downloadSettings.maxHeight },
+        ytDlp = ytDlpExtractor,
+    )
 
     val pipeline: DownloadPipeline = DownloadPipeline(
         extractor = extractor,

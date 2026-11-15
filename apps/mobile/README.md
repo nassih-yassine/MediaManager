@@ -32,8 +32,13 @@ If the wrapper is missing, regenerate it once:
 
 ## What works
 
-- Paste a URL, choose Audio (mp3 + cover art) or Video (mp4, height capped in
-  Settings). Downloads run in a foreground service and survive leaving the app.
+- Paste a URL, choose Audio or Video. **YouTube goes through NewPipe Extractor**
+  (anonymous, no JS runtime), so audio arrives as m4a/opus with its cover; every
+  other site stays on the bundled yt-dlp, where audio is mp3.
+  Downloads run in a foreground service and survive leaving the app.
+- **Network loss resumes by itself.** A waiting job keeps the service alive, the
+  notification says "Waiting for the network", and the queue continues on the
+  next connectivity change without reopening the app.
 - Library: All / Audio / Video, search, sort by newest, oldest, title, largest,
   duration. Play, play next, add to queue, add to playlist, delete.
 - Player bar that stays across screens, queue with reorder, resume points saved in
@@ -47,8 +52,9 @@ If the wrapper is missing, regenerate it once:
 
 ## Known limits
 
-- **yt-dlp breaks sometimes.** YouTube changes signature handling; the extractor is
-  the most fragile part. Update the app when downloads start failing.
+- **YouTube extraction is the fragile part.** NewPipe occasionally needs an update
+  when YouTube changes; update the app when YouTube downloads start failing.
+- YouTube audio is m4a/opus, not mp3. Convert later if you care.
 - **Android 15+ caps `dataSync` foreground services at 6 hours per day.** Jobs are
   rows: a cancelled service resumes on the next app open. Very long queues may need
   two sessions.

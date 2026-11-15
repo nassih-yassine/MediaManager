@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +43,7 @@ fun AddScreen(container: AppContainer) {
     var form by remember { mutableStateOf(AddFormState()) }
     var message by remember { mutableStateOf<String?>(null) }
     val recent by container.settings.recentUrls.collectAsStateWithLifecycle(initialValue = emptyList())
+    val finished by container.db.jobDao().observeFinished().collectAsStateWithLifecycle(initialValue = emptyList())
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Text("Paste a link", color = colors.ink, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
@@ -102,9 +104,52 @@ fun AddScreen(container: AppContainer) {
             Text(it, color = colors.accent)
         }
 
-        if (recent.isNotEmpty()) {
+        if (finished.isNotEmpty()) {
             Spacer(Modifier.height(22.dp))
-            SectionTitle("Recent")
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                SectionTitle("Recent downloads")
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { scope.launch { container.db.jobDao().clearFinished() } }) {
+                    Text("Clear", color = colors.muted)
+                }
+            }
+            finished.take(4).forEach { job ->
+                val failed = job.status == "failed"
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.Top,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            dev.mediamanager.mobile.ui.jobLabel(job.url),
+                            color = colors.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            when {
+                                failed -> job.error ?: "Failed"
+                                job.status == "done" -> "Downloaded · " + job.mode
+                                else -> "Cancelled"
+                            },
+                            color = if (failed) colors.danger else colors.muted,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    TextButton(onClick = { scope.launch { container.db.jobDao().deleteFinished(job.id) } }) {
+                        Text("Dismiss", color = colors.muted)
+                    }
+                }
+            }
+            HorizontalDivider(color = colors.line, modifier = Modifier.padding(vertical = 8.dp))
+        }
+
+        if (recent.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            SectionTitle("Recent links")
             recent.take(6).forEach { url ->
                 Row(
                     Modifier

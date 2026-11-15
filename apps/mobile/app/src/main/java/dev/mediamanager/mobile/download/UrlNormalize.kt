@@ -8,6 +8,11 @@ import android.net.Uri
  * URL, so the app rewrites the link to the single video before it reaches yt-dlp.
  * Everything else is left alone.
  */
+fun isYouTubeUrl(raw: String): Boolean {
+    val host = runCatching { Uri.parse(raw.trim()).host?.lowercase() }.getOrNull() ?: return false
+    return host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com")
+}
+
 fun normalizeUrl(raw: String): String {
     val trimmed = raw.trim()
     val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return trimmed

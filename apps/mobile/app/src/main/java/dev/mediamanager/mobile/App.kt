@@ -27,8 +27,8 @@ class App : Application() {
             }.collect { container.downloadSettings = it }
         }
         scope.launch {
-            container.connectivity.observeUnmetered().collect { unmetered ->
-                if (unmetered && hasQueuedWork()) DownloadService.start(this@App)
+            container.connectivity.observeOnline().collect { online ->
+                if (online && hasQueuedWork()) runCatching { DownloadService.start(this@App) }
             }
         }
         // The service can be killed while the process survives (OEM battery managers).

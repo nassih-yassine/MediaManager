@@ -89,6 +89,7 @@ dependencies {
 
     implementation(libs.youtubedl.library)
     implementation(libs.youtubedl.ffmpeg)
+    implementation(libs.newpipe.extractor)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,6 +103,7 @@ class DownloadService : Service() {
 
     private suspend fun runQueue() {
         val app = container()
+        var wasOffline = !app.connectivity.online()
         try {
             app.jobQueue.reapExpired()
             while (true) {
@@ -110,7 +112,30 @@ class DownloadService : Service() {
                     notify(DownloadState(running = false, waitingForWifi = true))
                     break
                 }
-                val job = app.jobQueue.claim(workerId) ?: break
+                val claimed = app.jobQueue.claim(workerId)
+                if (claimed == null) {
+                    // A backoff can mean "the network is gone". Stay alive, keep the
+                    // notification, and continue the moment connectivity returns.
+                    if (app.db.jobDao().queuedCount() == 0) break
+                    val isOnline = app.connectivity.online()
+                    if (!isOnline) {
+                        _state.value = DownloadState(waitingForNetwork = true)
+                        notify(_state.value, null)
+                    } else {
+                        if (wasOffline) {
+                            app.db.jobDao().pullForward(System.currentTimeMillis())
+                            wasOffline = false
+                            continue
+                        }
+                        _state.value = DownloadState()
+                        notify(_state.value, null)
+                    }
+                    wasOffline = !isOnline
+                    delay(10_000)
+                    continue
+                }
+                val job = claimed
+                wasOffline = !app.connectivity.online()
                 activeJob = job
                 val title = job.url.substringAfterLast('/').ifBlank { "Media" }
                 _state.value = DownloadState(
