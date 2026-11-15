@@ -73,7 +73,8 @@ Categories=AudioVideo;Player;
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now mm-api.service mm-web.service
+systemctl --user enable mm-api.service mm-web.service
+systemctl --user restart mm-api.service mm-web.service
 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
 update-desktop-database "$APPS" >/dev/null 2>&1 || true
 
