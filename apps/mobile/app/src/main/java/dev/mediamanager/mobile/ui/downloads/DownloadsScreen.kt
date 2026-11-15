@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
@@ -147,15 +148,18 @@ fun DownloadsScreen(
                         fillColor = colors.accent,
                     )
                 }
-                MmTextButton(
-                    "Cancel",
-                    Icons.Default.Close,
-                    color = colors.danger,
+                IconButton(
                     onClick = {
                         DownloadService.cancel(container.appContext)
                         scope.launch { container.jobQueue.cancel(job.id) }
                     },
-                )
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Cancel download",
+                        tint = colors.danger,
+                    )
+                }
             }
         }
 
