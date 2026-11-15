@@ -371,13 +371,36 @@ fun PlaylistDetailScreen(
                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                         )
                     }
-                    IconButton(onClick = { scope.launch { dao.removeItem(playlistId, item.id) } }) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Remove",
-                            tint = colors.danger,
-                            modifier = Modifier.size(18.dp),
-                        )
+                    var rowMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { rowMenu = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "Item actions",
+                                tint = colors.muted,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        DropdownMenu(expanded = rowMenu, onDismissRequest = { rowMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Play") },
+                                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                                onClick = {
+                                    rowMenu = false
+                                    player.playItems(items, index)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Remove from playlist", color = colors.danger) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = colors.danger)
+                                },
+                                onClick = {
+                                    rowMenu = false
+                                    scope.launch { dao.removeItem(playlistId, item.id) }
+                                },
+                            )
+                        }
                     }
                     Icon(
                         Icons.Default.DragHandle,

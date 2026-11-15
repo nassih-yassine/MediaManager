@@ -242,6 +242,8 @@ class PlayerRepository(
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(item.title)
+                    .setArtist(if (item.isVideo) "Video" else "Audio")
+                    .setAlbumTitle("MediaManager")
                     .setArtworkUri(thumb?.toUri())
                     .build(),
             )

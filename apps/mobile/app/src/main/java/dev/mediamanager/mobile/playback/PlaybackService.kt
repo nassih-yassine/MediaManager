@@ -4,8 +4,10 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import dev.mediamanager.mobile.R
 
 /** Owns the single ExoPlayer instance for the whole app. */
 class PlaybackService : MediaSessionService() {
@@ -34,7 +36,24 @@ class PlaybackService : MediaSessionService() {
             .build()
         player = exo
         currentPlayer = exo
-        session = MediaSession.Builder(this, exo).build()
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId("playback")
+                .setChannelName(R.string.playback_channel)
+                .setNotificationId(1001)
+                .build()
+                .apply { setSmallIcon(R.drawable.ic_logo_fg) },
+        )
+        session = MediaSession.Builder(this, exo)
+            .setSessionActivity(
+                android.app.PendingIntent.getActivity(
+                    this,
+                    0,
+                    android.content.Intent(this, dev.mediamanager.mobile.MainActivity::class.java),
+                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+                ),
+            )
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
