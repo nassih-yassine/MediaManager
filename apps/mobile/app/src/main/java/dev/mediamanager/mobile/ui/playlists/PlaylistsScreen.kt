@@ -55,6 +55,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.Modifier
 import kotlin.math.roundToInt
 import androidx.compose.ui.input.pointer.pointerInput
@@ -93,6 +98,7 @@ fun PlaylistsTab(container: AppContainer, player: PlayerRepository) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistListContent(
     container: AppContainer,
@@ -189,44 +195,73 @@ fun PlaylistListContent(
     }
 
     if (creating) {
-        androidx.compose.material3.AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { creating = false },
             containerColor = colors.panel,
-            title = { Text("New playlist", color = colors.ink) },
-            text = {
-                OutlinedTextField(
+        ) {
+            val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text(
+                    "New playlist",
+                    color = colors.ink,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    "Name it now; add audio and video from the library afterwards.",
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     singleLine = true,
-                    label = { Text("Name") },
+                    placeholder = { Text("Playlist name") },
+                    shape = RoundedCornerShape(14.dp),
                 )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val name = newName.trim()
-                        if (name.isEmpty()) return@TextButton
-                        scope.launch {
-                            val now = System.currentTimeMillis()
-                            val playlist = PlaylistEntity(
-                                id = UUID.randomUUID().toString(),
-                                name = name,
-                                createdAt = now,
-                                updatedAt = now,
-                            )
-                            container.db.playlistDao().upsert(playlist)
-                            newName = ""
-                            creating = false
-                            onOpen(playlist.id)
-                        }
-                    },
-                    enabled = newName.isNotBlank(),
-                ) { Text("Create", color = colors.accent) }
-            },
-            dismissButton = {
-                TextButton(onClick = { creating = false }) { Text("Cancel", color = colors.muted) }
-            },
-        )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.TextButton(
+                        onClick = { creating = false },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Cancel", color = colors.muted) }
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            val name = newName.trim()
+                            if (name.isEmpty()) return@Button
+                            scope.launch {
+                                val now = System.currentTimeMillis()
+                                val playlist = PlaylistEntity(
+                                    id = UUID.randomUUID().toString(),
+                                    name = name,
+                                    createdAt = now,
+                                    updatedAt = now,
+                                )
+                                container.db.playlistDao().upsert(playlist)
+                                newName = ""
+                                creating = false
+                                onOpen(playlist.id)
+                            }
+                        },
+                        enabled = newName.isNotBlank(),
+                        modifier = Modifier.weight(2f).height(48.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                            contentColor = colors.accentInk,
+                        ),
+                    ) { Text("Create playlist") }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
     }
 }
 
