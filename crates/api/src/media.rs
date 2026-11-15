@@ -35,7 +35,9 @@ pub fn extension_of(path: &Path) -> String {
 /// Convert an image to a JPEG thumbnail (no upscaling). Returns the written path.
 pub async fn make_jpeg_thumb(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
     if extension_of(src) == "jpg" || extension_of(src) == "jpeg" {
-        tokio::fs::rename(src, dest).await?;
+        // Copy, never rename: callers may pass the library media file itself
+        // (picture finalize), and moving it would leave items.path dangling.
+        tokio::fs::copy(src, dest).await?;
         return Ok(());
     }
     if let Some(parent) = dest.parent() {
@@ -1089,6 +1091,23 @@ mod tests {
         assert_eq!(temp, 0);
         assert!(!dir.join(".thumbs/aa/existing.jpg").exists());
         assert!(dir.join(".thumbs/bb/temp.jpg").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// JPEG/JPEG input must not consume the media file it is generating from.
+    #[tokio::test]
+    async fn jpeg_thumbnail_keeps_the_source() {
+        let dir = std::env::temp_dir().join(format!("mm-thumb-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(dir.join(".thumbs/aa")).unwrap();
+        let cfg = test_config(&dir);
+        let src = dir.join("source.jpg");
+        let dest = dir.join(".thumbs/aa/source.jpg");
+        std::fs::write(&src, b"jpeg-bytes").unwrap();
+
+        make_jpeg_thumb(&cfg, &src, &dest).await.unwrap();
+        assert!(src.exists(), "the media file must survive");
+        assert_eq!(std::fs::read(&src).unwrap(), b"jpeg-bytes");
+        assert!(dest.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

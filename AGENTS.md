@@ -202,6 +202,11 @@ Cargo always runs via `--manifest-path` so the CWD stays at the repo root and
 
 ## Gotchas that have already cost time
 
+- **`make_jpeg_thumb` must copy JPEGs, never rename.** Picture finalize passes
+  the library media file to it; renaming moved the original into `.thumbs/`, so
+  grid thumbs worked but the full image and lightbox were 404. Regression test:
+  `jpeg_thumbnail_keeps_the_source`.
+
 - **Never run `next build` while `next dev` is running.** Both write `.next`; the
   build replaces dev chunks, the open tab 404s `main-app.js` /
   `app-pages-internals.js`, hydration never runs, and the UI sits on "Loading…"
