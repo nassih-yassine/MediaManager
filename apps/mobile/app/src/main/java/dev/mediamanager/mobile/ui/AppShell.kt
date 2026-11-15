@@ -6,7 +6,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -98,7 +101,8 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
                         Text(
                             if (current == Tab.HOME) "MediaManager" else current.label,
                             color = colors.ink,
-                            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                            style = androidx.compose.material3.MaterialTheme.typography.displaySmall,
+                            modifier = Modifier.padding(bottom = 6.dp),
                         )
                         Spacer(Modifier.weight(1f))
                     }
@@ -225,13 +229,21 @@ fun AppShell(container: AppContainer, player: PlayerRepository) {
             AnimatedVisibility(
                 visible = nowPlayingOpen,
                 enter = slideInVertically(
-                    initialOffsetY = { it },
-                    animationSpec = tween(260),
-                ) + fadeIn(tween(200)),
+                    initialOffsetY = { it / 3 },
+                    animationSpec = tween(300),
+                ) + scaleIn(
+                    initialScale = 0.88f,
+                    transformOrigin = TransformOrigin(0.5f, 1f),
+                    animationSpec = tween(300),
+                ) + fadeIn(tween(180)),
                 exit = slideOutVertically(
-                    targetOffsetY = { it },
-                    animationSpec = tween(220),
-                ) + fadeOut(tween(160)),
+                    targetOffsetY = { it / 3 },
+                    animationSpec = tween(240),
+                ) + scaleOut(
+                    targetScale = 0.9f,
+                    transformOrigin = TransformOrigin(0.5f, 1f),
+                    animationSpec = tween(240),
+                ) + fadeOut(tween(140)),
             ) {
                 NowPlayingScreen(
                     player = player,

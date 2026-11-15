@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -45,6 +46,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -52,6 +55,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
@@ -228,6 +236,9 @@ fun PlaylistDetailScreen(
     var coverSheet by remember { mutableStateOf(false) }
     var itemPicker by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
+    var draggingIndex by remember { mutableIntStateOf(-1) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val rowHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
     var renameValue by remember { mutableStateOf("") }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -331,9 +342,16 @@ fun PlaylistDetailScreen(
             }
 
             itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
+                val dragging = draggingIndex == index
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .zIndex(if (dragging) 1f else 0f)
+                        .graphicsLayer {
+                            translationY = if (dragging) dragOffset else 0f
+                            alpha = if (dragging) 0.92f else 1f
+                        }
+                        .background(if (dragging) colors.panel2 else colors.canvas)
                         .clickable { player.playItems(items, index) }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -353,35 +371,51 @@ fun PlaylistDetailScreen(
                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                         )
                     }
-                    IconButton(onClick = {
-                        if (index == 0) return@IconButton
-                        val ids = items.map { it.id }.toMutableList()
-                        ids.add(index - 1, ids.removeAt(index))
-                        scope.launch { dao.reorder(playlistId, ids) }
-                    }) {
+                    IconButton(onClick = { scope.launch { dao.removeItem(playlistId, item.id) } }) {
                         Icon(
-                            androidx.compose.material.icons.Icons.Default.ArrowBack,
-                            contentDescription = "Move up",
-                            tint = colors.muted,
+                            Icons.Default.Delete,
+                            contentDescription = "Remove",
+                            tint = colors.danger,
                             modifier = Modifier.size(18.dp),
                         )
                     }
-                    IconButton(onClick = {
-                        if (index == items.lastIndex) return@IconButton
-                        val ids = items.map { it.id }.toMutableList()
-                        ids.add(index + 1, ids.removeAt(index))
-                        scope.launch { dao.reorder(playlistId, ids) }
-                    }) {
-                        Icon(
-                            androidx.compose.material.icons.Icons.Default.ArrowBack,
-                            contentDescription = "Move down",
-                            tint = colors.muted,
-                            modifier = Modifier.size(18.dp).rotate(180f),
-                        )
-                    }
-                    IconButton(onClick = { scope.launch { dao.removeItem(playlistId, item.id) } }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Remove", tint = colors.danger, modifier = Modifier.size(18.dp))
-                    }
+                    Icon(
+                        Icons.Default.DragHandle,
+                        contentDescription = "Drag to reorder",
+                        tint = colors.muted,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .pointerInput(item.id, items.size) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        draggingIndex = index
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount.y
+                                    },
+                                    onDragEnd = {
+                                        val from = draggingIndex
+                                        draggingIndex = -1
+                                        val steps = (dragOffset / rowHeightPx).roundToInt()
+                                        dragOffset = 0f
+                                        if (from >= 0) {
+                                            val to = (from + steps).coerceIn(0, items.lastIndex)
+                                            if (to != from) {
+                                                val ids = items.map { it.id }.toMutableList()
+                                                ids.add(to, ids.removeAt(from))
+                                                scope.launch { dao.reorder(playlistId, ids) }
+                                            }
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        draggingIndex = -1
+                                        dragOffset = 0f
+                                    },
+                                )
+                            },
+                    )
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
