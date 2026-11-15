@@ -173,6 +173,38 @@ async fn epub_cover(cfg: &Config, src: &Path, dest: &Path) -> Result<()> {
     result
 }
 
+/// Read duration and dimensions with ffprobe. Uploaded audio/video would
+/// otherwise have no duration, which breaks resume and the player display.
+async fn probe_media(path: &Path) -> Option<(i64, Option<i64>, Option<i64>)> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=width,height",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let duration = json["format"]["duration"]
+        .as_str()
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|seconds| (seconds * 1000.0).round() as i64)?;
+    let stream = &json["streams"][0];
+    Some((
+        duration,
+        stream["width"].as_i64(),
+        stream["height"].as_i64(),
+    ))
+}
+
 /// Move a finished file into the sharded library layout, generate its thumbnail
 /// if one was produced, and insert the item row.
 #[allow(clippy::too_many_arguments)]
@@ -251,6 +283,20 @@ pub async fn finalize(
         .await
         .map(|m| m.len() as i64)
         .unwrap_or(0);
+    let probe = if matches!(kind, "music" | "video")
+        && (duration_ms.is_none() || (kind == "video" && width.is_none()))
+    {
+        probe_media(&media_dest).await
+    } else {
+        None
+    };
+    let (probe_duration, probe_width, probe_height) = match probe {
+        Some((duration, width, height)) => (Some(duration), width, height),
+        None => (None, None, None),
+    };
+    let duration_ms = duration_ms.or(probe_duration);
+    let width = width.or(probe_width);
+    let height = height.or(probe_height);
     let now = db::now_ms();
 
     sqlx::query(
