@@ -41,7 +41,15 @@ fn main() {
                 WebviewUrl::App("error.html".into())
             };
             let init_script = format!(
-                "window.__MM_SERVER__ = {};",
+                r#"window.__MM_SERVER__ = {};
+window.addEventListener("keydown", (event) => {{
+  const reload = event.key === "F5" ||
+    ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "r");
+  if (reload) {{
+    event.preventDefault();
+    location.reload();
+  }}
+}});"#,
                 serde_json::to_string(&server)?
             );
 
