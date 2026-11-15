@@ -1,9 +1,21 @@
-FROM rust:1.99-bookworm AS build
+# Dependency-aware build: cargo-chef keeps the compiled crates in a layer that
+# only invalidates when Cargo.toml/Cargo.lock change, not on every source edit.
+FROM rust:1.99-bookworm AS chef
+RUN cargo install cargo-chef --locked
 WORKDIR /app
-COPY crates/api/Cargo.toml crates/api/Cargo.lock ./crates/api/
-COPY crates/api/src ./crates/api/src
-COPY crates/api/migrations ./crates/api/migrations
-RUN cargo build --release --manifest-path crates/api/Cargo.toml
+
+FROM chef AS planner
+COPY crates/api/Cargo.toml crates/api/Cargo.lock ./
+COPY crates/api/src ./src
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS build
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY crates/api/Cargo.toml crates/api/Cargo.lock ./
+COPY crates/api/src ./src
+COPY crates/api/migrations ./migrations
+RUN cargo build --release
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -15,7 +27,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin mm
-COPY --from=build /app/crates/api/target/release/mm /usr/local/bin/mm
+COPY --from=build /app/target/release/mm /usr/local/bin/mm
 
 ENV MM_LIBRARY_DIR=/library \
     MM_BIND=0.0.0.0:8787 \

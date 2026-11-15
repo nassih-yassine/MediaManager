@@ -233,21 +233,6 @@ pub struct Playlist {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
-#[allow(dead_code)]
-pub struct PlaylistSummaryRow {
-    pub id: String,
-    pub name: String,
-    pub kind: String,
-    pub is_default: i64,
-    pub cover_path: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub item_count: i64,
-    pub thumb_path: Option<String>,
-    pub thumbs_json: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaylistSummaryDto {
@@ -261,35 +246,6 @@ pub struct PlaylistSummaryDto {
     pub thumb_urls: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
-}
-
-impl PlaylistSummaryRow {
-    pub fn to_dto(&self) -> PlaylistSummaryDto {
-        let thumb_urls = self
-            .thumbs_json
-            .as_deref()
-            .and_then(|raw| serde_json::from_str::<Vec<String>>(raw).ok())
-            .unwrap_or_default()
-            .iter()
-            .map(|path| thumb_url(path))
-            .collect();
-        PlaylistSummaryDto {
-            id: self.id.clone(),
-            name: self.name.clone(),
-            kind: self.kind.clone(),
-            is_default: self.is_default != 0,
-            item_count: self.item_count,
-            cover_url: self
-                .cover_path
-                .as_deref()
-                .map(thumb_url)
-                .or_else(|| self.thumb_path.as_deref().map(thumb_url)),
-            thumb_url: self.thumb_path.as_deref().map(thumb_url),
-            thumb_urls,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]

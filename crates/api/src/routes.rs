@@ -25,9 +25,7 @@ use tower_http::services::ServeFile;
 use crate::auth::{self, AdminUser, AuthUser};
 use crate::db;
 use crate::media;
-use crate::models::{
-    self, Item, ItemDto, Job, Playlist, PlaylistDetailDto, PlaylistSummaryDto, PlaylistSummaryRow,
-};
+use crate::models::{self, Item, ItemDto, Job, Playlist, PlaylistDetailDto, PlaylistSummaryDto};
 use crate::state::AppState;
 
 #[derive(Debug)]
@@ -489,13 +487,15 @@ async fn item_playlists(
         return Err(ApiError::not_found("item not found"));
     }
 
+    // One grouped join, not a count and an EXISTS subquery per playlist.
     let rows: Vec<(String, String, String, i64, i64)> = sqlx::query_as(
         "SELECT p.id, p.name, p.kind,
-                (SELECT COUNT(*) FROM playlist_items pi WHERE pi.playlist_id = p.id) AS item_count,
-                EXISTS(SELECT 1 FROM playlist_items x
-                        WHERE x.playlist_id = p.id AND x.item_id = ?) AS contains
+                COUNT(pi.item_id) AS item_count,
+                MAX(CASE WHEN pi.item_id = ? THEN 1 ELSE 0 END) AS contains
            FROM playlists p
+           LEFT JOIN playlist_items pi ON pi.playlist_id = p.id
           WHERE p.owner_id = ?
+          GROUP BY p.id
           ORDER BY p.name COLLATE NOCASE",
     )
     .bind(&id)
@@ -1056,30 +1056,73 @@ async fn list_playlists(
         " WHERE p.owner_id = ?"
     };
     let sql = format!(
-        "SELECT p.id, p.name, p.kind, p.is_default, p.cover_path, p.created_at, p.updated_at,
-                COUNT(pi.item_id) AS item_count,
-                (SELECT i.thumb_path
-                   FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
-                  WHERE pi2.playlist_id = p.id AND i.thumb_path IS NOT NULL
-                  ORDER BY pi2.position LIMIT 1) AS thumb_path,
-                (SELECT json_group_array(thumb_path) FROM (
-                   SELECT i.thumb_path
-                     FROM playlist_items pi2 JOIN items i ON i.id = pi2.item_id
-                    WHERE pi2.playlist_id = p.id AND i.thumb_path IS NOT NULL
-                    ORDER BY pi2.position LIMIT 4
-                 )) AS thumbs_json
+        "SELECT p.id, p.name, p.kind, p.is_default, p.cover_path, p.created_at,
+                p.updated_at, COUNT(pi.item_id) AS item_count
            FROM playlists p
            LEFT JOIN playlist_items pi ON pi.playlist_id = p.id
           {filter}
           GROUP BY p.id
           ORDER BY p.name COLLATE NOCASE"
     );
-    let mut query = sqlx::query_as::<_, PlaylistSummaryRow>(&sql).bind(&user.id);
+    let mut query =
+        sqlx::query_as::<_, (String, String, String, i64, Option<String>, i64, i64, i64)>(&sql)
+            .bind(&user.id);
     if let Some(kind) = kind {
         query = query.bind(kind);
     }
     let rows = query.fetch_all(&state.pool).await?;
-    let playlists: Vec<PlaylistSummaryDto> = rows.iter().map(|r| r.to_dto()).collect();
+
+    // One query for the covers of every collection instead of two correlated
+    // subqueries per row.
+    let thumb_rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT playlist_id, thumb_path FROM (
+           SELECT pi.playlist_id, i.thumb_path,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY pi.playlist_id
+                    ORDER BY pi.position, pi.added_at
+                  ) AS rn
+             FROM playlist_items pi
+             JOIN items i ON i.id = pi.item_id
+             JOIN playlists p ON p.id = pi.playlist_id
+            WHERE p.owner_id = ? AND i.thumb_path IS NOT NULL
+         )
+         WHERE rn <= 4",
+    )
+    .bind(&user.id)
+    .fetch_all(&state.pool)
+    .await?;
+    let mut thumbs: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (playlist_id, path) in thumb_rows {
+        thumbs
+            .entry(playlist_id)
+            .or_default()
+            .push(models::thumb_url(&path));
+    }
+
+    let playlists: Vec<PlaylistSummaryDto> = rows
+        .into_iter()
+        .map(
+            |(id, name, kind, is_default, cover_path, created_at, updated_at, item_count)| {
+                let thumb_urls = thumbs.remove(&id).unwrap_or_default();
+                PlaylistSummaryDto {
+                    id,
+                    name,
+                    kind,
+                    is_default: is_default != 0,
+                    item_count,
+                    cover_url: cover_path
+                        .as_deref()
+                        .map(models::thumb_url)
+                        .or_else(|| thumb_urls.first().cloned()),
+                    thumb_url: thumb_urls.first().cloned(),
+                    thumb_urls,
+                    created_at,
+                    updated_at,
+                }
+            },
+        )
+        .collect();
     Ok(Json(json!({ "playlists": playlists })))
 }
 
@@ -2003,47 +2046,52 @@ async fn admin_list_users(
     State(state): State<AppState>,
     AdminUser(_admin): AdminUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let rows = sqlx::query_as::<_, auth::User>(
-        "SELECT id, email, name, role, disabled, theme, theme_mode, created_at, updated_at
-           FROM users ORDER BY created_at",
+    // One aggregate query instead of four per user (the admin page used to be
+    // O(users) round trips).
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: String,
+        email: String,
+        name: String,
+        role: String,
+        disabled: i64,
+        created_at: i64,
+        items: i64,
+        bytes: i64,
+        playlists: i64,
+        active_jobs: i64,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT u.id, u.email, u.name, u.role, u.disabled, u.created_at,
+                (SELECT COUNT(*) FROM items i WHERE i.owner_id = u.id) AS items,
+                (SELECT COALESCE(SUM(i.bytes), 0) FROM items i WHERE i.owner_id = u.id) AS bytes,
+                (SELECT COUNT(*) FROM playlists p WHERE p.owner_id = u.id) AS playlists,
+                (SELECT COUNT(*) FROM jobs j
+                  WHERE j.owner_id = u.id AND j.status IN ('queued','running')) AS active_jobs
+           FROM users u
+          ORDER BY u.created_at",
     )
     .fetch_all(&state.pool)
     .await?;
-    let mut users = Vec::with_capacity(rows.len());
-    for user in rows {
-        let items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items WHERE owner_id = ?")
-            .bind(&user.id)
-            .fetch_one(&state.pool)
-            .await?;
-        let bytes: i64 =
-            sqlx::query_scalar("SELECT COALESCE(SUM(bytes), 0) FROM items WHERE owner_id = ?")
-                .bind(&user.id)
-                .fetch_one(&state.pool)
-                .await?;
-        let playlists: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM playlists WHERE owner_id = ?")
-                .bind(&user.id)
-                .fetch_one(&state.pool)
-                .await?;
-        let active_jobs: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM jobs WHERE owner_id = ? AND status IN ('queued','running')",
-        )
-        .bind(&user.id)
-        .fetch_one(&state.pool)
-        .await?;
-        users.push(json!({
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-            "role": user.role,
-            "disabled": user.disabled != 0,
-            "items": items,
-            "bytes": bytes,
-            "playlists": playlists,
-            "activeJobs": active_jobs,
-            "createdAt": user.created_at,
-        }));
-    }
+
+    let users: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "id": row.id,
+                "email": row.email,
+                "name": row.name,
+                "role": row.role,
+                "disabled": row.disabled != 0,
+                "items": row.items,
+                "bytes": row.bytes,
+                "playlists": row.playlists,
+                "activeJobs": row.active_jobs,
+                "createdAt": row.created_at,
+            })
+        })
+        .collect();
     Ok(Json(json!({ "users": users })))
 }
 
@@ -3545,6 +3593,162 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn admin_user_list_aggregates_in_one_response() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-admin-list-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let admin = auth::create_user(&state.pool, "a@example.com", "Admin", "secret123", "admin")
+            .await
+            .unwrap();
+        let user = auth::create_user(&state.pool, "u@example.com", "User", "secret123", "user")
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &admin.id, 30)
+            .await
+            .unwrap();
+        let now = db::now_ms();
+        sqlx::query(
+            "INSERT INTO items (id, owner_id, kind, title, path, mime, bytes, created_at, updated_at)
+             VALUES ('i1', ?, 'music', 'A', 'music/aa/i1.mp3', 'audio/mpeg', 100, ?, ?)",
+        )
+        .bind(&user.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO playlists (id, owner_id, name, kind, created_at, updated_at)
+             VALUES ('p1', ?, 'List', 'playlist', ?, ?)",
+        )
+        .bind(&user.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO jobs (id, owner_id, dedupe_key, url, kind, mode, status,
+                               scheduled_at, created_at, updated_at)
+             VALUES ('j1', ?, 'k', 'https://example.com', 'music', 'audio+thumb',
+                     'queued', ?, ?, ?)",
+        )
+        .bind(&user.id)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+        let app = router(state);
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/admin/users")
+                    .header(axum::http::header::COOKIE, format!("mm_session={token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let row = value["users"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["email"] == "u@example.com")
+            .unwrap();
+        assert_eq!(row["items"], 1);
+        assert_eq!(row["bytes"], 100);
+        assert_eq!(row["playlists"], 1);
+        assert_eq!(row["activeJobs"], 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn playlist_thumbs_come_from_one_ordered_query() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-thumbs-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let user = auth::create_user(&state.pool, "u@example.com", "User", "secret123", "user")
+            .await
+            .unwrap();
+        let token = auth::create_session(&state.pool, &user.id, 30)
+            .await
+            .unwrap();
+        let now = db::now_ms();
+        sqlx::query(
+            "INSERT INTO playlists (id, owner_id, name, kind, created_at, updated_at)
+             VALUES ('p1', ?, 'List', 'playlist', ?, ?)",
+        )
+        .bind(&user.id)
+        .bind(now)
+        .bind(now)
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        for i in 1..=5 {
+            sqlx::query(
+                "INSERT INTO items (id, owner_id, kind, title, path, thumb_path, mime,
+                                    bytes, created_at, updated_at)
+                 VALUES (?, ?, 'picture', ?, ?, ?, 'image/jpeg', 1, ?, ?)",
+            )
+            .bind(format!("i{i}"))
+            .bind(&user.id)
+            .bind(format!("Picture {i}"))
+            .bind(format!("picture/aa/i{i}.jpg"))
+            .bind(format!(".thumbs/aa/i{i}.jpg"))
+            .bind(now)
+            .bind(now)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO playlist_items (playlist_id, item_id, position, added_at)
+                 VALUES ('p1', ?, ?, ?)",
+            )
+            .bind(format!("i{i}"))
+            .bind(i)
+            .bind(now)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        }
+
+        let app = router(state);
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/playlists")
+                    .header(axum::http::header::COOKIE, format!("mm_session={token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let list = value["playlists"].as_array().unwrap()[0].clone();
+        assert_eq!(list["itemCount"], 5);
+        assert!(list["thumbUrl"].as_str().unwrap().ends_with("i1.jpg"));
+        let thumbs = list["thumbUrls"].as_array().unwrap();
+        assert_eq!(thumbs.len(), 4);
+        assert!(thumbs[0].as_str().unwrap().ends_with("i1.jpg"));
+        assert!(thumbs[3].as_str().unwrap().ends_with("i4.jpg"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
