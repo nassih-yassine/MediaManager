@@ -1,5 +1,8 @@
 # VM Deployment and CI/CD — spec
 
+> Status and next steps are tracked in
+> `2026-11-16-oracle-deployment-handoff.md`.
+
 ## Intent
 
 Deploy and update MediaManager on a cheap VPS (Oracle Cloud Free Tier ARM or
@@ -45,8 +48,9 @@ release, and have it reach the server without logging in.
   nothing.
 - Cookies must be `Secure` only behind TLS; `MM_COOKIE_SECURE` and
   `MM_WEB_ORIGIN` must match the transport or login breaks.
-- `yt-dlp` in the API image needs Python; ffmpeg, node, poppler and unzip are
-  runtime deps (already in `crates/api/Dockerfile`).
+- ffmpeg, node, poppler and unzip are runtime deps (already in
+  `crates/api/Dockerfile`). The yt-dlp release binary is a self-contained
+  zipapp, so the `python3` package is likely removable; see the handoff spec.
 
 ## Approach
 
