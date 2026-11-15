@@ -462,9 +462,19 @@ export function Library() {
 
   const countLabel = useMemo(() => {
     if (loading) return "Fetching your collection…";
+    if (kind === "picture") {
+      if (galleries.length === 0 && total === 0) return "Nothing here yet";
+      const parts = [
+        `${galleries.length} ${galleries.length === 1 ? "gallery" : "galleries"}`,
+      ];
+      if (total > 0) {
+        parts.push(`${total} loose ${total === 1 ? "picture" : "pictures"}`);
+      }
+      return parts.join(" · ");
+    }
     if (total === 0) return "Nothing here yet";
     return `${total.toLocaleString()} ${total === 1 ? "item" : "items"}`;
-  }, [loading, total]);
+  }, [loading, total, kind, galleries]);
 
   return (
     <div>
