@@ -16,12 +16,14 @@ import {
   type ThemeMode,
   type ThemeName,
 } from "@/lib/appearance";
+import { type Locale, applyLocale, currentLocale, isLocale } from "@/lib/i18n";
 import { resetRealtime } from "@/lib/realtime";
 import type { AuthUser } from "@/lib/types";
 
 export interface Preferences {
   theme: ThemeName;
   themeMode: ThemeMode;
+  language: Locale;
 }
 
 /** Everything tied to the signed-in account, not the browser. */
@@ -55,12 +57,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState<Preferences | null>(null);
 
   const loadPreferences = useCallback(async () => {
-    const profile = await api<{ theme: ThemeName; themeMode: ThemeMode }>(
-      "/api/profile",
-    ).catch(() => null);
+    const profile = await api<{
+      theme: ThemeName;
+      themeMode: ThemeMode;
+      language?: string;
+    }>("/api/profile").catch(() => null);
     if (profile) {
-      setPreferences({ theme: profile.theme, themeMode: profile.themeMode });
+      const language = isLocale(profile.language)
+        ? profile.language
+        : currentLocale();
+      setPreferences({
+        theme: profile.theme,
+        themeMode: profile.themeMode,
+        language,
+      });
       applyAppearance(profile.theme, profile.themeMode);
+      if (isLocale(profile.language)) applyLocale(language);
     }
   }, []);
 
@@ -86,8 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const next = {
         theme: partial.theme ?? current?.theme ?? fallback.theme,
         themeMode: partial.themeMode ?? current?.themeMode ?? fallback.mode,
+        language: partial.language ?? current?.language ?? currentLocale(),
       };
       applyAppearance(next.theme, next.themeMode);
+      applyLocale(next.language);
       return next;
     });
     try {

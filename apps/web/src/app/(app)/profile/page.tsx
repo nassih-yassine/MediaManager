@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { LanguagePicker } from "@/components/LanguagePicker";
 import { ThemePicker } from "@/components/ThemePicker";
 import { SelectMenu } from "@/components/ui/SelectMenu";
 import { useToast } from "@/components/ui/Toast";
@@ -176,6 +177,10 @@ export default function ProfilePage() {
           <ThemePicker />
         </div>
       </section>
+
+      <div className="mt-4">
+        <LanguagePicker />
+      </div>
 
       {!isAdmin ? (
       <section className="mt-4 rounded-2xl border border-line bg-panel p-4">

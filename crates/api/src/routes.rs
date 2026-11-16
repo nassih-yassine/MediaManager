@@ -2321,6 +2321,7 @@ fn user_dto(user: &auth::User) -> serde_json::Value {
         "email": user.email,
         "name": user.name,
         "role": user.role,
+        "language": user.language,
     })
 }
 
@@ -2429,6 +2430,7 @@ fn profile_json(user: &auth::User) -> serde_json::Value {
         "user": user_dto(user),
         "theme": user.theme,
         "themeMode": user.theme_mode,
+        "language": user.language,
     })
 }
 
@@ -2442,6 +2444,7 @@ struct ProfileBody {
     name: Option<String>,
     theme: Option<String>,
     theme_mode: Option<String>,
+    language: Option<String>,
 }
 
 async fn update_profile(
@@ -2475,6 +2478,16 @@ async fn update_profile(
             "themeMode must be light or dark",
         ));
     }
+    let language = body
+        .language
+        .clone()
+        .unwrap_or_else(|| user.language.clone());
+    if language != "en" && language != "ar" {
+        return Err(ApiError::bad_request(
+            "invalid_preference",
+            "language must be en or ar",
+        ));
+    }
     // COALESCE keeps concurrent partial updates from clobbering each other:
     // only the fields present in this request are written.
     sqlx::query(
@@ -2482,12 +2495,14 @@ async fn update_profile(
            name       = COALESCE(?, name),
            theme      = COALESCE(?, theme),
            theme_mode = COALESCE(?, theme_mode),
+           language   = COALESCE(?, language),
            updated_at = ?
          WHERE id = ?",
     )
     .bind(body.name.as_deref().map(str::trim))
     .bind(body.theme.as_deref())
     .bind(body.theme_mode.as_deref())
+    .bind(body.language.as_deref())
     .bind(db::now_ms())
     .bind(&user.id)
     .execute(&state.pool)
@@ -3301,6 +3316,88 @@ mod tests {
         assert_eq!(stored.name, "Annie");
         assert_eq!(stored.theme, "moss");
         assert_eq!(stored.theme_mode, "light");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn profile_updates_language_and_rejects_unknown_values() {
+        use tower::ServiceExt;
+        let dir = std::env::temp_dir().join(format!("mm-lang-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = test_state(&dir).await;
+        let user = auth::create_user(&state.pool, "lang@example.com", "Lang", "secret123", "user")
+            .await
+            .unwrap();
+        assert_eq!(user.language, "en", "new accounts start in English");
+        let token = auth::create_session(&state.pool, &user.id, 30).await.unwrap();
+        let cookie = format!("{}={}", auth::COOKIE_NAME, token);
+        let app = router(state.clone());
+
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::PATCH)
+                    .uri("/api/profile")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"language":"ar"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("\"language\":\"ar\""), "{body}");
+        assert_eq!(
+            auth::find_user(&state.pool, &user.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .language,
+            "ar"
+        );
+
+        // A name-only PATCH must not reset the language.
+        let name_only = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::PATCH)
+                    .uri("/api/profile")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"name":"Renamed"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(name_only.status(), StatusCode::OK);
+        assert_eq!(
+            auth::find_user(&state.pool, &user.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .language,
+            "ar"
+        );
+
+        let bad = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(axum::http::Method::PATCH)
+                    .uri("/api/profile")
+                    .header(axum::http::header::COOKIE, &cookie)
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"language":"fr"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

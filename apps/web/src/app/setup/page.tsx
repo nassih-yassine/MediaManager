@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { FirstRunLanguage } from "@/components/FirstRunLanguage";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export default function SetupPage() {
   const { setup, user, needsSetup, loading } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -36,20 +39,19 @@ export default function SetupPage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center px-4">
+      <FirstRunLanguage />
       <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl">
         <span className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-base font-bold text-accent-ink">
           M
         </span>
         <h1 className="mt-4 text-xl font-semibold tracking-tight">
-          Create the admin account
+          {t("auth.setupTitle")}
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          Existing media and playlists are moved into this account.
-        </p>
+        <p className="mt-1 text-sm text-muted">{t("auth.setupBody")}</p>
 
         <form onSubmit={submit} className="mt-5 space-y-3">
           <label className="block text-xs font-medium text-muted">
-            Email
+            {t("auth.email")}
             <input
               type="email"
               required
@@ -60,7 +62,7 @@ export default function SetupPage() {
             />
           </label>
           <label className="block text-xs font-medium text-muted">
-            Display name
+            {t("auth.name")}
             <input
               required
               value={name}
@@ -69,7 +71,7 @@ export default function SetupPage() {
             />
           </label>
           <label className="block text-xs font-medium text-muted">
-            Password (8+ characters)
+            {t("auth.passwordHint")}
             <input
               type="password"
               required
@@ -86,12 +88,12 @@ export default function SetupPage() {
             disabled={busy}
             className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-ink disabled:opacity-50"
           >
-            {busy ? "Creating…" : "Create admin"}
+            {busy ? t("auth.creating") : t("auth.createAdmin")}
           </button>
         </form>
 
         <Link href="/login" className="mt-4 block text-center text-xs text-muted hover:text-ink">
-          Back to sign in
+          {t("auth.backToSignIn")}
         </Link>
       </div>
     </div>

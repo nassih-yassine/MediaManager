@@ -1,0 +1,38 @@
+/** The source of truth. Every other locale must cover these keys exactly. */
+export const en = {
+  "nav.library": "Library",
+  "nav.add": "Add media",
+  "nav.playlists": "Playlists",
+  "nav.admin": "Admin",
+  "nav.profile": "Profile",
+  "nav.notifications": "Notifications",
+  "sidebar.playlists": "Playlists",
+  "sidebar.newPlaylist": "New playlist",
+  "sidebar.firstPlaylist":
+    "Create your first playlist to group a mix of music, books and pictures.",
+  "app.loading": "Loading…",
+  "auth.signIn": "Sign in",
+  "auth.signOut": "Sign out",
+  "auth.email": "Email",
+  "auth.password": "Password",
+  "auth.name": "Display name",
+  "auth.privateNote": "Your library is private to your account.",
+  "auth.firstRun": "First run:",
+  "auth.createAdminLink": "create the admin account",
+  "auth.setupTitle": "Create the admin account",
+  "auth.setupBody": "Existing media and playlists are moved into this account.",
+  "auth.createAccount": "Create account",
+  "auth.createAdmin": "Create admin",
+  "auth.signingIn": "Signing in…",
+  "auth.creating": "Creating…",
+  "auth.passwordHint": "Password (8+ characters)",
+  "auth.backToSignIn": "Back to sign in",
+  "language.title": "Language",
+  "language.firstRunTitle": "Choose your language",
+  "language.firstRunBody": "You can change it later from your profile.",
+  "language.english": "English",
+  "language.arabic": "العربية",
+  "language.continue": "Continue",
+} as const;
+
+export type MessageKey = keyof typeof en;
