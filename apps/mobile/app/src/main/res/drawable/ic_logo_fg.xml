@@ -1,16 +1,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Card: 52 dp square, radius 16 = 52 / phi^3, inside the 66 dp safe circle. -->
-    <path android:fillColor="#9AE6B4"
-        android:pathData="M36.3,20.3 H77.9 L87.8,30.2 V71.8 A16,16 0 0 1 71.8,87.8 H36.3 A16,16 0 0 1 20.3,71.8 V36.3 A16,16 0 0 1 36.3,20.3 Z" />
-    <!-- Turned corner: 9.9 dp = 16 / phi, inner radius 2.3. -->
-    <path android:fillColor="#0A0C0F"
-        android:pathData="M77.9,20.3 V27.9 A2.3,2.3 0 0 0 80.2,30.2 H87.8 Z" />
-    <!-- Play: 26 dp tall, nudged right for optical centring. -->
-    <path android:fillColor="#0A0C0F"
-        android:strokeColor="#0A0C0F"
-        android:strokeWidth="3.4"
-        android:strokeLineJoin="round"
-        android:pathData="M44,42.4 L67,54 L44,65.6 Z" />
+    <path android:strokeColor="#9AE6B4" android:strokeWidth="9.28" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M-18.10,55.90 A69.609375,69.609375 0 0 1 102.47,55.90" />
+    <path android:strokeColor="#9AE6B4" android:strokeWidth="9.28" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M4.93,69.19 A43.02095968696384,43.02095968696384 0 0 1 79.44,69.19" />
+    <path android:strokeColor="#9AE6B4" android:strokeWidth="9.28" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M19.16,77.41 A26.58841531600259,26.58841531600259 0 0 1 65.21,77.41" />
 </vector>

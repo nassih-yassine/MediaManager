@@ -1,41 +1,39 @@
 # The mark
 
-A card with one corner turned, and a play mark cut through it. The card is the
-thing you keep; the play is the thing it does. Everything is one colour, so the
-mark survives a circular launcher mask, a 16 px favicon and a monochrome
-notification icon without a second version.
+Three arcs rising like sound waves — a library that plays. It takes Spotify's
+signal as a reference point and keeps the app's own character: near-black tile,
+the theme accent, and golden-ratio proportions instead of a fixed grid.
 
 ## Construction
 
-Built on a 512 grid with a 320 content box, every part derived from it and φ.
+Built on a 512 grid, anchored lower-left so the wave bleeds off the tile the way
+a real sound mark should.
 
 | Part | Value | Derivation |
 |---|---|---|
-| Card | 320 × 320 | content box |
-| Corner radius | 76 | `320 / φ³` |
-| Turned corner | 47 | `76 / φ` |
-| Fold inner radius | 11 | `47 / φ³` |
-| Play height | 159 | `320 / φ^1.45` |
-| Play stroke | 16 | `47 / φ²`, rounds the triangle's points |
+| Outer radius | 330 | fills the tile |
+| Middle radius | 204 | `330 / φ` |
+| Inner radius | 126 | `330 / φ²` |
+| Stroke | 44 | equal across all three arcs |
+| Arc span | −150° → −30° | 120°, open to the upper-right |
+| Anchor | (200, 430) | lower-left of the content box |
 
-The play is **not** centred in its bounding box: it is nudged right so its mass
-sits at the card's optical centre. A triangle centred by geometry always looks
-like it leans left.
+Equal stroke is deliberate: tapering the inner arcs to `44/φ`, `44/φ²` reads more
+"designed" but the thin arcs vanish below 32 px. Equal weight keeps all three
+waves legible down to a 16 px favicon.
 
 ## Rules the mark follows
 
-1. **One silhouette.** Three shapes, one fill, no strokes, no gradient, no
-   shadows. It reads as a shape, not a picture.
-2. **One colour.** It works on any accent from the six theme families, in black
-   on white, and as a white-on-transparent status-bar glyph.
-3. **Fixed proportions.** Change the size, never the ratios; all values scale
-   from the 320 content box.
-4. **Mask-safe.** The Android foreground keeps its content inside the 66 dp safe
-   circle (`52 / 108` of the canvas), so launchers may crop to a circle, squircle
-   or rounded square without shaving the card.
-5. **Degrades deliberately.** Below 32 px the fold disappears and the mark reads
-   as a card with a play — the small-size version is a simplification of the same
-   shape, not a different logo.
+1. **One colour.** Accent on the near-black tile; the same shape in white for the
+   status-bar glyph and black on white for monochrome use.
+2. **Golden radii.** The three circles are `R`, `R/φ`, `R/φ²`, so the eye reads a
+   harmonic decay rather than arbitrary spacing.
+3. **Bleed is the signature.** The wave is anchored off the tile, which is what
+   makes it a wave and not three rings in a box.
+4. **Scalable.** At 16 px it reads as two or three rising lines; the identity is in
+   the arc gesture, not in fine detail.
+5. **One source of truth.** `apps/web/public/logo.svg`; the Android foreground and
+   the notification glyph are the same geometry scaled to 108 and 24.
 
 ## Files
 
@@ -43,5 +41,4 @@ like it leans left.
 - `apps/web/public/logo.png` — 512 px render for Apple touch icons and docs.
 - `apps/mobile/app/src/main/res/drawable/ic_logo_fg.xml` — adaptive-icon
   foreground, same geometry scaled to 108.
-- `apps/mobile/app/src/main/res/drawable/ic_stat_mm.xml` — status-bar glyph,
-  simplified to one path for 24 dp.
+- `apps/mobile/app/src/main/res/drawable/ic_stat_mm.xml` — status-bar glyph at 24.
