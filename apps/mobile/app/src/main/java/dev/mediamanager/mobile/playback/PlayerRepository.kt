@@ -355,7 +355,8 @@ class PlayerRepository(
         _nowPlaying.value = snapshot
         NowPlayingWidget.widgetState = snapshot
         // Widget repaints are expensive (bitmap decode); only on a visible change.
-        val signature = "${item.id}|${snapshot.isPlaying}|${snapshot.title}"
+        val tick = if (snapshot.isPlaying) snapshot.positionMs / 5_000 else 0L
+        val signature = "${item.id}|${snapshot.isPlaying}|${snapshot.title}|$tick"
         if (signature != lastWidgetSignature) {
             lastWidgetSignature = signature
             WidgetPublisher.render(context, state = snapshot)

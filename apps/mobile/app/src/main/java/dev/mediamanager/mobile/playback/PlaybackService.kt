@@ -13,6 +13,10 @@ import dev.mediamanager.mobile.R
 class PlaybackService : MediaSessionService() {
 
     companion object {
+        /** Widget transport, forwarded as start commands (receivers cannot bind). */
+        const val ACTION_TOGGLE = "dev.mediamanager.mobile.playback.TOGGLE"
+        const val ACTION_NEXT = "dev.mediamanager.mobile.playback.NEXT"
+
         /** In-process handle for the video surface; the session is still the source of truth. */
         @Volatile
         var currentPlayer: ExoPlayer? = null
@@ -54,6 +58,14 @@ class PlaybackService : MediaSessionService() {
                 ),
             )
             .build()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_TOGGLE -> player?.let { if (it.isPlaying) it.pause() else it.play() }
+            ACTION_NEXT -> player?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
+        }
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

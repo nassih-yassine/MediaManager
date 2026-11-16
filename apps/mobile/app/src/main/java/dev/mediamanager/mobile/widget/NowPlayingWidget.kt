@@ -9,19 +9,20 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.widget.RemoteViews
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import com.google.common.util.concurrent.ListenableFuture
 import dev.mediamanager.mobile.MainActivity
 import dev.mediamanager.mobile.R
 import dev.mediamanager.mobile.playback.NowPlaying
 import dev.mediamanager.mobile.playback.PlaybackService
+import dev.mediamanager.mobile.ui.format.formatDuration
 import java.io.File
 
 /**
- * Now-playing widget. It never renders the video and never holds a player; it reads
- * the session the app already runs and sends transport commands back through a
- * short-lived MediaController.
+ * Home-screen twin of the mini player: cover, title, clock, progress line, and the
+ * two controls people actually reach for.
+ *
+ * Transport is forwarded to [PlaybackService] as a start command. A broadcast
+ * receiver is forbidden from binding to a service, so the widget never builds a
+ * MediaController itself; it only wakes the service that already owns the player.
  */
 class NowPlayingWidget : AppWidgetProvider() {
 
@@ -30,31 +31,26 @@ class NowPlayingWidget : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
-        WidgetPublisher.render(context, appWidgetManager, widgetState)
+        WidgetPublisher.render(context, appWidgetManager, NowPlayingWidget.widgetState)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        when (intent.action) {
-            ACTION_TOGGLE -> transport(context) { c ->
-                if (c.isPlaying) c.pause() else c.play()
-            }
-            ACTION_NEXT -> transport(context) { c ->
-                if (c.hasNextMediaItem()) c.seekToNextMediaItem()
-            }
+        val action = intent.action ?: return
+        if (action != ACTION_TOGGLE && action != ACTION_NEXT) return
+        val command = when (action) {
+            ACTION_TOGGLE -> PlaybackService.ACTION_TOGGLE
+            else -> PlaybackService.ACTION_NEXT
         }
-    }
-
-    private fun transport(context: Context, block: (MediaController) -> Unit) {
-        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future: ListenableFuture<MediaController> =
-            MediaController.Builder(context, token).buildAsync()
-        future.addListener({
-            val controller = runCatching { future.get() }.getOrNull() ?: return@addListener
-            // The service publishes on change and repaints us; just let go.
-            runCatching { block(controller) }
-            controller.release()
-        }, androidx.core.content.ContextCompat.getMainExecutor(context))
+        if (PlaybackService.currentPlayer != null) {
+            // Same process, service alive: hand it the command directly.
+            runCatching {
+                context.startService(Intent(context, PlaybackService::class.java).setAction(command))
+            }
+        } else {
+            // Nothing loaded: the useful thing is the app, on the player.
+            runCatching { context.startActivity(openPlayerIntent(context)) }
+        }
     }
 
     companion object {
@@ -62,17 +58,18 @@ class NowPlayingWidget : AppWidgetProvider() {
         const val ACTION_NEXT = "dev.mediamanager.mobile.widget.NEXT"
         const val EXTRA_OPEN_PLAYER = "open_player"
 
-        /** Snapshot pushed by the app whenever playback changes. */
+        /** Snapshot pushed by the app whenever playback moves. */
         @Volatile
         var widgetState: NowPlaying? = null
+
+        fun openPlayerIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java)
+                .putExtra(EXTRA_OPEN_PLAYER, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
 }
 
-/**
- * Renders the widget from a playback snapshot. Called by the provider on update and
- * by PlayerRepository every time it publishes, so the widget tracks the session
- * without polling.
- */
+/** Renders the widget from a playback snapshot; called by the app and the provider. */
 object WidgetPublisher {
 
     fun render(
@@ -90,9 +87,7 @@ object WidgetPublisher {
         val open = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java)
-                .putExtra(NowPlayingWidget.EXTRA_OPEN_PLAYER, true)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            NowPlayingWidget.openPlayerIntent(context),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         views.setOnClickPendingIntent(R.id.widget_cover, open)
@@ -102,27 +97,37 @@ object WidgetPublisher {
             views.setTextViewText(R.id.widget_title, context.getString(R.string.widget_idle))
             views.setTextViewText(R.id.widget_subtitle, context.getString(R.string.widget_idle_hint))
             views.setImageViewResource(R.id.widget_play, R.drawable.ic_widget_play)
+            views.setProgressBar(R.id.widget_progress, 1000, 0, false)
             views.setOnClickPendingIntent(R.id.widget_play, open)
             views.setOnClickPendingIntent(R.id.widget_next, open)
             return views
         }
 
+        val clock = buildString {
+            append(formatDuration(state.positionMs).ifEmpty { "0:00" })
+            append(" / ")
+            append(formatDuration(state.durationMs).ifEmpty { "--:--" })
+        }
         views.setTextViewText(R.id.widget_title, state.title)
-        views.setTextViewText(
-            R.id.widget_subtitle,
-            if (state.isPlaying) context.getString(R.string.widget_playing) else context.getString(R.string.widget_paused),
-        )
+        views.setTextViewText(R.id.widget_subtitle, clock)
         views.setImageViewResource(
             R.id.widget_play,
             if (state.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
         )
+        val fraction = if (state.durationMs > 0) {
+            (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+        views.setProgressBar(R.id.widget_progress, 1000, (fraction * 1000).toInt(), false)
         coverBitmap(context, state.thumbPath)?.let { views.setImageViewBitmap(R.id.widget_cover, it) }
-        views.setOnClickPendingIntent(R.id.widget_play, broadcast(context, NowPlayingWidget.ACTION_TOGGLE, 1))
-        views.setOnClickPendingIntent(R.id.widget_next, broadcast(context, NowPlayingWidget.ACTION_NEXT, 2))
+
+        views.setOnClickPendingIntent(R.id.widget_play, command(context, NowPlayingWidget.ACTION_TOGGLE, 1))
+        views.setOnClickPendingIntent(R.id.widget_next, command(context, NowPlayingWidget.ACTION_NEXT, 2))
         return views
     }
 
-    private fun broadcast(context: Context, action: String, code: Int): PendingIntent =
+    private fun command(context: Context, action: String, code: Int): PendingIntent =
         PendingIntent.getBroadcast(
             context,
             code,
