@@ -15,7 +15,7 @@ apps/desktop/src-tauri/gen/
 !.env.example
 !**/.env.example
 .envrc
-library/
+/library/
 *.db
 *.db-wal
 *.db-shm
