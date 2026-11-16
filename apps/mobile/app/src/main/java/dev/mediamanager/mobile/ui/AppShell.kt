@@ -58,6 +58,14 @@ import dev.mediamanager.mobile.ui.home.HomeScreen
 import dev.mediamanager.mobile.ui.library.LibraryScreen
 import dev.mediamanager.mobile.ui.player.MiniPlayer
 import dev.mediamanager.mobile.ui.player.PlayerOverlay
+import dev.mediamanager.mobile.ui.i18n.AppLanguage
+import dev.mediamanager.mobile.ui.i18n.ArabicStrings
+import dev.mediamanager.mobile.ui.i18n.EnglishStrings
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import dev.mediamanager.mobile.ui.i18n.LanguageFirstRunDialog
+import dev.mediamanager.mobile.ui.i18n.LocalStrings
+import dev.mediamanager.mobile.ui.i18n.Strings
 import dev.mediamanager.mobile.ui.settings.SettingsScreen
 import dev.mediamanager.mobile.ui.storage.StorageScreen
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
@@ -65,12 +73,20 @@ import dev.mediamanager.mobile.ui.theme.MmTheme
 import dev.mediamanager.mobile.ui.theme.ThemeFamily
 import dev.mediamanager.mobile.ui.theme.ThemeMode
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    HOME("Home", Icons.Default.Home),
-    LIBRARY("Library", Icons.Default.LibraryMusic),
-    ADD("Add", Icons.Default.AddCircle),
-    PLAYLISTS("Playlists", Icons.Default.PlaylistPlay),
-    SETTINGS("Settings", Icons.Default.Settings),
+private enum class Tab(val icon: ImageVector) {
+    HOME(Icons.Default.Home),
+    LIBRARY(Icons.Default.LibraryMusic),
+    ADD(Icons.Default.AddCircle),
+    PLAYLISTS(Icons.Default.PlaylistPlay),
+    SETTINGS(Icons.Default.Settings);
+
+    fun label(strings: Strings): String = when (this) {
+        HOME -> strings.tabHome
+        LIBRARY -> strings.tabLibrary
+        ADD -> strings.tabAdd
+        PLAYLISTS -> strings.tabPlaylists
+        SETTINGS -> strings.tabSettings
+    }
 }
 
 @androidx.compose.material3.ExperimentalMaterial3Api
@@ -85,7 +101,19 @@ fun AppShell(
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
         initialValue = Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
     )
+    val languageKey by container.settings.language.collectAsStateWithLifecycle(initialValue = null)
+    val languageChosen by container.settings.languageChosen
+        .collectAsStateWithLifecycle(initialValue = null as Boolean?)
+    val language = AppLanguage.fromKey(languageKey)
+    val strings = if (language == AppLanguage.ARABIC) ArabicStrings else EnglishStrings
+
     MmTheme(appearance.family, appearance.mode) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalStrings provides strings,
+            androidx.compose.ui.platform.LocalLayoutDirection provides
+                if (language.isRtl) androidx.compose.ui.unit.LayoutDirection.Rtl
+                else androidx.compose.ui.unit.LayoutDirection.Ltr,
+        ) {
         var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
         var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(player) {
@@ -105,6 +133,8 @@ fun AppShell(
             onReady()
         }
         var storageOpen by remember { mutableStateOf(false) }
+        var pendingLanguage by remember { mutableStateOf(AppLanguage.ENGLISH) }
+        val shellScope = rememberCoroutineScope()
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)
 
@@ -126,7 +156,7 @@ fun AppShell(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            if (current == Tab.HOME) "MediaManager" else current.label,
+                            if (current == Tab.HOME) strings.appName else current.label(strings),
                             color = colors.ink,
                             style = androidx.compose.material3.MaterialTheme.typography.displaySmall,
                             modifier = Modifier.padding(bottom = 6.dp),
@@ -160,18 +190,18 @@ fun AppShell(
                                             ) {
                                                 Icon(
                                                     entry.icon,
-                                                    contentDescription = entry.label,
+                                                    contentDescription = entry.label(strings),
                                                     tint = colors.accentInk,
                                                     modifier = Modifier.size(20.dp),
                                                 )
                                             }
                                         } else {
-                                            Icon(entry.icon, contentDescription = entry.label)
+                                            Icon(entry.icon, contentDescription = entry.label(strings))
                                         }
                                     },
                                     label = {
                                         Text(
-                                            entry.label,
+                                            entry.label(strings),
                                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                                             maxLines = 1,
                                         )
@@ -282,6 +312,16 @@ fun AppShell(
                 )
             }
 
+            if (languageChosen == false) {
+                LanguageFirstRunDialog(
+                    selected = pendingLanguage,
+                    onSelect = { pendingLanguage = it },
+                    onConfirm = {
+                        shellScope.launch { container.settings.setLanguage(pendingLanguage.key) }
+                    },
+                )
+            }
+
             androidx.compose.animation.AnimatedVisibility(
                 visible = loading,
                 exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(260)),
@@ -291,4 +331,5 @@ fun AppShell(
             }
         }
     }
+        }
 }

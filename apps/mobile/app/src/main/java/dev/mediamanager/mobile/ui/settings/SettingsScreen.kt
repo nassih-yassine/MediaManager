@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
@@ -74,6 +75,7 @@ fun SettingsScreen(
     val wifiOnly by container.settings.wifiOnly.collectAsStateWithLifecycle(initialValue = false)
     val maxHeight by container.settings.maxHeight.collectAsStateWithLifecycle(initialValue = 1080)
     val simultaneous by container.settings.concurrentDownloads.collectAsStateWithLifecycle(initialValue = 2)
+    val languageKey by container.settings.language.collectAsStateWithLifecycle(initialValue = null)
     val libraryBytes by container.db.itemDao().observeTotalBytes().collectAsStateWithLifecycle(initialValue = 0L)
 
     BackHandler(onBack = onBack)
@@ -131,6 +133,12 @@ fun SettingsScreen(
                 }
             }
         }
+
+        Spacer(Modifier.height(12.dp))
+        LanguageCard(
+            current = dev.mediamanager.mobile.ui.i18n.AppLanguage.fromKey(languageKey),
+            onPick = { scope.launch { container.settings.setLanguage(it.key) } },
+        )
 
         Spacer(Modifier.height(12.dp))
         SettingsCard("Downloads", Icons.Default.Download) {
@@ -275,6 +283,20 @@ private fun ThemeOption(
                     Box(Modifier.size(14.dp).clip(CircleShape).background(dot))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LanguageCard(
+    current: dev.mediamanager.mobile.ui.i18n.AppLanguage,
+    onPick: (dev.mediamanager.mobile.ui.i18n.AppLanguage) -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Column(Modifier.fillMaxWidth()) {
+        SectionTitle(dev.mediamanager.mobile.ui.i18n.LocalStrings.current.languageTitle, Icons.Default.Language)
+        MmSurface(Modifier.fillMaxWidth()) {
+            dev.mediamanager.mobile.ui.i18n.LanguagePickerRow(current = current, onPick = onPick)
         }
     }
 }

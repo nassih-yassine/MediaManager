@@ -27,6 +27,22 @@ class SettingsStore(private val context: Context) {
         val concurrentDownloads = intPreferencesKey("concurrent_downloads")
         val recentUrls = stringPreferencesKey("recent_urls")
         val lastItemId = stringPreferencesKey("last_item_id")
+        val language = stringPreferencesKey("language")
+        val languageChosen = booleanPreferencesKey("language_chosen")
+    }
+
+    /** Empty until the first-run chooser has been answered once. */
+    val language: Flow<String?> = context.dataStore.data.map { it[Keys.language] }
+
+    val languageChosen: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.languageChosen] ?: false
+    }
+
+    suspend fun setLanguage(language: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.language] = language
+            prefs[Keys.languageChosen] = true
+        }
     }
 
     val appearance: Flow<Appearance> = context.dataStore.data.map { prefs ->
