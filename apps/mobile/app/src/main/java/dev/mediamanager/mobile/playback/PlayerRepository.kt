@@ -56,6 +56,12 @@ class PlayerRepository(
     private var current: Item? = null
     private var ticks = 0
 
+    /** Waiting for a yes/no on long media that already has a saved position. */
+    data class ResumePoint(val itemId: String, val positionMs: Long)
+
+    private val _resumePrompt = MutableStateFlow<ResumePoint?>(null)
+    val resumePrompt: StateFlow<ResumePoint?> = _resumePrompt.asStateFlow()
+
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
     val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
 
@@ -148,14 +154,37 @@ class PlayerRepository(
             db.queueDao().replaceAll(items.map { it.id })
             settings.setLastItemId(items[index].id)
         }
-        c.setMediaItems(items.map(::mediaItem), index, 0)
         val target = resumeTarget(current?.positionMs ?: 0, current?.durationMs)
-        if (target > 0) c.seekTo(index, target)
+        c.setMediaItems(items.map(::mediaItem), index, 0)
         c.prepare()
-        c.play()
+        if (target > 0) {
+            // Long media: hold on the first frame and ask, so nobody is dropped into
+            // the middle of something they meant to restart.
+            c.playWhenReady = false
+            _resumePrompt.value = ResumePoint(items[index].id, target)
+        } else {
+            c.play()
+        }
         publish()
         // Tapping a piece of media always lands on the big player.
         openPlayer()
+    }
+
+    /** Continue from the saved frame and start playing. */
+    fun resumeFromPrompt() {
+        val point = _resumePrompt.value ?: return
+        controller?.seekTo(point.positionMs.coerceAtLeast(0))
+        controller?.play()
+        _resumePrompt.value = null
+        publish()
+    }
+
+    /** Ignore the saved frame and begin at the first second. */
+    fun startOver() {
+        controller?.seekTo(0)
+        controller?.play()
+        _resumePrompt.value = null
+        publish()
     }
 
     fun playNext(item: Item) {
@@ -233,6 +262,7 @@ class PlayerRepository(
     }
 
     fun stop() {
+        _resumePrompt.value = null
         savePosition()
         controller?.stop()
         controller?.clearMediaItems()

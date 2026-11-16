@@ -97,6 +97,7 @@ fun NowPlayingScreen(
 ) {
     val colors = LocalAppColors.current
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
+    val resumePoint by player.resumePrompt.collectAsStateWithLifecycle(initialValue = null)
     val queue by player.queue.collectAsStateWithLifecycle(initialValue = emptyList())
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     val route by audio.route.collectAsStateWithLifecycle()
@@ -134,6 +135,14 @@ fun NowPlayingScreen(
                         1f to colors.canvas.copy(alpha = 0.65f),
                     ),
                 ),
+            )
+        }
+
+        resumePoint?.let { point ->
+            ResumeDialog(
+                positionMs = point.positionMs,
+                onResume = { player.resumeFromPrompt() },
+                onStartOver = { player.startOver() },
             )
         }
 

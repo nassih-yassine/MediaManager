@@ -30,10 +30,17 @@ fun checkSpace(
 const val RESUME_MIN_MS: Long = 3_000
 const val RESUME_END_GUARD_MS: Long = 5_000
 
-/** Where playback should start: 0 for a fresh item, the saved point otherwise. */
+/**
+ * Only programming asks to continue. A four-minute clip is quicker to restart than
+ * to re-orient in, so anything under ten minutes always begins at zero.
+ */
+const val RESUME_MIN_DURATION_MS: Long = 10 * 60_000
+
+/** Where playback should start: 0 for a fresh or short item, the saved point otherwise. */
 fun resumeTarget(positionMs: Long, durationMs: Long?): Long {
     if (positionMs < RESUME_MIN_MS) return 0
-    if (durationMs != null && durationMs > 0 && positionMs > durationMs - RESUME_END_GUARD_MS) return 0
+    if (durationMs == null || durationMs < RESUME_MIN_DURATION_MS) return 0
+    if (positionMs > durationMs - RESUME_END_GUARD_MS) return 0
     return positionMs
 }
 

@@ -72,10 +72,12 @@ class DownloadRulesTest {
 
     @Test
     fun `resume seeks only past three seconds and away from the end`() {
-        assertEquals(0L, resumeTarget(1_000, 100_000))
-        assertEquals(30_000L, resumeTarget(30_000, 100_000))
-        assertEquals(0L, resumeTarget(98_000, 100_000))
-        assertEquals(30_000L, resumeTarget(30_000, null))
+        val long = 30 * 60_000L
+        assertEquals(0L, resumeTarget(1_000, long))
+        assertEquals(30_000L, resumeTarget(30_000, long))
+        assertEquals(0L, resumeTarget(long - 2_000, long))
+        // An unknown duration cannot prove the item is long, so it restarts.
+        assertEquals(0L, resumeTarget(30_000, null))
         assertEquals(0L, resumeTarget(0, null))
     }
 
