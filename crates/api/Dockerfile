@@ -1,6 +1,6 @@
 # Dependency-aware build: cargo-chef keeps the compiled crates in a layer that
 # only invalidates when Cargo.toml/Cargo.lock change, not on every source edit.
-FROM rust:1.99-bookworm AS chef
+FROM rust:1.100-bookworm AS chef
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
