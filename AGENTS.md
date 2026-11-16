@@ -409,22 +409,3 @@ than polling the output file.
 - **Mute is real.** The speaker glyph toggles `STREAM_MUSIC` to 0 and back to the
   remembered level; the icon becomes a struck-through speaker in the accent
   colour. Verified with `dumpsys audio` (`streamVolume:0`, then `7`).
-
-## Language (en / ar)
-
-- **Account column, device cache.** `users.language` is `en`|`ar` (migration
-  `0013`), read and written through `GET`/`PATCH /api/profile`. `mm.locale` in
-  localStorage is only the first-paint cache; the account wins on sign-in.
-- **No routes, no dependency.** `src/lib/i18n` holds a typed message map:
-  `messages/en.ts` is the source of truth and `messages/ar.ts` is typed against
-  it, so a missing Arabic key is a `tsc` error, not a blank label.
-- **First paint.** The inline script in `layout.tsx` sets `lang`/`dir` from
-  `mm.locale` before paint, so RTL never flashes.
-- **First run.** `FirstRunLanguage` asks once per device when `mm.locale` is
-  unset, defaulting to English; it is mounted on `/login` and `/setup` because
-  there is no account yet. `LanguagePicker` on `/profile` writes the account.
-- **Direction work.** Physical utilities (`left-*`, `right-*`, `pl-*`, `pr-*`)
-  must become logical (`start-*`, `end-*`, `ps-*`, `pe-*`); keep numbers and
-  durations wrapped `dir="ltr"` so timestamps do not scramble.
-- **Rendering text.** `I18nProvider` returns English when no provider is
-  mounted, which is why the component tests keep asserting plain strings.

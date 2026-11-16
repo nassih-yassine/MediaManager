@@ -12,20 +12,18 @@ import {
 } from "@/components/icons";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useRealtime } from "@/lib/realtime";
 import type { PlaylistSummary } from "@/lib/types";
 
 const NAV = [
-  { href: "/", key: "nav.library", icon: LibraryIcon, mobileOnly: false },
-  { href: "/add", key: "nav.add", icon: AddMediaIcon, mobileOnly: false },
-  { href: "/playlists", key: "nav.playlists", icon: DiscIcon, mobileOnly: true },
-] as const;
+  { href: "/", label: "Library", icon: LibraryIcon, mobileOnly: false },
+  { href: "/add", label: "Add media", icon: AddMediaIcon, mobileOnly: false },
+  { href: "/playlists", label: "Playlists", icon: DiscIcon, mobileOnly: true },
+];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const { t } = useI18n();
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -93,7 +91,7 @@ export function Sidebar() {
                 }`}
               >
                 <Icon className="h-4 w-4" />
-                <span className="font-medium">{t(item.key)}</span>
+                <span className="font-medium">{item.label}</span>
               </Link>
             );
           })}
@@ -109,7 +107,7 @@ export function Sidebar() {
               <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-current text-[9px] font-bold">
                 A
               </span>
-              <span className="font-medium">{t("nav.admin")}</span>
+              <span className="font-medium">Admin</span>
             </Link>
           ) : null}
         </nav>
@@ -117,11 +115,11 @@ export function Sidebar() {
         <div className="hidden md:block md:w-full">
           <div className="flex items-center justify-between px-2.5 pb-2">
             <span className="text-[10px] font-semibold tracking-[0.14em] text-muted uppercase">
-              {t("sidebar.playlists")}
+              Playlists
             </span>
             <Link
               href="/playlists"
-              aria-label={t("sidebar.newPlaylist")}
+              aria-label="New playlist"
               className="rounded-md p-1 text-muted transition-colors hover:bg-panel-2 hover:text-ink"
             >
               <PlusIcon className="h-3.5 w-3.5" />
@@ -134,7 +132,7 @@ export function Sidebar() {
                 href="/playlists"
                 className="block rounded-lg px-2.5 py-2 text-xs leading-relaxed text-muted transition-colors hover:bg-panel-2 hover:text-ink"
               >
-                {t("sidebar.firstPlaylist")}
+                Create your first playlist to group a mix of music, books and pictures.
               </Link>
             ) : (
               playlists.slice(0, 12).map((playlist) => {
