@@ -80,6 +80,7 @@ fun AppShell(
     player: PlayerRepository,
     sharedUrl: String? = null,
     onSharedHandled: () -> Unit = {},
+    onReady: () -> Unit = {},
 ) {
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
         initialValue = Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
@@ -91,6 +92,18 @@ fun AppShell(
             player.openRequests.collect { nowPlayingOpen = true }
         }
         var downloadsOpen by remember { mutableStateOf(false) }
+        // Hold a branded screen until the database has actually answered once.
+        var loading by remember { mutableStateOf(true) }
+        LaunchedEffect(container) {
+            val started = System.currentTimeMillis()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                container.db.itemDao().count()
+            }
+            val spent = System.currentTimeMillis() - started
+            if (spent < 350) kotlinx.coroutines.delay(350 - spent)
+            loading = false
+            onReady()
+        }
         var storageOpen by remember { mutableStateOf(false) }
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)
@@ -267,6 +280,14 @@ fun AppShell(
                     volume = container.volume,
                     onClose = { nowPlayingOpen = false },
                 )
+            }
+
+            androidx.compose.animation.AnimatedVisibility(
+                visible = loading,
+                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(260)),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LoadingScreen()
             }
         }
     }

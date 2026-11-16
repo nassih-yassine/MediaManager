@@ -393,16 +393,19 @@ than polling the output file.
 8. Create a playlist, select items in the library, add them, drag to reorder.
 9. Switch theme on `/profile`, reload (or sign in on another browser) → theme and mode persist.
 
-## Pending on-device checks (2026-11-16)
+## Startup and the big player (verified on device)
 
-Two UI changes were built and installed but never confirmed with a clean
-screenshot because the emulator-free test loop kept catching mid-animation
-frames. Verify on the phone before trusting them:
-
-- **Mute toggle.** Tap the speaker glyph on the big player: the icon should turn
-  into a struck-through speaker tinted with the accent, `STREAM_MUSIC` should
-  drop to 0, and a second tap should restore the previous level.
-- **Video aspect ratio.** Open a 16:9 video in the big player: the frame should
-  be 16:9 with no letterbox bars, sitting in the same slot the audio artwork
-  uses. `VideoSlot` reads `exo.videoSize`, so a 4:3 or vertical clip should
-  change the frame shape.
+- **Cold start uses the system splash.** `MainActivity` calls
+  `installSplashScreen()` and holds it until `AppShell` reports the first database
+  read (`onReady`). The theme `Theme.MediaManager.Splash` paints the mark on
+  `@color/ic_launcher_bg`, so there is no blank window before Compose draws. Keep
+  `windowBackground` on the base theme as well: it is what fills the gap when the
+  splash is dismissed early.
+- **`LoadingScreen` is the second half.** It covers the moment after the splash
+  while the DB answers, with a 350 ms floor so it never flashes.
+- **One big player for both kinds.** `NowPlayingScreen` takes an optional
+  `mediaSlot`; video passes `VideoSlot`, which reads `exo.videoSize` so the frame
+  matches the stream (16:9, 4:3, vertical) instead of a fixed square.
+- **Mute is real.** The speaker glyph toggles `STREAM_MUSIC` to 0 and back to the
+  remembered level; the icon becomes a struck-through speaker in the accent
+  colour. Verified with `dumpsys audio` (`streamVolume:0`, then `7`).

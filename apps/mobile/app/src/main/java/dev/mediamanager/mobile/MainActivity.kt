@@ -11,11 +11,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.mediamanager.mobile.ui.AppShell
 
 class MainActivity : ComponentActivity() {
 
     private val sharedLink = mutableStateOf<String?>(null)
+
+    /** Held by the system splash until the first screen is actually ready. */
+    private val appReady = mutableStateOf(false)
 
     private val requestNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -23,6 +27,8 @@ class MainActivity : ComponentActivity() {
     @androidx.compose.material3.ExperimentalMaterial3Api
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val splash = installSplashScreen()
+        splash.setKeepOnScreenCondition { !appReady.value }
         enableEdgeToEdge()
         maybeAskForNotifications()
         val container = (application as App).container
@@ -33,6 +39,7 @@ class MainActivity : ComponentActivity() {
                 player = container.player,
                 sharedUrl = sharedLink.value,
                 onSharedHandled = { sharedLink.value = null },
+                onReady = { appReady.value = true },
             )
         }
     }

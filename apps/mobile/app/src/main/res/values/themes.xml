@@ -4,5 +4,15 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
+        <!-- Cold start: paint brand darkness instead of the framework grey. -->
+        <item name="android:windowBackground">@color/ic_launcher_bg</item>
+    </style>
+
+    <!-- System splash: the logo is on screen from the first frame, so there is no
+         blank window while Compose warms up. -->
+    <style name="Theme.MediaManager.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_logo_fg</item>
+        <item name="postSplashScreenTheme">@style/Theme.MediaManager</item>
     </style>
 </resources>
