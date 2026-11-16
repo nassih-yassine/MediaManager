@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.widget.RemoteViews
+import androidx.media3.common.Player
 import dev.mediamanager.mobile.MainActivity
 import dev.mediamanager.mobile.R
 import dev.mediamanager.mobile.playback.NowPlaying
@@ -37,10 +38,12 @@ class NowPlayingWidget : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         val action = intent.action ?: return
-        if (action != ACTION_TOGGLE && action != ACTION_NEXT) return
         val command = when (action) {
             ACTION_TOGGLE -> PlaybackService.ACTION_TOGGLE
-            else -> PlaybackService.ACTION_NEXT
+            ACTION_NEXT -> PlaybackService.ACTION_NEXT
+            ACTION_PREV -> PlaybackService.ACTION_PREV
+            ACTION_REPEAT -> PlaybackService.ACTION_REPEAT
+            else -> return
         }
         if (PlaybackService.currentPlayer != null) {
             // Same process, service alive: hand it the command directly.
@@ -56,6 +59,8 @@ class NowPlayingWidget : AppWidgetProvider() {
     companion object {
         const val ACTION_TOGGLE = "dev.mediamanager.mobile.widget.TOGGLE"
         const val ACTION_NEXT = "dev.mediamanager.mobile.widget.NEXT"
+        const val ACTION_PREV = "dev.mediamanager.mobile.widget.PREV"
+        const val ACTION_REPEAT = "dev.mediamanager.mobile.widget.REPEAT"
         const val EXTRA_OPEN_PLAYER = "open_player"
 
         /** Snapshot pushed by the app whenever playback moves. */
@@ -98,8 +103,11 @@ object WidgetPublisher {
             views.setTextViewText(R.id.widget_subtitle, context.getString(R.string.widget_idle_hint))
             views.setImageViewResource(R.id.widget_play, R.drawable.ic_widget_play)
             views.setProgressBar(R.id.widget_progress, 1000, 0, false)
+            views.setImageViewResource(R.id.widget_repeat, R.drawable.ic_widget_repeat)
             views.setOnClickPendingIntent(R.id.widget_play, open)
             views.setOnClickPendingIntent(R.id.widget_next, open)
+            views.setOnClickPendingIntent(R.id.widget_prev, open)
+            views.setOnClickPendingIntent(R.id.widget_repeat, open)
             return views
         }
 
@@ -122,8 +130,18 @@ object WidgetPublisher {
         views.setProgressBar(R.id.widget_progress, 1000, (fraction * 1000).toInt(), false)
         coverBitmap(context, state.thumbPath)?.let { views.setImageViewBitmap(R.id.widget_cover, it) }
 
+        views.setImageViewResource(
+            R.id.widget_repeat,
+            when (state.repeatMode) {
+                Player.REPEAT_MODE_ONE -> R.drawable.ic_widget_repeat_one
+                Player.REPEAT_MODE_ALL -> R.drawable.ic_widget_repeat_on
+                else -> R.drawable.ic_widget_repeat
+            },
+        )
         views.setOnClickPendingIntent(R.id.widget_play, command(context, NowPlayingWidget.ACTION_TOGGLE, 1))
         views.setOnClickPendingIntent(R.id.widget_next, command(context, NowPlayingWidget.ACTION_NEXT, 2))
+        views.setOnClickPendingIntent(R.id.widget_prev, command(context, NowPlayingWidget.ACTION_PREV, 3))
+        views.setOnClickPendingIntent(R.id.widget_repeat, command(context, NowPlayingWidget.ACTION_REPEAT, 4))
         return views
     }
 

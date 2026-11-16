@@ -16,6 +16,8 @@ class PlaybackService : MediaSessionService() {
         /** Widget transport, forwarded as start commands (receivers cannot bind). */
         const val ACTION_TOGGLE = "dev.mediamanager.mobile.playback.TOGGLE"
         const val ACTION_NEXT = "dev.mediamanager.mobile.playback.NEXT"
+        const val ACTION_PREV = "dev.mediamanager.mobile.playback.PREV"
+        const val ACTION_REPEAT = "dev.mediamanager.mobile.playback.REPEAT"
 
         /** In-process handle for the video surface; the session is still the source of truth. */
         @Volatile
@@ -64,6 +66,18 @@ class PlaybackService : MediaSessionService() {
         when (intent?.action) {
             ACTION_TOGGLE -> player?.let { if (it.isPlaying) it.pause() else it.play() }
             ACTION_NEXT -> player?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
+            // Mirrors the app: restart the track unless it just started, then step back.
+            ACTION_PREV -> player?.let {
+                if (it.currentPosition > 3_000) it.seekTo(0)
+                else if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem()
+            }
+            ACTION_REPEAT -> player?.let {
+                it.repeatMode = when (it.repeatMode) {
+                    androidx.media3.common.Player.REPEAT_MODE_OFF -> androidx.media3.common.Player.REPEAT_MODE_ALL
+                    androidx.media3.common.Player.REPEAT_MODE_ALL -> androidx.media3.common.Player.REPEAT_MODE_ONE
+                    else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+                }
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }

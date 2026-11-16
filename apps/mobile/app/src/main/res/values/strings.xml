@@ -9,5 +9,7 @@
     <string name="widget_cover">Cover art</string>
     <string name="widget_play">Play or pause</string>
     <string name="widget_next">Next</string>
+    <string name="widget_prev">Previous</string>
+    <string name="widget_repeat">Repeat</string>
     <string name="widget_description">Controls for whatever is playing</string>
 </resources>
