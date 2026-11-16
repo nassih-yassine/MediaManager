@@ -37,6 +37,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +87,9 @@ fun AppShell(
     MmTheme(appearance.family, appearance.mode) {
         var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
         var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(player) {
+            player.openRequests.collect { nowPlayingOpen = true }
+        }
         var downloadsOpen by remember { mutableStateOf(false) }
         var storageOpen by remember { mutableStateOf(false) }
         val colors = LocalAppColors.current

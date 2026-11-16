@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MediaManager">
+  <title>MediaManager</title>
   <rect width="512" height="512" rx="116" fill="#0a0c0f"/>
-  <path d="M171 146 341 256 171 366Z" fill="#9ae6b4" stroke="#9ae6b4" stroke-width="28" stroke-linejoin="round"/>
+  <rect x="96" y="96" width="148" height="148" rx="36" fill="#9ae6b4"/>
+  <rect x="268" y="96" width="148" height="148" rx="36" fill="#9ae6b4"/>
+  <rect x="96" y="268" width="148" height="148" rx="36" fill="#9ae6b4"/>
+  <path d="M292 302 L382 341 L292 380 Z" fill="#9ae6b4" stroke="#9ae6b4" stroke-width="10" stroke-linejoin="round"/>
 </svg>

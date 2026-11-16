@@ -59,6 +59,14 @@ class PlayerRepository(
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
     val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
 
+    /** Bumped whenever something asks for the big player; the shell listens. */
+    private val _openRequests = MutableStateFlow(0)
+    val openRequests: StateFlow<Int> = _openRequests.asStateFlow()
+
+    fun openPlayer() {
+        _openRequests.value = _openRequests.value + 1
+    }
+
     private val _queue = MutableStateFlow<List<Item>>(emptyList())
     val queue: StateFlow<List<Item>> = _queue.asStateFlow()
 
@@ -146,6 +154,8 @@ class PlayerRepository(
         c.prepare()
         c.play()
         publish()
+        // Tapping a piece of media always lands on the big player.
+        openPlayer()
     }
 
     fun playNext(item: Item) {

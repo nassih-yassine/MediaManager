@@ -8,7 +8,7 @@ WEB_DIR := apps/web
 CARGO_RUN := cargo run --manifest-path $(API_DIR)/Cargo.toml
 ENGINE ?= podman
 
-.PHONY: help install dev api worker web build test check lint fmt clean images setup mobile mobile-test
+.PHONY: help install dev api worker web build test check lint fmt clean images setup mobile mobile-test mobile-install
 
 help:
 	@echo "make install   install web deps + fetch rust deps"
@@ -25,12 +25,18 @@ help:
 	@echo "make setup     create the first admin (interactive)"
 	@echo "make mobile    build the Android APK"
 	@echo "make mobile-test  Android unit tests"
+	@echo "make mobile-install  install the debug APK if the phone has room"
 
 mobile:
 	cd apps/mobile && ./gradlew assembleDebug
 
 mobile-test:
 	cd apps/mobile && ./gradlew testDebugUnitTest
+
+# Refuses to install when free space is below the APK size plus headroom.
+mobile-install:
+	cd apps/mobile && ./gradlew assembleDebug
+	scripts/install-apk.sh apps/mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 
 install:
 	cd $(WEB_DIR) && npm install

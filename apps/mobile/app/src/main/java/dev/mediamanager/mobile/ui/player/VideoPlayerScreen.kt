@@ -86,11 +86,23 @@ fun PlayerOverlay(
     onClose: () -> Unit,
 ) {
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
-    if (now?.isVideo == true) {
-        VideoWatchScreen(player = player, onClose = onClose)
-    } else {
-        NowPlayingScreen(player = player, filesDir = filesDir, audio = audio, volume = volume, onClose = onClose)
+    var expanded by remember { mutableStateOf(false) }
+    if (now?.isVideo == true && expanded) {
+        VideoPlayerScreen(player = player, onClose = { expanded = false })
+        return
     }
+    NowPlayingScreen(
+        player = player,
+        filesDir = filesDir,
+        audio = audio,
+        volume = volume,
+        onClose = onClose,
+        mediaSlot = if (now?.isVideo == true) {
+            { VideoSlot(player = player, onExpand = { expanded = true }) }
+        } else {
+            null
+        },
+    )
 }
 
 /**

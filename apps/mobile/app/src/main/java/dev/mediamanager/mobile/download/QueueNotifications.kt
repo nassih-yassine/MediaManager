@@ -57,7 +57,7 @@ object QueueNotifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_logo_fg)
+            .setSmallIcon(R.drawable.ic_stat_mm)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -82,7 +82,7 @@ object QueueNotifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_logo_fg)
+            .setSmallIcon(R.drawable.ic_stat_mm)
             .setContentTitle("MediaManager")
             .setContentText(summary(state, activeTitle))
             .setContentIntent(open)

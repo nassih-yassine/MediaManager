@@ -1,5 +1,7 @@
 package dev.mediamanager.mobile.ui.home
 
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -91,20 +93,17 @@ fun HomeScreen(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.height(8.dp))
-                addedItems.take(8).chunked(2).forEach { row ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        row.forEach { item ->
-                            JumpCard(
-                                item = item,
-                                filesDir = filesDir,
-                                modifier = Modifier.weight(1f),
-                                onClick = { player.playItems(addedItems, addedItems.indexOf(item)) },
-                            )
-                        }
-                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                val recent = addedItems.take(8)
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    recent.forEach { item ->
+                        JumpRow(
+                            item = item,
+                            filesDir = filesDir,
+                            onClick = { player.playItems(addedItems, addedItems.indexOf(item)) },
+                        )
                     }
                 }
             }
@@ -113,19 +112,20 @@ fun HomeScreen(
 }
 
 @Composable
-private fun JumpCard(
+private fun JumpRow(
     item: Item,
     filesDir: java.io.File,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val colors = LocalAppColors.current
     Row(
-        modifier
-            .clip(RoundedCornerShape(14.dp))
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .background(colors.panel)
+            .border(1.dp, colors.line, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(8.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Thumb(item, filesDir, Modifier.size(48.dp))
@@ -138,10 +138,20 @@ private fun JumpCard(
                 style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             )
             Text(
-                if (item.isAudio) "Audio" else "Video",
+                buildString {
+                    append(if (item.isAudio) "Audio" else "Video")
+                    val duration = formatDuration(item.durationMs)
+                    if (duration.isNotEmpty()) append(" · ").append(duration)
+                },
                 color = colors.muted,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
             )
         }
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = "Play",
+            tint = colors.accent,
+            modifier = Modifier.size(22.dp).padding(start = 4.dp),
+        )
     }
 }

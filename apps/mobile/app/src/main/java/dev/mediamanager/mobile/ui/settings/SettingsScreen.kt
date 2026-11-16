@@ -217,7 +217,7 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
         SettingsCard("About", Icons.Default.Info) {
-            KeyValueRow("Version", "0.1.0", Modifier.padding(vertical = 12.dp))
+            KeyValueRow("Version", dev.mediamanager.mobile.BuildConfig.VERSION_NAME, Modifier.padding(vertical = 12.dp))
         }
 
         Spacer(Modifier.height(24.dp))

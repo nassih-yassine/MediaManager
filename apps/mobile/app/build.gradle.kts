@@ -14,6 +14,22 @@ val localProps = Properties().apply {
 fun signingValue(key: String): String? =
     providers.gradleProperty(key).orNull ?: localProps.getProperty(key)
 
+/** Git facts for the version string; a source zip without .git still builds. */
+fun git(vararg args: String): String? = runCatching {
+    val process = ProcessBuilder(listOf("git") + args)
+        .directory(rootProject.projectDir)
+        .redirectError(ProcessBuilder.Redirect.DISCARD)
+        .start()
+    val text = process.inputStream.bufferedReader().readText().trim()
+    if (process.waitFor() != 0) null else text.ifBlank { null }
+}.getOrNull()
+
+val commitCount = git("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 1
+val releaseTag = git("describe", "--tags", "--abbrev=0", "--match", "android-v*")
+    ?.removePrefix("android-v")
+// Tagged builds read as their tag; anything else counts commits so no two builds match.
+val appVersionName = "${releaseTag ?: "0.1"}.$commitCount"
+
 val releaseStoreFile = signingValue("MM_STORE_FILE")
 val releaseStorePassword = signingValue("MM_STORE_PASSWORD")
 val releaseKeyAlias = signingValue("MM_KEY_ALIAS")
@@ -27,8 +43,8 @@ android {
         applicationId = "dev.mediamanager.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 10_000 + commitCount
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -45,7 +61,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (releaseStoreFile != null) {
                 signingConfigs.getByName("release")
@@ -62,6 +79,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
@@ -78,7 +96,7 @@ android {
             isEnable = true
             reset()
             include("arm64-v8a")
-            isUniversalApk = true
+            isUniversalApk = false
         }
     }
 }

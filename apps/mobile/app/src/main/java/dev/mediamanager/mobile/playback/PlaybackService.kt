@@ -42,7 +42,7 @@ class PlaybackService : MediaSessionService() {
                 .setChannelName(R.string.playback_channel)
                 .setNotificationId(1001)
                 .build()
-                .apply { setSmallIcon(R.drawable.ic_logo_fg) },
+                .apply { setSmallIcon(R.drawable.ic_stat_mm) },
         )
         session = MediaSession.Builder(this, exo)
             .setSessionActivity(

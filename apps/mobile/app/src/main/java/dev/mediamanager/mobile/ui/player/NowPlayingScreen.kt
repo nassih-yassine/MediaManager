@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -91,6 +92,8 @@ fun NowPlayingScreen(
     audio: AudioOutputMonitor,
     volume: VolumeControl,
     onClose: () -> Unit,
+    /** Replaces the square artwork; the video slot brings its own aspect ratio. */
+    mediaSlot: (@Composable () -> Unit)? = null,
 ) {
     val colors = LocalAppColors.current
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
@@ -98,6 +101,8 @@ fun NowPlayingScreen(
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     val route by audio.route.collectAsStateWithLifecycle()
     var volumeLevel by remember { mutableIntStateOf(volume.current) }
+    // Kept so the speaker glyph can bring the volume back to what it was.
+    var rememberedLevel by remember { mutableIntStateOf(volume.current.coerceAtLeast(volume.max / 2)) }
     val scope = rememberCoroutineScope()
     val dragOffset = remember { Animatable(0f) }
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
@@ -135,7 +140,14 @@ fun NowPlayingScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationY = dragOffset.value }
+                .graphicsLayer {
+                    translationY = dragOffset.value
+                    val leaving = (dragOffset.value / dismissAt.coerceAtLeast(1f)).coerceIn(0f, 1f)
+                    alpha = 1f - ((leaving - 0.3f) / 0.7f).coerceIn(0f, 1f) * 0.95f
+                    val shrink = 1f - leaving * 0.05f
+                    scaleX = shrink
+                    scaleY = shrink
+                }
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp),
@@ -175,7 +187,11 @@ fun NowPlayingScreen(
                     Spacer(Modifier.size(48.dp))
                 }
                 Spacer(Modifier.height(4.dp))
-                Artwork(current, filesDir, colors.panel2, colors.muted)
+                if (mediaSlot != null) {
+                    mediaSlot()
+                } else {
+                    Artwork(current, filesDir, colors.panel2, colors.muted)
+                }
             }
 
             Spacer(Modifier.height(12.dp))
@@ -268,20 +284,36 @@ fun NowPlayingScreen(
                 }
 
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        when {
-                            volumeLevel == 0 -> Icons.Default.VolumeMute
-                            volumeLevel < volume.max / 2 -> Icons.Default.VolumeDown
-                            else -> Icons.Default.VolumeUp
+                    // Tap the glyph to mute; it switches to a struck-through speaker.
+                    val muted = volumeLevel == 0
+                    IconButton(
+                        onClick = {
+                            if (muted) {
+                                volumeLevel = rememberedLevel.coerceAtLeast(1)
+                            } else {
+                                rememberedLevel = volumeLevel
+                                volumeLevel = 0
+                            }
+                            volume.set(volumeLevel)
                         },
-                        contentDescription = "Volume",
-                        tint = colors.muted,
-                        modifier = Modifier.size(20.dp),
-                    )
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            when {
+                                muted -> Icons.Default.VolumeOff
+                                volumeLevel < volume.max / 2 -> Icons.Default.VolumeDown
+                                else -> Icons.Default.VolumeUp
+                            },
+                            contentDescription = if (muted) "Unmute" else "Mute",
+                            tint = if (muted) colors.accent else colors.muted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                     Scrubber(
                         value = volumeLevel.toFloat() / volume.max,
                         onScrub = { fraction ->
                             volumeLevel = (fraction * volume.max).toInt().coerceIn(0, volume.max)
+                            if (volumeLevel > 0) rememberedLevel = volumeLevel
                             volume.set(volumeLevel)
                         },
                         onCommit = { volume.set(volumeLevel) },
@@ -297,18 +329,6 @@ fun NowPlayingScreen(
                         contentDescription = route.label,
                         tint = if (route == AudioRoute.SPEAKER) colors.muted else colors.accent,
                         modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        when (route) {
-                            AudioRoute.SPEAKER -> "Speaker"
-                            AudioRoute.BLUETOOTH -> "Bluetooth"
-                            AudioRoute.HEADPHONES -> "Headphones"
-                            AudioRoute.USB -> "USB"
-                            AudioRoute.UNKNOWN -> "Output"
-                        },
-                        color = colors.muted,
-                        modifier = Modifier.padding(start = 6.dp),
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                     )
                 }
 
