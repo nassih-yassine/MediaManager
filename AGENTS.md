@@ -409,20 +409,3 @@ than polling the output file.
 - **Mute is real.** The speaker glyph toggles `STREAM_MUSIC` to 0 and back to the
   remembered level; the icon becomes a struck-through speaker in the accent
   colour. Verified with `dumpsys audio` (`streamVolume:0`, then `7`).
-
-## Android language (en / ar)
-
-- **Per device, in DataStore.** `mm.settings` holds `language` plus a
-  `language_chosen` flag. There is no account to sync it to; the app is standalone.
-- **Strings live in Kotlin.** `ui/i18n/Strings.kt` is one data class with an
-  English and an Arabic instance, provided through `LocalStrings`. Adding a field
-  forces both languages to fill it, which is the whole point of the shape.
-- **Direction.** `AppShell` provides `LocalLayoutDirection` from the language, so
-  RTL layout comes from Compose. Use `start`/`end` padding and
-  `Icons.AutoMirrored.*` — a physical `left`/`right` or a non-mirrored arrow
-  breaks in Arabic.
-- **First run.** If `language_chosen` is false, `LanguageFirstRunDialog` blocks
-  the shell once, with English preselected. Settings → Language changes it later
-  and applies immediately.
-- **Numbers stay LTR.** Wrap anything like `12:34` or `2.8 GB` in a `Text` with
-  `textDirection = TextDirection.Ltr` so Arabic does not reorder the digits.
