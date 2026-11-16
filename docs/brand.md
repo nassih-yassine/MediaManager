@@ -1,37 +1,33 @@
 # The mark
 
-Three arcs rising like sound waves — a library that plays. It takes Spotify's
-signal as a reference point and keeps the app's own character: near-black tile,
-the theme accent, and golden-ratio proportions instead of a fixed grid.
+A bold `M` — MediaManager's initial — whose counter is cut to a single point.
+It takes Spotify's confidence (one flat shape, one colour, no outline) without
+copying their arcs: the letter is ours, and the pointed counter is the signature.
 
 ## Construction
 
-Built on a 512 grid, anchored lower-left so the wave bleeds off the tile the way
-a real sound mark should.
+A 320 × 320 box on the 512 grid, every part from the box and φ.
 
 | Part | Value | Derivation |
 |---|---|---|
-| Outer radius | 330 | fills the tile |
-| Middle radius | 204 | `330 / φ` |
-| Inner radius | 126 | `330 / φ²` |
-| Stroke | 44 | equal across all three arcs |
-| Arc span | −150° → −30° | 120°, open to the upper-right |
-| Anchor | (200, 430) | lower-left of the content box |
+| Box | 320 × 320 | content box |
+| Corner radius | 24 | visual rounding, kept small so it stays bold |
+| Stem width | 76 | `320 / φ³` |
+| Counter apex | y = 294 | `96 + 320 / φ` |
 
-Equal stroke is deliberate: tapering the inner arcs to `44/φ`, `44/φ²` reads more
-"designed" but the thin arcs vanish below 32 px. Equal weight keeps all three
-waves legible down to a 16 px favicon.
+The counter is one triangle from the two inner stem edges to that apex, cut with
+`fill-rule="evenodd"`, so it is a real hole — the mark works on any background,
+not just the near-black tile.
 
 ## Rules the mark follows
 
-1. **One colour.** Accent on the near-black tile; the same shape in white for the
-   status-bar glyph and black on white for monochrome use.
-2. **Golden radii.** The three circles are `R`, `R/φ`, `R/φ²`, so the eye reads a
-   harmonic decay rather than arbitrary spacing.
-3. **Bleed is the signature.** The wave is anchored off the tile, which is what
-   makes it a wave and not three rings in a box.
-4. **Scalable.** At 16 px it reads as two or three rising lines; the identity is in
-   the arc gesture, not in fine detail.
+1. **One shape.** A box minus one triangle; no strokes, no gradients, no shadow.
+2. **One colour.** Accent on the tile; white for the status bar; black for
+   monochrome print.
+3. **Golden ratios.** Stem and counter are `320/φ³` and `320/φ`, so the letter's
+   weight and its open mouth stay in proportion at any scale.
+4. **Scalable.** Below 32 px the pointed counter starts to close and the mark
+   reads as a solid M — a simplification of the same letter, not a second logo.
 5. **One source of truth.** `apps/web/public/logo.svg`; the Android foreground and
    the notification glyph are the same geometry scaled to 108 and 24.
 

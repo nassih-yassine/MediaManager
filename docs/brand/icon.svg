@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MediaManager">
   <title>MediaManager</title>
-  <desc>Three arcs rising like sound waves, a library that plays.</desc>
+  <desc>A bold M, its counter cut to a point.</desc>
   <rect width="512" height="512" rx="116" fill="#0a0c0f"/>
-  <path d="M -85.8 265.0 A 330.0 330.0 0 0 1 485.8 265.0" fill="none" stroke="#9ae6b4" stroke-width="44" stroke-linecap="round"/>
-  <path d="M 23.4 328.0 A 203.95 203.95 0 0 1 376.6 328.0" fill="none" stroke="#9ae6b4" stroke-width="44" stroke-linecap="round"/>
-  <path d="M 90.8 367.0 A 126.05 126.05 0 0 1 309.2 367.0" fill="none" stroke="#9ae6b4" stroke-width="44" stroke-linecap="round"/>
+  <path fill-rule="evenodd" fill="#9ae6b4" d="M120 96 h272 a24 24 0 0 1 24 24 v272 a24 24 0 0 1 -24 24 h-272 a24 24 0 0 1 -24 -24 v-272 a24 24 0 0 1 24 -24 z M172 96 L340 96 L256 294 Z"/>
 </svg>
