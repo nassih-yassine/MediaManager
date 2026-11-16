@@ -33,6 +33,10 @@ class MainActivity : ComponentActivity() {
         maybeAskForNotifications()
         val container = (application as App).container
         sharedLink.value = extractLink(intent)
+        if (intent?.getBooleanExtra(dev.mediamanager.mobile.widget.NowPlayingWidget.EXTRA_OPEN_PLAYER, false) == true) {
+            // The widget's tap should land on the player, not the last tab.
+            container.player.openPlayer()
+        }
         setContent {
             AppShell(
                 container = container,

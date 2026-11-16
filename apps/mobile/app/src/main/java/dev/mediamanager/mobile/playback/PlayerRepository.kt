@@ -17,6 +17,8 @@ import dev.mediamanager.mobile.download.resumeTarget
 import dev.mediamanager.mobile.download.restoreIndex
 import kotlinx.coroutines.flow.first
 import dev.mediamanager.mobile.media.LibraryPaths
+import dev.mediamanager.mobile.widget.WidgetPublisher
+import dev.mediamanager.mobile.widget.NowPlayingWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -286,6 +288,9 @@ class PlayerRepository(
 
     fun stop() {
         _resumePrompt.value = null
+        lastWidgetSignature = null
+        NowPlayingWidget.widgetState = null
+        WidgetPublisher.render(context, state = null)
         savePosition()
         controller?.stop()
         controller?.clearMediaItems()
@@ -329,10 +334,12 @@ class PlayerRepository(
             .build()
     }
 
+    private var lastWidgetSignature: String? = null
+
     private fun publish() {
         val c = controller ?: return
         val item = current ?: return
-        _nowPlaying.value = NowPlaying(
+        val snapshot = NowPlaying(
             itemId = item.id,
             title = item.title,
             isPlaying = c.isPlaying,
@@ -345,6 +352,14 @@ class PlayerRepository(
             shuffle = c.shuffleModeEnabled,
             speed = c.playbackParameters.speed,
         )
+        _nowPlaying.value = snapshot
+        NowPlayingWidget.widgetState = snapshot
+        // Widget repaints are expensive (bitmap decode); only on a visible change.
+        val signature = "${item.id}|${snapshot.isPlaying}|${snapshot.title}"
+        if (signature != lastWidgetSignature) {
+            lastWidgetSignature = signature
+            WidgetPublisher.render(context, state = snapshot)
+        }
     }
 
     private fun startTicker() {
