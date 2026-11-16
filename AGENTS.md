@@ -392,3 +392,17 @@ than polling the output file.
    the bar; open the queue drawer and reorder.
 8. Create a playlist, select items in the library, add them, drag to reorder.
 9. Switch theme on `/profile`, reload (or sign in on another browser) → theme and mode persist.
+
+## Pending on-device checks (2026-11-16)
+
+Two UI changes were built and installed but never confirmed with a clean
+screenshot because the emulator-free test loop kept catching mid-animation
+frames. Verify on the phone before trusting them:
+
+- **Mute toggle.** Tap the speaker glyph on the big player: the icon should turn
+  into a struck-through speaker tinted with the accent, `STREAM_MUSIC` should
+  drop to 0, and a second tap should restore the previous level.
+- **Video aspect ratio.** Open a 16:9 video in the big player: the frame should
+  be 16:9 with no letterbox bars, sitting in the same slot the audio artwork
+  uses. `VideoSlot` reads `exo.videoSize`, so a 4:3 or vertical clip should
+  change the frame shape.
