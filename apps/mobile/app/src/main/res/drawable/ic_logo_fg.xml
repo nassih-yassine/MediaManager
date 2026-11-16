@@ -1,7 +1,16 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#9AE6B4" android:pathData="M41,28 H70 L80,38 V67 A13,13 0 0 1 67,80 H41 A13,13 0 0 1 28,67 V41 A13,13 0 0 1 41,28 Z" />
-    <path android:fillColor="#0A0C0F" android:pathData="M70,28 V35 A3,3 0 0 0 73,38 H80 Z" />
-    <path android:fillColor="#0A0C0F" android:pathData="M45,47 L63,55 L45,63 Z" />
+    <!-- Card: 52 dp square, radius 16 = 52 / phi^3, inside the 66 dp safe circle. -->
+    <path android:fillColor="#9AE6B4"
+        android:pathData="M36.3,20.3 H77.9 L87.8,30.2 V71.8 A16,16 0 0 1 71.8,87.8 H36.3 A16,16 0 0 1 20.3,71.8 V36.3 A16,16 0 0 1 36.3,20.3 Z" />
+    <!-- Turned corner: 9.9 dp = 16 / phi, inner radius 2.3. -->
+    <path android:fillColor="#0A0C0F"
+        android:pathData="M77.9,20.3 V27.9 A2.3,2.3 0 0 0 80.2,30.2 H87.8 Z" />
+    <!-- Play: 26 dp tall, nudged right for optical centring. -->
+    <path android:fillColor="#0A0C0F"
+        android:strokeColor="#0A0C0F"
+        android:strokeWidth="3.4"
+        android:strokeLineJoin="round"
+        android:pathData="M44,42.4 L67,54 L44,65.6 Z" />
 </vector>

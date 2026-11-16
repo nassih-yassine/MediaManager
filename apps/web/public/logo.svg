@@ -2,10 +2,10 @@
   <title>MediaManager</title>
   <desc>A card with one corner turned, carrying a play mark.</desc>
   <rect width="512" height="512" rx="116" fill="#0a0c0f"/>
-  <!-- The card: a library item, one corner turned like a page you kept. -->
-  <path d="M96 182a86 86 0 0 1 86-86h170l64 64v170a86 86 0 0 1-86 86H182a86 86 0 0 1-86-86z" fill="#9ae6b4"/>
-  <!-- The turned corner reads as a fold, not a cut: a hairline hides the seam. -->
-  <path d="M352 96v52a12 12 0 0 0 12 12h52z" fill="#0a0c0f"/>
-  <!-- Play, optically centred in the card rather than in its bounding box. -->
-  <path d="M214 194c0-13 14-21 25-14l101 62c11 7 11 23 0 30l-101 62c-11 7-25-1-25-14z" fill="#0a0c0f"/>
+  <!-- Card: 320 square, radius 76 = 320 / phi^3. -->
+  <path d="M172 96H369L416 143V340A76 76 0 0 1 340 416H172A76 76 0 0 1 96 340V172A76 76 0 0 1 172 96Z" fill="#9ae6b4"/>
+  <!-- Turned corner: 47 = 76 / phi, inner radius 11 = 47 / phi^3. -->
+  <path d="M369 96V132A11 11 0 0 0 380 143H416Z" fill="#0a0c0f"/>
+  <!-- Play: 159 tall = 320 / phi^1.45, nudged right so it reads centred. -->
+  <path d="M206 190 L319 256 L206 322 Z" fill="#0a0c0f" stroke="#0a0c0f" stroke-width="16" stroke-linejoin="round"/>
 </svg>
