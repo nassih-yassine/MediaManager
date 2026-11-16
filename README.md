@@ -5,93 +5,130 @@
 <h1 align="center">MediaManager</h1>
 
 <p align="center">
-  A private library for downloaded audio, video, pictures, galleries and books.<br/>
-  Rust API + SQLite on a machine you own, a web and desktop client, and a standalone Android app.
+  A private library for everything you download and save.<br/>
+  Rust + SQLite on a machine you own. Web, desktop, and a standalone Android app.
 </p>
 
 <p align="center">
+  <a href="#design">Design</a> ·
+  <a href="#the-android-app">Android</a> ·
   <a href="#quick-start">Quick start</a> ·
-  <a href="#the-android-app">Android app</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#documentation">Docs</a>
 </p>
 
-![Library](docs/screenshots/library.jpg)
+<p align="center">
+  <img src="docs/screenshots/android-player.png" width="270" alt="Video player on Android" />
+  <img src="docs/screenshots/android-downloads.png" width="270" alt="Download queue on Android" />
+  <img src="docs/screenshots/android-themes.png" width="270" alt="Theme picker on Android" />
+</p>
 
 ## What it does
 
-**Downloads become a library.** Paste a link; yt-dlp/ffmpeg fetch audio with its
-cover or the full video, and the files land in a plain, sharded folder tree that
-survives the database. Uploads work for pictures, PDFs and EPUBs.
+**A link becomes a library.** Paste a YouTube or yt-dlp URL, pick audio or video,
+and the file lands in a sharded folder tree with cover art. Uploads handle pictures,
+PDFs and EPUBs.
 
-**Watching and listening.** One persistent player across navigation, a queue you
-can reorder, resume points, shuffle, repeat, and speed. Videos seek with HTTP
-Range because files are served by `ServeDir`, not buffered in memory.
+**A player worth using.** One queue that survives navigation, resume points saved to
+disk, shuffle, repeat, speed, a queue you can reorder, and video that seeks properly
+because files stream with HTTP Range instead of being buffered.
 
-**Organizing.** Ordered playlists hold any mix of kinds. Pictures live in galleries
-with a protected `All pictures` default. Both use the same picker, and a playlist
-cover can come from its own items or from your gallery.
+**Organised, not piled up.** Ordered playlists mix audio and video. Pictures live in
+galleries with a protected default. Both use the same picker, and any playlist can
+borrow a cover from its own items.
 
-**Knowing where the space went.** Idle audio/video with a source URL can be evicted
-after 30 days, metadata kept, and the player re-downloads on demand. The desktop
-and Android apps both report real usage per item with exact delete sizes.
+**You can see where the space went.** Idle downloads can be evicted after a month,
+metadata kept, and the player re-fetches on demand. Storage reports real per-item
+sizes and the exact bytes a delete frees.
 
-**One library per person.** Email + password, private rows and files per user,
-admin management, and `404` (never `403`) for someone else's data.
+**Yours alone.** Email + password, rows and files scoped per owner, admin tooling, and
+`404` — never `403` — for another person's data. The Android app has no account at
+all, because it needs no server.
 
-**Quiet by default.** Four theme families in light and dark, live updates over SSE,
-a notification bell, and no accounts to create unless you want them.
+## Design
 
-## Screenshots
+The UI is a small, deliberate system rather than a pile of Material defaults. One set
+of tokens, six theme families, two modes.
 
-| Library | Galleries |
+| Token | Role |
 |---|---|
-| ![Library](docs/screenshots/library.jpg) | ![Galleries](docs/screenshots/galleries.jpg) |
-| **Gallery + lightbox** | **Full-screen viewer** |
-| ![Gallery](docs/screenshots/gallery.jpg) | ![Lightbox](docs/screenshots/lightbox.jpg) |
-| **Profile** | **Notifications** |
-| ![Profile](docs/screenshots/profile.jpg) | ![Notifications](docs/screenshots/notifications.jpg) |
+| `canvas` | App background |
+| `panel` / `panel-2` | Cards, sheets, tracks |
+| `line` / `line-strong` | Hairline borders |
+| `ink` / `muted` | Primary and secondary text |
+| `accent` / `accent-ink` | Actions, and the colour that sits on them |
+| `danger` | Destructive intent |
+
+| Family | Canvas (dark) | Accent (dark) |
+|---|---|---|
+| **Slate** | `#0A0A0B` | `#9AE6B4` |
+| **Paper** | `#12100E` | `#E8B06A` |
+| **Ocean** | `#071018` | `#5CC8F5` |
+| **Moss** | `#080C09` | `#B8E986` |
+| **Ember** | `#0D0705` | `#FF6B4A` |
+| **Violet** | `#0A0712` | `#B18CFF` |
+
+Each family also ships a light palette. Mode (light / dark / system) and family are
+account settings on the web and per-device settings on Android, applied before the
+first frame so nothing flashes.
+
+**Type.** Space Grotesk for everything, JetBrains Mono for numbers and durations, and
+Noto Sans Arabic UI bundled as woff2 so Arabic titles render correctly instead of
+falling back to whatever the WebView picks.
+
+**Interaction rules that hold everywhere:**
+
+- Popovers are portaled — menus inside cards and sidebars never get clipped.
+- Confirmations are sheets with a headline, one line of context, and a full-width
+  action; no tiny text buttons squeezed into a footer.
+- Progress is a plain track-and-fill bar. Material's indicator leaves a stop dot
+  floating beside the fill.
+- The destructive action uses the theme accent, so a red theme does not turn every
+  button into an alarm.
 
 ## The Android app
 
-`apps/mobile` is a standalone Kotlin/Compose app: no account, no server, no sync.
-Its own Room database, its own library in app-private storage, and the same
-paste-a-link idea.
+`apps/mobile` is a standalone Kotlin/Compose app. No account, no server, no sync: its
+own Room database and its own library in app-private storage.
 
-- **YouTube through NewPipe Extractor** (anonymous, no JS runtime, no PO token);
-  every other site stays on the bundled yt-dlp. Audio is m4a/opus from YouTube,
-  mp3 elsewhere.
-- **Durable queue** in a `dataSync` foreground service; leaving the app or losing
-  the process does not lose a job, and connectivity loss resumes by itself.
-- **Player** with resume points, queue, playlists, repeat and shuffle.
-- **Storage screen**: library total, phone used/free from `StatFs`, breakdown by
-  kind, and every item ranked by size with the exact bytes a delete frees.
-
-| Android library | Storage |
-|---|---|
-| ![Android library](docs/screenshots/android-library.png) | ![Android storage](docs/screenshots/android-storage.png) |
+- **YouTube without yt-dlp.** NewPipe Extractor fetches anonymously, so no JS runtime
+  and no PO token. Everything else goes through the bundled yt-dlp.
+- **Video that actually plays.** Most YouTube videos have no muxed stream at all. The
+  app downloads the picture and the sound on separate connections and remuxes them to
+  MP4 with `MediaMuxer`, falling back to WebM and finally to the bundled FFmpeg.
+- **Downloads tuned for a phone line.** Each file is split across four HTTP ranges;
+  two jobs run at once by default. Progress never overshoots, cancellations stop only
+  the job you picked, and a URL already in the library is refused instead of fetched
+  twice.
+- **A durable queue.** A `dataSync` foreground service claims rows from SQLite with a
+  lease, heartbeats every 15 s, and re-queues stale ones. Losing the process, leaving
+  the app, or dropping off Wi-Fi costs nothing.
+- **Resume everywhere.** Position is saved every few seconds, on pause, on end and on
+  leaving the app; reopening the library puts you back on the same item at the same
+  frame, with a thin line on the card showing how far in you are.
+- **Storage screen.** Library total, phone usage from `StatFs`, breakdown by kind, and
+  every item ranked by size with the exact bytes a delete frees.
 
 ```sh
 make mobile        # assembleDebug
 make mobile-test   # unit + Robolectric tests
 ```
 
-Device checklist, known limits and the build prerequisites live in
-[`apps/mobile/README.md`](apps/mobile/README.md).
+Device checklist, release signing and known limits: [`apps/mobile/README.md`](apps/mobile/README.md).
 
 ## Quick start
 
 Requirements: Node 20+, Rust 1.85+, `yt-dlp`, `ffmpeg`. `pdftoppm` and `unzip` are
-optional, used for book covers.
+optional and only used to pull book covers.
 
 ```sh
 make install     # npm install + cargo fetch
-make dev         # API :8787 and web :3000 (or :3001 if 3000 is taken)
+make dev         # API :8787 and web :3000 (3001 if 3000 is taken)
 ```
 
-Open the printed URL. A fresh database shows **Create the admin account**, or run
-`make setup` in another terminal. Media created before accounts existed is adopted
-by the first admin, so an upgrade never hides your library.
+A fresh database shows **Create the admin account**, or run `make setup` in another
+terminal. Media created before accounts existed is adopted by the first admin, so an
+upgrade never hides your library.
 
 ## Commands
 
@@ -120,11 +157,18 @@ library/        sharded media, .incoming/ per job, .thumbs/
 ```
 
 The server owns SQLite and the files. Clients never write the database or compose
-paths; they call `/api`, and files stream with Range. Jobs are rows with a lease,
-not in-memory tasks, so a crash or a second worker changes nothing.
+paths; they call `/api`, and bytes stream with Range. Jobs are rows with a lease, not
+in-memory tasks, so a crash or a second worker changes nothing.
 
-Full rules and gotchas: [`AGENTS.md`](AGENTS.md) and
+Rules, gotchas and the reasoning behind them: [`AGENTS.md`](AGENTS.md) and
 [`docs/architecture.md`](docs/architecture.md).
+
+## Web and desktop
+
+The web client carries the same design system: collection-first library, galleries
+with a lightbox, drag-reordered playlists, live updates over SSE, notification bell,
+reports, and an admin area. The desktop app is a Tauri window around that UI — one
+backend, two shells.
 
 ## Deploying
 
@@ -132,8 +176,9 @@ Full rules and gotchas: [`AGENTS.md`](AGENTS.md) and
   (`ghcr.io/<repo>/api`, `/web`), optional Caddy TLS, `.env` for bootstrap and
   `MM_WEB_ORIGIN`.
 - **Local install** — `scripts/install-local.sh` writes `mm`, `mm-desktop`, a
-  `.desktop` launcher and `mm-api`/`mm-web` user services.
-- Releases are built on `v*` tags: desktop bundles plus amd64/arm64 images.
+  `.desktop` launcher and `mm-api` / `mm-web` user services.
+- Releases are built on `v*` tags: desktop bundles plus amd64/arm64 images and a
+  release-signed Android APK.
 
 ## Documentation
 
@@ -146,5 +191,5 @@ Full rules and gotchas: [`AGENTS.md`](AGENTS.md) and
 
 ## License
 
-GPL-3.0. The Android app bundles yt-dlp, FFmpeg (via `youtubedl-android`) and
-NewPipe Extractor; their licences are listed in Settings → About in the app.
+GPL-3.0. The Android app bundles yt-dlp, FFmpeg (via `youtubedl-android`) and NewPipe
+Extractor; their licences are listed in Settings → About in the app.
