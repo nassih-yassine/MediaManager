@@ -29,8 +29,12 @@ class YoutubeNewPipeExtractor(
 ) : Extractor {
 
     companion object {
-        private const val PARALLEL_PARTS = 4
-        private const val PARALLEL_MIN_BYTES = 8L * 1024 * 1024
+        // A 3-minute track is ~3 MB. With an 8 MB floor every song took the
+        // single-connection path, which googlevideo throttles to a few hundred KB/s.
+        private const val PARALLEL_MIN_BYTES = 1_200_000L
+        private const val MIN_PARTS = 2
+        private const val MAX_PARTS = 8
+        private const val BYTES_PER_PART = 1_500_000L
 
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
@@ -187,7 +191,8 @@ class YoutubeNewPipeExtractor(
         length: Long,
         onProgress: (Float) -> Unit,
     ): Unit = coroutineScope {
-        val parts = PARALLEL_PARTS
+        // More connections for bigger files: 2 for a short track, up to 8 for a film.
+        val parts = (length / BYTES_PER_PART).toInt().coerceIn(MIN_PARTS, MAX_PARTS)
         val chunk = length / parts
         val meter = ProgressMeter(length)
         // Each part reports cumulative bytes; remembering the previous value keeps the

@@ -387,6 +387,17 @@ fun NowPlayingScreen(
                                 color = colors.muted,
                                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                             )
+                            IconButton(
+                                onClick = { player.removeFromQueue(item.id) },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Remove from queue",
+                                    tint = colors.muted,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }

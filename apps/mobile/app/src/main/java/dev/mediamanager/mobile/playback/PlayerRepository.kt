@@ -204,6 +204,29 @@ class PlayerRepository(
         scope.launch { db.queueDao().replaceAll(next.map { it.id }) }
     }
 
+    /** Drops one entry from the play queue, playing or not. */
+    fun removeFromQueue(id: String) {
+        val c = controller ?: return
+        val index = _queue.value.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val removingCurrent = _queue.value[index].id == current?.id
+        val next = _queue.value.filterNot { it.id == id }
+        _queue.value = next
+        scope.launch { db.queueDao().replaceAll(next.map { it.id }) }
+        c.removeMediaItem(index)
+        if (next.isEmpty()) {
+            _resumePrompt.value = null
+            current = null
+            _nowPlaying.value = null
+            return
+        }
+        if (removingCurrent) {
+            current = next.getOrNull(index.coerceAtMost(next.lastIndex))
+            c.prepare()
+        }
+        publish()
+    }
+
     fun reorderQueue(orderedIds: List<String>) {
         val byId = _queue.value.associateBy { it.id }
         val next = orderedIds.mapNotNull { byId[it] }

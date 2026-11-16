@@ -96,8 +96,14 @@ fun AppShell(
         var loading by remember { mutableStateOf(true) }
         LaunchedEffect(container) {
             val started = System.currentTimeMillis()
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val pending = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 container.db.itemDao().count()
+                // A download can outlive the process that started it (MIUI kills the
+                // foreground service). Opening the app is the resume gesture.
+                container.db.jobDao().activeJobs().size + container.db.jobDao().queuedCount()
+            }
+            if (pending > 0) {
+                dev.mediamanager.mobile.download.DownloadService.start(container.appContext)
             }
             val spent = System.currentTimeMillis() - started
             if (spent < 350) kotlinx.coroutines.delay(350 - spent)

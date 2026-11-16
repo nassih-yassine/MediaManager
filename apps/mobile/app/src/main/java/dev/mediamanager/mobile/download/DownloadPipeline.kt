@@ -61,6 +61,8 @@ class DownloadPipeline(
         onMeta: (title: String, durationMs: Long?, thumbFile: File?) -> Unit = { _, _, _ -> },
     ): Result {
         val incoming = paths.incomingDir(job.id)
+        // A killed process leaves partial files behind; never mix them into this run.
+        runCatching { paths.deleteRecursively(incoming) }
         val fetched = try {
             extractor.fetch(job, onProgress, onStage, onMeta)
         } catch (c: CancellationException) {
