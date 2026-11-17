@@ -108,13 +108,16 @@ fun NowPlayingScreen(
     val dragOffset = remember { Animatable(0f) }
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
 
-    BackHandler(onBack = onClose)
     val current = now ?: return
+    // Registered only with content: an empty overlay must not eat the Back press.
+    BackHandler(onBack = onClose)
 
+    var volumeTouching by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(2_000)
-            volumeLevel = volume.current
+            // Never overwrite the thumb while a finger is on the volume row.
+            if (!volumeTouching) volumeLevel = volume.current
         }
     }
 
@@ -321,11 +324,15 @@ fun NowPlayingScreen(
                     Scrubber(
                         value = volumeLevel.toFloat() / volume.max,
                         onScrub = { fraction ->
+                            volumeTouching = true
                             volumeLevel = (fraction * volume.max).toInt().coerceIn(0, volume.max)
                             if (volumeLevel > 0) rememberedLevel = volumeLevel
                             volume.set(volumeLevel)
                         },
-                        onCommit = { volume.set(volumeLevel) },
+                        onCommit = {
+                            volume.set(volumeLevel)
+                            volumeTouching = false
+                        },
                         modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                     )
                     Icon(

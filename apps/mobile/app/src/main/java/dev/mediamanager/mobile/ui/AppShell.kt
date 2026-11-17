@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.drop
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Appearance
 import dev.mediamanager.mobile.playback.PlayerRepository
@@ -81,6 +82,8 @@ fun AppShell(
     sharedUrl: String? = null,
     onSharedHandled: () -> Unit = {},
     onReady: () -> Unit = {},
+    /** Launched from the widget: land on the player once, without a replay. */
+    openPlayerOnStart: Boolean = false,
 ) {
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
         initialValue = Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
@@ -88,8 +91,13 @@ fun AppShell(
     MmTheme(appearance.family, appearance.mode) {
         var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
         var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
+        // StateFlow replays its current value, which opened the player on every
+        // cold start and hid the mini player until it was closed by hand.
         LaunchedEffect(player) {
-            player.openRequests.collect { nowPlayingOpen = true }
+            player.openRequests.drop(1).collect { nowPlayingOpen = true }
+        }
+        LaunchedEffect(Unit) {
+            if (openPlayerOnStart) nowPlayingOpen = true
         }
         var downloadsOpen by remember { mutableStateOf(false) }
         // Hold a branded screen until the database has actually answered once.

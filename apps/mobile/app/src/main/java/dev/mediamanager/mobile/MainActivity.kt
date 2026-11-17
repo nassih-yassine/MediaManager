@@ -33,10 +33,10 @@ class MainActivity : ComponentActivity() {
         maybeAskForNotifications()
         val container = (application as App).container
         sharedLink.value = extractLink(intent)
-        if (intent?.getBooleanExtra(dev.mediamanager.mobile.widget.NowPlayingWidget.EXTRA_OPEN_PLAYER, false) == true) {
-            // The widget's tap should land on the player, not the last tab.
-            container.player.openPlayer()
-        }
+        val openPlayerOnStart = intent?.getBooleanExtra(
+            dev.mediamanager.mobile.widget.NowPlayingWidget.EXTRA_OPEN_PLAYER,
+            false,
+        ) == true
         setContent {
             AppShell(
                 container = container,
@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
                 sharedUrl = sharedLink.value,
                 onSharedHandled = { sharedLink.value = null },
                 onReady = { appReady.value = true },
+                openPlayerOnStart = openPlayerOnStart,
             )
         }
     }
@@ -57,6 +58,14 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         sharedLink.value = extractLink(intent)
+        // A widget tap while the app is alive arrives here, not in onCreate.
+        if (intent.getBooleanExtra(
+                dev.mediamanager.mobile.widget.NowPlayingWidget.EXTRA_OPEN_PLAYER,
+                false,
+            )
+        ) {
+            (application as App).container.player.openPlayer()
+        }
     }
 
     /** Pulls the first http(s) link out of a share payload. */

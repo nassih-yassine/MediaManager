@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -75,6 +76,9 @@ fun VideoSlot(
         contentAlignment = Alignment.Center,
     ) {
         if (exo != null) {
+            // The service can recreate its ExoPlayer; key() rebuilds the view so the
+            // pane follows the new instance instead of holding a released one.
+            key(exo) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -86,6 +90,7 @@ fun VideoSlot(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+            }
         }
         Box(
             Modifier.fillMaxSize().clickable { player.toggle() },

@@ -336,8 +336,12 @@ fun PlaylistDetailScreen(
                                     leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.danger) },
                                     onClick = {
                                         menu = false
-                                        scope.launch { dao.delete(playlistId) }
-                                        onBack()
+                                        // Delete first, then leave: onBack() removes this
+                                        // composable and cancels a still-running scope.
+                                        scope.launch {
+                                            dao.delete(playlistId)
+                                            onBack()
+                                        }
                                     },
                                 )
                             }
@@ -478,7 +482,7 @@ fun PlaylistDetailScreen(
                         tint = colors.muted,
                         modifier = Modifier
                             .size(32.dp)
-                            .pointerInput(item.id, items.size) {
+                            .pointerInput(item.id, index, items.size) {
                                 detectDragGesturesAfterLongPress(
                                     onDragStart = {
                                         draggingIndex = index

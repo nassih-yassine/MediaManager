@@ -8,6 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class App : Application() {
@@ -36,11 +38,13 @@ class App : Application() {
         // Whenever queued work exists, try to bring it back; if the app is in the
         // background Android rejects the start and the next open retries.
         scope.launch {
-            container.db.jobDao().observeActive().collect { jobs ->
-                if (jobs.any { it.status == "queued" || it.status == "running" }) {
-                    runCatching { DownloadService.start(this@App) }
+            container.db.jobDao().observeActive()
+                // Heartbeats rewrite the row every ~900 ms; react to the state, not the writes.
+                .map { jobs -> jobs.any { it.status == "queued" || it.status == "running" } }
+                .distinctUntilChanged()
+                .collect { pending ->
+                    if (pending) runCatching { DownloadService.start(this@App) }
                 }
-            }
         }
     }
 
