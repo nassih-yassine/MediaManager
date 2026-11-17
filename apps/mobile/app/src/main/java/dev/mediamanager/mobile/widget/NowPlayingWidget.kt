@@ -153,8 +153,13 @@ object WidgetPublisher {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+    /** Last decoded cover; the same track repaints every five seconds. */
+    @Volatile private var cachedPath: String? = null
+    @Volatile private var cachedBitmap: Bitmap? = null
+
     /** Covers are small; decode downsampled so the widget stays under the binder limit. */
     private fun coverBitmap(context: Context, thumbPath: String?): Bitmap? {
+        thumbPath?.let { if (it == cachedPath) return cachedBitmap }
         val file = thumbPath?.let { File(context.filesDir, it) } ?: return null
         if (!file.exists()) return null
         return runCatching {
@@ -163,6 +168,9 @@ object WidgetPublisher {
             var sample = 1
             while (bounds.outWidth / sample > 256) sample *= 2
             BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
-        }.getOrNull()
+        }.getOrNull()?.also { bitmap ->
+            cachedPath = thumbPath
+            cachedBitmap = bitmap
+        }
     }
 }

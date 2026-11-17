@@ -21,6 +21,9 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE id = :id")
     suspend fun get(id: String): ItemEntity?
 
+    @Query("SELECT * FROM items WHERE sourceUrl = :url ORDER BY createdAt DESC LIMIT 1")
+    suspend fun getBySourceUrl(url: String): ItemEntity?
+
     /** Used to refuse a second copy of something already downloaded. */
     @Query("SELECT EXISTS(SELECT 1 FROM items WHERE sourceUrl = :url)")
     suspend fun existsBySourceUrl(url: String): Boolean

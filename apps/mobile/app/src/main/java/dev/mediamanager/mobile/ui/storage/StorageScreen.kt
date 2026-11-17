@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -276,7 +277,7 @@ private fun LegendRow(label: String, bytes: Long, whole: Long, dot: Color) {
         Text(
             formatShare(share(bytes, whole)),
             color = colors.muted,
-            modifier = Modifier.size(width = 64.dp, height = 20.dp).padding(start = 8.dp),
+            modifier = Modifier.width(64.dp).padding(start = 8.dp),
             style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
             maxLines = 1,
         )

@@ -295,6 +295,11 @@ class PlayerRepository(
         controller?.stop()
         controller?.clearMediaItems()
         _nowPlaying.value = null
+        scope.launch {
+            // "Close" must survive a restart, or the queue comes back on next launch.
+            db.queueDao().clear()
+            settings.setLastItemId(null)
+        }
         _queue.value = emptyList()
         current = null
     }
@@ -359,7 +364,8 @@ class PlayerRepository(
         val signature = "${item.id}|${snapshot.isPlaying}|${snapshot.title}|$tick"
         if (signature != lastWidgetSignature) {
             lastWidgetSignature = signature
-            WidgetPublisher.render(context, state = snapshot)
+            // Decoding a cover on Main would jank the player; render off-thread.
+            scope.launch(Dispatchers.Default) { WidgetPublisher.render(context, state = snapshot) }
         }
     }
 

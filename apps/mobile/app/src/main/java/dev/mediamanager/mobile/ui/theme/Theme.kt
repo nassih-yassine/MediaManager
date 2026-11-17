@@ -30,6 +30,8 @@ private fun spaceGrotesk(weight: Int, fontWeight: FontWeight) = Font(
 )
 
 val SpaceGrotesk = FontFamily(
+    // Arabic titles fall through to the bundled face instead of a platform default.
+    Font(R.font.noto_sans_arabic, FontWeight.Normal),
     spaceGrotesk(400, FontWeight.Normal),
     spaceGrotesk(500, FontWeight.Medium),
     spaceGrotesk(600, FontWeight.SemiBold),

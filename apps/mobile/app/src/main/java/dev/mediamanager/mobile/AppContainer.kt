@@ -2,6 +2,7 @@ package dev.mediamanager.mobile
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.MIGRATION_1_2
 import dev.mediamanager.mobile.data.MIGRATION_2_3
@@ -36,6 +37,7 @@ class AppContainer(context: Context) {
     val connectivity: ConnectivityMonitor = ConnectivityMonitor(appContext)
 
     val jobQueue: JobQueue = JobQueue(
+        transaction = { block -> db.withTransaction { block() } },
         dao = db.jobDao(),
         existsInLibrary = { url -> db.itemDao().existsBySourceUrl(url) },
     )

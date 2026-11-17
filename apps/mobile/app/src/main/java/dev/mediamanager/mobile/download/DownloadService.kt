@@ -98,6 +98,10 @@ class DownloadService : Service() {
             scope.launch {
                 val ids = if (target != null) listOf(target) else activeIds()
                 ids.forEach { cancelOne(it) }
+                // Nothing left to run: do not linger as a started, non-foreground service.
+                if (activeIds().isEmpty() && loop?.isActive != true) {
+                    withContext(Dispatchers.Main) { stopForegroundCompatAndSelf() }
+                }
             }
             return START_NOT_STICKY
         }
@@ -145,6 +149,8 @@ class DownloadService : Service() {
             coroutineScope {
                 repeat(limit) { index -> launch { worker(app, index) } }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "download loop crashed", e)
         } finally {
@@ -245,6 +251,14 @@ class DownloadService : Service() {
         // row must not be flipped to done or failed afterwards.
         if (app.db.jobDao().get(job.id)?.status == "cancelled") {
             pathsCleanup(app, job.id)
+            // A finalize that raced the cancel can leave a row and a file behind.
+            app.db.itemDao().getBySourceUrl(job.url)
+                ?.takeIf { it.createdAt >= job.createdAt }
+                ?.let { orphan ->
+                    runCatching { app.paths.resolve(orphan.path)?.delete() }
+                    runCatching { app.paths.thumbFile(orphan.id).delete() }
+                    runCatching { app.db.itemDao().delete(orphan.id) }
+                }
             return
         }
         when (result) {

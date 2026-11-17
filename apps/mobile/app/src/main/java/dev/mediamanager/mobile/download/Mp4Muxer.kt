@@ -85,8 +85,8 @@ internal object Mp4Muxer {
                     val outVideo = muxer.addTrack(video.getTrackFormat(videoTrack))
                     val outAudio = muxer.addTrack(audio.getTrackFormat(audioTrack))
                     muxer.start()
-                    copy(video, muxer, outVideo)
-                    copy(audio, muxer, outAudio)
+                    copy(video, muxer, outVideo, videoTrack)
+                    copy(audio, muxer, outAudio, audioTrack)
                     muxer.stop()
                 } finally {
                     muxer.release()
@@ -107,8 +107,13 @@ internal object Mp4Muxer {
         return -1
     }
 
-    private fun copy(extractor: MediaExtractor, muxer: MediaMuxer, outTrack: Int) {
-        val buffer = ByteBuffer.allocateDirect(BUFFER_SIZE)
+    private fun copy(extractor: MediaExtractor, muxer: MediaMuxer, outTrack: Int, track: Int) {
+        // 4K keyframes can exceed 1 MiB; allocating too little throws and costs a
+        // whole ffmpeg pass, so ask the track for its maximum sample size.
+        val maxSample = runCatching {
+            extractor.getTrackFormat(track).getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+        }.getOrDefault(0)
+        val buffer = ByteBuffer.allocateDirect(maxSample.coerceAtLeast(BUFFER_SIZE))
         val info = MediaCodec.BufferInfo()
         while (true) {
             buffer.clear()

@@ -31,7 +31,14 @@ class PlaylistCoverStore(
 
     suspend fun fromUri(playlistId: String, uri: Uri): String? =
         withContext(Dispatchers.IO) {
-            val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+            // A 48 MP photo decodes to ~190 MB at full size; sample to ~1024 px first.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (bounds.outWidth / sample > 1024 || bounds.outHeight / sample > 1024) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            val bitmap = context.contentResolver.openInputStream(uri)
+                ?.use { BitmapFactory.decodeStream(it, null, options) }
                 ?: return@withContext null
             val target = paths.coverFile(playlistId)
             target.parentFile?.mkdirs()

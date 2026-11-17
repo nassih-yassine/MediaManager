@@ -93,12 +93,17 @@ fun LibraryScreen(
 
     val currentFilter = LibraryFilter.from(filter)
     val currentSort = LibrarySort.valueOf(sort)
-    val visible = sortItems(
-        all.map { it.toItem() }
-            .filter { kindFor(currentFilter)?.let { kind -> it.kind == kind } ?: true }
-            .filter { query.isBlank() || it.title.contains(query, ignoreCase = true) },
-        currentSort,
-    )
+    // Filtering and sorting run per keystroke otherwise; cache until an input moves.
+    val visible by remember(all, currentFilter, currentSort, query) {
+        androidx.compose.runtime.derivedStateOf {
+            sortItems(
+                all.map { it.toItem() }
+                    .filter { kindFor(currentFilter)?.let { kind -> it.kind == kind } ?: true }
+                    .filter { query.isBlank() || it.title.contains(query, ignoreCase = true) },
+                currentSort,
+            )
+        }
+    }
 
     fun playFrom(item: Item) {
         val index = visible.indexOfFirst { it.id == item.id }.coerceAtLeast(0)

@@ -8,6 +8,9 @@ class JobQueue(
     private val dao: JobDao,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    /** Wraps the check-then-insert pair so two taps cannot both pass the check. */
+    private val transaction: suspend (suspend () -> Unit) -> Unit = { it() },
+
     /** True when the library already holds this URL; a second copy is never queued. */
     private val existsInLibrary: suspend (String) -> Boolean = { false },
 ) {
@@ -19,6 +22,12 @@ class JobQueue(
     )
 
     suspend fun enqueue(url: String, mode: DownloadMode): EnqueueResult {
+        lateinit var result: EnqueueResult
+        transaction { result = enqueueLocked(url, mode) }
+        return result
+    }
+
+    private suspend fun enqueueLocked(url: String, mode: DownloadMode): EnqueueResult {
         val now = clock()
         val cleanUrl = normalizeUrl(url)
         val key = dedupeKey(cleanUrl, mode)
