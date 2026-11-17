@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -69,79 +70,69 @@ fun HomeScreen(
         return
     }
 
+    val recent = addedItems.take(12)
     LazyColumn(
         Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(
-                    "${addedItems.size} item${if (addedItems.size == 1) "" else "s"}",
-                    color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-
-        item {
-            Column(Modifier.padding(top = 12.dp)) {
+            // One header line, like the library: section on the left, count on the right.
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     "Recently added",
                     color = colors.ink,
                     style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
-                Spacer(Modifier.height(8.dp))
-                val recent = addedItems.take(8)
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    recent.forEach { item ->
-                        JumpRow(
-                            item = item,
-                            filesDir = filesDir,
-                            onClick = { player.playItems(addedItems, addedItems.indexOf(item)) },
-                        )
-                    }
-                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "${addedItems.size} item${if (addedItems.size == 1) "" else "s"}",
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
             }
+        }
+        items(recent, key = { it.id }) { item ->
+            RecentRow(
+                item = item,
+                filesDir = filesDir,
+                onClick = { player.playItems(addedItems, addedItems.indexOf(item)) },
+            )
         }
     }
 }
 
 @Composable
-private fun JumpRow(
+private fun RecentRow(
     item: Item,
     filesDir: java.io.File,
     onClick: () -> Unit,
 ) {
     val colors = LocalAppColors.current
+    // Flat row: same rhythm as the library, no card border to add noise.
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.panel)
-            .border(1.dp, colors.line, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Thumb(item, filesDir, Modifier.size(48.dp))
-        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(
                 item.title,
                 color = colors.ink,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             )
             Text(
                 buildString {
                     append(if (item.isAudio) "Audio" else "Video")
-                    val duration = formatDuration(item.durationMs)
-                    if (duration.isNotEmpty()) append(" · ").append(duration)
+                    formatDuration(item.durationMs).takeIf { it.isNotEmpty() }
+                        ?.let { append(" · ").append(it) }
                 },
                 color = colors.muted,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
@@ -151,7 +142,7 @@ private fun JumpRow(
             Icons.Default.PlayArrow,
             contentDescription = "Play",
             tint = colors.accent,
-            modifier = Modifier.size(22.dp).padding(start = 4.dp),
+            modifier = Modifier.size(22.dp),
         )
     }
 }
