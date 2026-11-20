@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    jacoco
 }
 
 val localProps = Properties().apply {
@@ -151,4 +152,50 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+}
+
+/**
+ * Unit-test coverage: `make coverage` (or ./gradlew coverageReport).
+ * Robolectric tests run on the JVM, so JaCoCo instruments them like plain tests.
+ */
+tasks.withType<Test>().configureEach {
+    configure<JacocoTaskExtension> {
+        isIncludeNoLocationClasses = true
+        excludes = listOf("jdk.internal.*")
+    }
+}
+
+tasks.register<JacocoReport>("coverageReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Unit-test coverage for the debug variant."
+
+    val excludes = listOf(
+        "**/R.class",
+        "**/R\$*.class",
+        "**/BuildConfig.*",
+        "**/Manifest*.*",
+        "**/*_Factory.*",
+        "**/*_Impl.*",
+        "**/*_Hilt*.*",
+        "**/ComposableSingletons*.*",
+    )
+
+    classDirectories.setFrom(
+        files(
+            // AGP 9 compiles Kotlin through the built-in task; older AGP used tmp/kotlin-classes.
+            layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
+            layout.buildDirectory.dir("tmp/kotlin-classes/debug"),
+            layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"),
+        ).asFileTree.matching { exclude(excludes) }
+    )
+    sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
+    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
+
+    reports {
+        html.required.set(true)
+        xml.required.set(true)
+        csv.required.set(false)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/coverage"))
+    }
 }

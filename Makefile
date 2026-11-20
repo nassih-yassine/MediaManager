@@ -5,12 +5,13 @@ SHELL := /bin/bash
 APK := androidApp/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 RELEASE_APK := androidApp/build/outputs/apk/release/app-arm64-v8a-release.apk
 
-.PHONY: help build test lint check install clean release
+.PHONY: help build test lint coverage check install clean release
 
 help:
 	@echo "make build    assemble the debug APK"
 	@echo "make test     unit + Robolectric tests"
 	@echo "make lint     Android lint"
+	@echo "make coverage unit-test coverage report (HTML under androidApp/build/reports/coverage)"
 	@echo "make check    test + lint"
 	@echo "make install  install on the connected phone if it fits"
 	@echo "make release  signed release APK (needs the keystore)"
@@ -23,6 +24,9 @@ test:
 
 lint:
 	./gradlew lint
+
+coverage:
+	./gradlew coverageReport
 
 check: test lint
 
