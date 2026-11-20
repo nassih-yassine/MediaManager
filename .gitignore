@@ -1,31 +1,26 @@
-# deps / build output
-node_modules/
-**/node_modules/
-.next/
-**/.next/
-target/
-**/target/
-*.tsbuildinfo
-coverage/
-apps/desktop/src-tauri/gen/
+# Gradle / Android
+.gradle/
+build/
+**/build/
+local.properties
+.kotlin/
+captures/
+.cxx/
 
-# local state — never commit credentials or the library
+# signing material — never in the repo
+*.jks
+*.keystore
+keystore.properties
 .env
-.env.*
-!.env.example
-!**/.env.example
-.envrc
-/library/
-*.db
-*.db-wal
-*.db-shm
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+
+# generated coverage and logs
+coverage/
 *.log
 
-# editor / os
-.DS_Store
-.idea/
-.vscode/
-.superpowers/
-
-# local planning docs (kept on disk, not in the repo)
+# local planning docs (not published)
 docs/superpowers/
