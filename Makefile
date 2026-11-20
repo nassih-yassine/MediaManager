@@ -1,95 +1,44 @@
-# MediaManager — run from the repo root.
-# cargo runs with --manifest-path so the CWD stays at the repo root and
-# dotenvy picks up the root .env.
+# MediaManager for Android — build from the repo root.
+# Requires JDK 21 and the Android SDK (ANDROID_HOME or local.properties).
 
 SHELL := /bin/bash
-API_DIR := crates/api
-WEB_DIR := apps/web
-CARGO_RUN := cargo run --manifest-path $(API_DIR)/Cargo.toml
-ENGINE ?= podman
+APK := androidApp/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+RELEASE_APK := androidApp/build/outputs/apk/release/app-arm64-v8a-release.apk
 
-.PHONY: help install dev api worker web build test check lint fmt clean images setup mobile mobile-test mobile-install
+.PHONY: help build test lint check install clean release
 
 help:
-	@echo "make install   install web deps + fetch rust deps"
-	@echo "make dev       run API (:8787) and web (:3000) together"
-	@echo "make api       run API only"
-	@echo "make worker    run worker only (MM_ROLE=worker)"
-	@echo "make web       run Next dev server"
-	@echo "make test      cargo test + vitest"
-	@echo "make test-web  vitest only"
-	@echo "make e2e       browser smoke test (needs make dev running)"
-	@echo "make check     cargo check + tsc --noEmit"
-	@echo "make lint      eslint"
-	@echo "make images    build api + web images with $(ENGINE)"
-	@echo "make setup     create the first admin (interactive)"
-	@echo "make mobile    build the Android APK"
-	@echo "make mobile-test  Android unit tests"
-	@echo "make mobile-install  install the debug APK if the phone has room"
-
-mobile:
-	cd apps/mobile && ./gradlew assembleDebug
-
-mobile-test:
-	cd apps/mobile && ./gradlew testDebugUnitTest
-
-# Refuses to install when free space is below the APK size plus headroom.
-mobile-install:
-	cd apps/mobile && ./gradlew assembleDebug
-	scripts/install-apk.sh apps/mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
-
-install:
-	cd $(WEB_DIR) && npm install
-	cargo fetch --manifest-path $(API_DIR)/Cargo.toml
-
-dev:
-	@trap 'kill 0' INT TERM; \
-	$(MAKE) api & \
-	$(MAKE) web & \
-	wait
-
-api:
-	$(CARGO_RUN)
-
-worker:
-	MM_ROLE=worker $(CARGO_RUN)
-
-web:
-	cd $(WEB_DIR) && npm run dev
+	@echo "make build    assemble the debug APK"
+	@echo "make test     unit + Robolectric tests"
+	@echo "make lint     Android lint"
+	@echo "make check    test + lint"
+	@echo "make install  install on the connected phone if it fits"
+	@echo "make release  signed release APK (needs the keystore)"
 
 build:
-	cargo build --release --manifest-path $(API_DIR)/Cargo.toml
-	cd $(WEB_DIR) && npm run build
+	./gradlew assembleDebug
 
 test:
-	cargo test --manifest-path $(API_DIR)/Cargo.toml
-	cd $(WEB_DIR) && npm test
-
-test-web:
-	cd $(WEB_DIR) && npm test
-
-e2e:
-	cd $(WEB_DIR) && npm run e2e
-
-check:
-	cargo check --manifest-path $(API_DIR)/Cargo.toml
-	cd $(WEB_DIR) && npx tsc --noEmit
+	./gradlew testDebugUnitTest
 
 lint:
-	cd $(WEB_DIR) && npm run lint
+	./gradlew lint
 
-fmt:
-	cargo fmt --manifest-path $(API_DIR)/Cargo.toml
+check: test lint
+
+# Refuses to install when free space is below the APK size plus headroom.
+install: build
+	scripts/install-apk.sh $(APK)
+
+release:
+	@test -n "$$MM_STORE_FILE" || { echo "source the keystore properties first"; exit 1; }
+	./gradlew assembleRelease \
+		-PMM_STORE_FILE="$$MM_STORE_FILE" \
+		-PMM_STORE_PASSWORD="$$MM_STORE_PASSWORD" \
+		-PMM_KEY_ALIAS="$$MM_KEY_ALIAS" \
+		-PMM_KEY_PASSWORD="$$MM_KEY_PASSWORD"
+	@ls -lh $(RELEASE_APK)
 
 clean:
-	cargo clean --manifest-path $(API_DIR)/Cargo.toml
-	rm -rf $(WEB_DIR)/.next
-
-images:
-	$(ENGINE) build -f $(API_DIR)/Dockerfile -t localhost/mm-api:local .
-	$(ENGINE) build -f $(WEB_DIR)/Dockerfile \
-		--build-arg MM_API_URL=http://api:8787 \
-		-t localhost/mm-web:local $(WEB_DIR)
-
-setup:
-	./scripts/first-run.sh
+	./gradlew clean
+	rm -rf androidApp/build build .gradle .kotlin

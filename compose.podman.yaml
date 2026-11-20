@@ -1,9 +1,0 @@
-# Local Podman overrides: `podman compose -f compose.yaml -f compose.podman.yaml up -d`
-# Requires `make images`. keep-id keeps the library bind mount writable by the
-# host user in rootless Podman.
-services:
-  api:
-    image: localhost/mm-api:local
-    userns_mode: keep-id
-  web:
-    image: localhost/mm-web:local

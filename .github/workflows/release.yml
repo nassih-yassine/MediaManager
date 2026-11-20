@@ -1,127 +1,60 @@
-name: Release
+name: release
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "android-v*"
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  desktop:
-    name: Desktop bundles
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri
-      - name: Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            librsvg2-dev patchelf libfuse2
-      - run: npm install
-        working-directory: apps/desktop
-      - uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: MediaManager ${{ github.ref_name }}
-          releaseDraft: true
-          prerelease: false
-
-  android:
-    name: Android APK
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
+  apk:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # versionName reads the tag and the commit count
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode the signing keystore
+        env:
+          KEYSTORE: ${{ secrets.MM_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "No keystore secret; building an unsigned release."
+            exit 0
+          fi
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
       - name: Build arm64 APK
+        env:
+          MM_STORE_FILE: ${{ secrets.MM_KEYSTORE_BASE64 != '' && format('{0}/release.keystore', runner.temp) || '' }}
+          MM_STORE_PASSWORD: ${{ secrets.MM_STORE_PASSWORD }}
+          MM_KEY_ALIAS: ${{ secrets.MM_KEY_ALIAS }}
+          MM_KEY_PASSWORD: ${{ secrets.MM_KEY_PASSWORD }}
         run: |
-          cd apps/mobile
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/mm-release.keystore
-            ./gradlew assembleRelease --no-daemon \
-              -PMM_STORE_FILE=/tmp/mm-release.keystore \
-              -PMM_STORE_PASSWORD="${{ secrets.ANDROID_STORE_PASSWORD }}" \
-              -PMM_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}" \
-              -PMM_KEY_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
-          else
-            echo "::warning::No release keystore secret; building a debug-signed APK."
-            ./gradlew assembleDebug --no-daemon
+          set -euo pipefail
+          ARGS=()
+          if [ -n "${MM_STORE_FILE:-}" ]; then
+            ARGS=(
+              -PMM_STORE_FILE="$MM_STORE_FILE"
+              -PMM_STORE_PASSWORD="$MM_STORE_PASSWORD"
+              -PMM_KEY_ALIAS="$MM_KEY_ALIAS"
+              -PMM_KEY_PASSWORD="$MM_KEY_PASSWORD"
+            )
           fi
-      - name: Collect APK
-        run: |
-          if [ -f apps/mobile/app/build/outputs/apk/release/app-arm64-v8a-release.apk ]; then
-            SRC=apps/mobile/app/build/outputs/apk/release/app-arm64-v8a-release.apk
-          else
-            SRC=apps/mobile/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
-          fi
+          ./gradlew assembleRelease "${ARGS[@]}"
+          SRC=androidApp/build/outputs/apk/release/app-arm64-v8a-release.apk
           cp "$SRC" "MediaManager-${GITHUB_REF_NAME}-arm64.apk"
+
       - name: Attach to release
         uses: softprops/action-gh-release@v3
         with:
           files: MediaManager-${{ github.ref_name }}-arm64.apk
           draft: true
-
-  images:
-    name: Container images
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Lowercase image prefix
-        id: image
-        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - name: API image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: crates/api/Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ steps.image.outputs.prefix }}/api:${{ github.ref_name }}
-            ${{ steps.image.outputs.prefix }}/api:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-      - name: Web image
-        uses: docker/build-push-action@v7
-        with:
-          context: apps/web
-          file: apps/web/Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            MM_API_URL=http://api:8787
-          tags: |
-            ${{ steps.image.outputs.prefix }}/web:${{ github.ref_name }}
-            ${{ steps.image.outputs.prefix }}/web:latest
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web

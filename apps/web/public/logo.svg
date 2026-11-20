@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MediaManager">
-  <title>MediaManager</title>
-  <desc>A bold M, its counter cut to a point.</desc>
-  <rect width="512" height="512" rx="116" fill="#0a0c0f"/>
-  <path fill-rule="evenodd" fill="#9ae6b4" d="M120 96 h272 a24 24 0 0 1 24 24 v272 a24 24 0 0 1 -24 24 h-272 a24 24 0 0 1 -24 -24 v-272 a24 24 0 0 1 24 -24 z M172 96 L340 96 L256 294 Z"/>
-</svg>
