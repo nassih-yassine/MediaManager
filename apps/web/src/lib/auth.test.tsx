@@ -163,3 +163,166 @@ describe("AuthProvider", () => {
     );
   });
 });
+
+describe("AuthProvider account actions", () => {
+  beforeEach(() => {
+    mocks.api.mockReset();
+    localStorage.clear();
+  });
+
+  it("creates the first admin and loads its preferences", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: true });
+      if (path === "/api/auth/setup") return Promise.resolve({ user: ADMIN });
+      if (path === "/api/profile")
+        return Promise.resolve({ theme: "moss", themeMode: "light" });
+      return Promise.reject(new Error("unexpected"));
+    });
+
+    function SetupProbe() {
+      const { setup, preferences, needsSetup } = useAuth();
+      return (
+        <>
+          <button type="button" onClick={() => void setup("a@example.com", "Ann", "secret123")}>
+            create
+          </button>
+          <span data-testid="state">
+            {needsSetup ? "setup" : `${preferences?.theme ?? "none"}`}
+          </span>
+        </>
+      );
+    }
+
+    render(
+      <AuthProvider>
+        <SetupProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("setup"));
+
+    screen.getByRole("button", { name: "create" }).click();
+
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("moss"));
+    expect(mocks.api).toHaveBeenCalledWith("/api/auth/setup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "a@example.com",
+        name: "Ann",
+        password: "secret123",
+      }),
+    });
+  });
+
+  it("applies a preference locally and PATCHes the profile", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: false });
+      if (path === "/api/auth/me") return Promise.resolve({ user: ADMIN });
+      if (path === "/api/profile")
+        return Promise.resolve({ theme: "ocean", themeMode: "dark" });
+      return Promise.resolve(undefined);
+    });
+
+    function PrefProbe() {
+      const { savePreferences, preferences } = useAuth();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => void savePreferences({ theme: "moss", themeMode: "light" })}
+          >
+            save
+          </button>
+          <span data-testid="state">{`${preferences?.theme}/${preferences?.themeMode}`}</span>
+        </>
+      );
+    }
+
+    render(
+      <AuthProvider>
+        <PrefProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("state")).toHaveTextContent("ocean/dark"),
+    );
+
+    screen.getByRole("button", { name: "save" }).click();
+
+    await waitFor(() =>
+      expect(mocks.api).toHaveBeenCalledWith("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ theme: "moss", themeMode: "light" }),
+      }),
+    );
+    expect(screen.getByTestId("state")).toHaveTextContent("moss/light");
+    expect(document.documentElement.dataset.theme).toBe("moss");
+  });
+
+  it("keeps a local preference when the save fails", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: false });
+      if (path === "/api/auth/me") return Promise.resolve({ user: ADMIN });
+      if (path === "/api/profile") return Promise.reject(new Error("offline"));
+      return Promise.reject(new Error("unexpected"));
+    });
+
+    function PrefProbe() {
+      const { savePreferences, preferences } = useAuth();
+      return (
+        <>
+          <button type="button" onClick={() => void savePreferences({ theme: "moss" })}>
+            save
+          </button>
+          <span data-testid="state">{preferences?.theme ?? "none"}</span>
+        </>
+      );
+    }
+
+    render(
+      <AuthProvider>
+        <PrefProbe />
+      </AuthProvider>,
+    );
+    expect(screen.getByTestId("state")).toHaveTextContent("none");
+
+    screen.getByRole("button", { name: "save" }).click();
+
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("moss"));
+    expect(document.documentElement.dataset.theme).toBe("moss");
+  });
+
+  it("treats a status failure as signed out", async () => {
+    mocks.api.mockRejectedValue(new Error("network down"));
+    renderProvider();
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anon"));
+  });
+
+  it("clears the session even when logout fails", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status") return Promise.resolve({ needsSetup: false });
+      if (path === "/api/auth/me") return Promise.resolve({ user: ADMIN });
+      if (path === "/api/auth/logout") return Promise.reject(new Error("offline"));
+      return Promise.reject(new Error("unexpected"));
+    });
+
+    function LogoutProbe() {
+      const { logout, user } = useAuth();
+      return (
+        <button type="button" onClick={() => void logout()}>
+          {user ? "out" : "gone"}
+        </button>
+      );
+    }
+
+    render(
+      <AuthProvider>
+        <LogoutProbe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole("button")).toHaveTextContent("out"));
+
+    screen.getByRole("button").click();
+
+    await waitFor(() => expect(screen.getByRole("button")).toHaveTextContent("gone"));
+  });
+});
