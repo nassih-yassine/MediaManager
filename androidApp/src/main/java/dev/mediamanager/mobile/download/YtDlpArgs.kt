@@ -1,43 +1,31 @@
 package dev.mediamanager.mobile.download
 
 import android.util.Log
-import org.json.JSONObject
 import java.io.File
+import org.json.JSONObject
 
-data class MediaInfo(
-    val title: String,
-    val durationMs: Long?,
-    val ext: String,
-    val width: Int?,
-    val height: Int?,
-    val approxBytes: Long?,
-)
+data class MediaInfo(val title: String, val durationMs: Long?, val ext: String, val width: Int?, val height: Int?, val approxBytes: Long?)
 
 object YtDlpArgs {
 
-    fun audio(
-        url: String,
-        outDir: File,
-        jsRuntime: String? = "quickjs",
-        extractorArgs: String? = null,
-    ): List<String> =
-        (base(outDir, jsRuntime, extractorArgs) + listOf(
+    fun audio(url: String, outDir: File, jsRuntime: String? = "quickjs", extractorArgs: String? = null): List<String> = (
+        base(outDir, jsRuntime, extractorArgs) + listOf(
             "-x",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-        )) + url
+            "--audio-format",
+            "mp3",
+            "--audio-quality",
+            "0",
+        )
+        ) + url
 
-    fun video(
-        url: String,
-        outDir: File,
-        maxHeight: Int,
-        jsRuntime: String? = "quickjs",
-        extractorArgs: String? = null,
-    ): List<String> =
-        (base(outDir, jsRuntime, extractorArgs) + listOf(
-            "-f", "bv*[height<=$maxHeight]+ba/b[height<=$maxHeight]",
-            "--merge-output-format", "mp4",
-        )) + url
+    fun video(url: String, outDir: File, maxHeight: Int, jsRuntime: String? = "quickjs", extractorArgs: String? = null): List<String> = (
+        base(outDir, jsRuntime, extractorArgs) + listOf(
+            "-f",
+            "bv*[height<=$maxHeight]+ba/b[height<=$maxHeight]",
+            "--merge-output-format",
+            "mp4",
+        )
+        ) + url
 
     private fun base(outDir: File, jsRuntime: String?, extractorArgs: String?): List<String> = buildList {
         addAll(

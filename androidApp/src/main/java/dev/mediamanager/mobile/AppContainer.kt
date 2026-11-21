@@ -17,11 +17,11 @@ import dev.mediamanager.mobile.download.YoutubeNewPipeExtractor
 import dev.mediamanager.mobile.download.YtDlpExtractor
 import dev.mediamanager.mobile.media.AudioOutputMonitor
 import dev.mediamanager.mobile.media.ItemRepository
-import dev.mediamanager.mobile.media.PlaylistCoverStore
 import dev.mediamanager.mobile.media.LibraryPaths
+import dev.mediamanager.mobile.media.PlaylistCoverStore
+import dev.mediamanager.mobile.media.VolumeControl
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.storage.StorageRepository
-import dev.mediamanager.mobile.media.VolumeControl
 
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
@@ -41,7 +41,6 @@ class AppContainer(context: Context) {
         dao = db.jobDao(),
         existsInLibrary = { url -> db.itemDao().existsBySourceUrl(url) },
     )
-
 
     val itemRepository: ItemRepository = ItemRepository(db, paths)
 

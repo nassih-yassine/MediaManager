@@ -11,14 +11,14 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.Item
-import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.data.SettingsStore
-import dev.mediamanager.mobile.download.resumeTarget
+import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.download.restoreIndex
-import kotlinx.coroutines.flow.first
+import dev.mediamanager.mobile.download.resumeTarget
 import dev.mediamanager.mobile.media.LibraryPaths
-import dev.mediamanager.mobile.widget.WidgetPublisher
 import dev.mediamanager.mobile.widget.NowPlayingWidget
+import dev.mediamanager.mobile.widget.WidgetPublisher
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,9 +27,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.File
 
 data class NowPlaying(
     val itemId: String,
@@ -91,7 +91,9 @@ class PlayerRepository(
             c.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     publish()
-                    if (isPlaying) startTicker() else {
+                    if (isPlaying) {
+                        startTicker()
+                    } else {
                         stopTicker()
                         savePosition()
                     }
@@ -277,7 +279,11 @@ class PlayerRepository(
 
     fun previous() {
         controller?.let {
-            if (it.currentPosition > 3_000) it.seekTo(0) else if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem()
+            if (it.currentPosition > 3_000) {
+                it.seekTo(0)
+            } else if (it.hasPreviousMediaItem()) {
+                it.seekToPreviousMediaItem()
+            }
         }
     }
 

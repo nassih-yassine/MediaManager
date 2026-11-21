@@ -64,40 +64,39 @@ internal object Mp4Muxer {
             .firstOrNull { it.isFile && (it.name == "ffmpeg" || it.name == "ffmpeg.bin") }
     }.getOrNull()
 
-    private fun remux(videoFile: File, audioFile: File, output: File, extension: String): Boolean =
-        runCatching {
-            val video = MediaExtractor().apply { setDataSource(videoFile.absolutePath) }
-            val audio = MediaExtractor().apply { setDataSource(audioFile.absolutePath) }
-            try {
-                val videoTrack = firstTrack(video, "video/")
-                val audioTrack = firstTrack(audio, "audio/")
-                if (videoTrack < 0 || audioTrack < 0) return false
+    private fun remux(videoFile: File, audioFile: File, output: File, extension: String): Boolean = runCatching {
+        val video = MediaExtractor().apply { setDataSource(videoFile.absolutePath) }
+        val audio = MediaExtractor().apply { setDataSource(audioFile.absolutePath) }
+        try {
+            val videoTrack = firstTrack(video, "video/")
+            val audioTrack = firstTrack(audio, "audio/")
+            if (videoTrack < 0 || audioTrack < 0) return false
 
-                video.selectTrack(videoTrack)
-                audio.selectTrack(audioTrack)
-                val format = if (extension == "webm") {
-                    MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
-                } else {
-                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
-                }
-                val muxer = MediaMuxer(output.absolutePath, format)
-                try {
-                    val outVideo = muxer.addTrack(video.getTrackFormat(videoTrack))
-                    val outAudio = muxer.addTrack(audio.getTrackFormat(audioTrack))
-                    muxer.start()
-                    copy(video, muxer, outVideo, videoTrack)
-                    copy(audio, muxer, outAudio, audioTrack)
-                    muxer.stop()
-                } finally {
-                    muxer.release()
-                }
-                output.length() > 0
-            } finally {
-                video.release()
-                audio.release()
+            video.selectTrack(videoTrack)
+            audio.selectTrack(audioTrack)
+            val format = if (extension == "webm") {
+                MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
+            } else {
+                MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
             }
-        }.onFailure { Log.w(TAG, "remux to $extension failed: ${it.message}") }
-            .getOrDefault(false)
+            val muxer = MediaMuxer(output.absolutePath, format)
+            try {
+                val outVideo = muxer.addTrack(video.getTrackFormat(videoTrack))
+                val outAudio = muxer.addTrack(audio.getTrackFormat(audioTrack))
+                muxer.start()
+                copy(video, muxer, outVideo, videoTrack)
+                copy(audio, muxer, outAudio, audioTrack)
+                muxer.stop()
+            } finally {
+                muxer.release()
+            }
+            output.length() > 0
+        } finally {
+            video.release()
+            audio.release()
+        }
+    }.onFailure { Log.w(TAG, "remux to $extension failed: ${it.message}") }
+        .getOrDefault(false)
 
     private fun firstTrack(extractor: MediaExtractor, mimePrefix: String): Int {
         for (index in 0 until extractor.trackCount) {

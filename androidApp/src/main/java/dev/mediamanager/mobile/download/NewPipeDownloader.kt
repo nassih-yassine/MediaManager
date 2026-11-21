@@ -1,10 +1,10 @@
 package dev.mediamanager.mobile.download
 
+import java.net.HttpURLConnection
+import java.net.URL
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Minimal bridge between NewPipe's extractor and the platform HTTP stack.

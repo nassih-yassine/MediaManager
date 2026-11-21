@@ -45,11 +45,7 @@ class ItemRepositoryTest {
     @After
     fun tearDown() = db.close()
 
-    private suspend fun seed(
-        id: String,
-        bytesWritten: Int = 1_200_000,
-        withThumb: Boolean = true,
-    ): ItemEntity {
+    private suspend fun seed(id: String, bytesWritten: Int = 1_200_000, withThumb: Boolean = true): ItemEntity {
         val media = paths.itemFile("audio", id, "mp3")
         media.parentFile!!.mkdirs()
         media.writeBytes(ByteArray(bytesWritten))
@@ -58,7 +54,9 @@ class ItemRepositoryTest {
             thumb.parentFile!!.mkdirs()
             thumb.writeBytes(ByteArray(40_000))
             paths.thumbRelativePath(id)
-        } else null
+        } else {
+            null
+        }
         val item = ItemEntity(
             id = id,
             kind = "audio",

@@ -62,11 +62,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 @Composable
-fun StorageScreen(
-    container: AppContainer,
-    player: PlayerRepository,
-    onClose: () -> Unit = {},
-) {
+fun StorageScreen(container: AppContainer, player: PlayerRepository, onClose: () -> Unit = {}) {
     androidx.activity.compose.BackHandler(onBack = onClose)
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
@@ -285,12 +281,7 @@ private fun LegendRow(label: String, bytes: Long, whole: Long, dot: Color) {
 }
 
 @Composable
-private fun LargestRow(
-    row: SizeRow,
-    filesDir: java.io.File,
-    onPlay: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun LargestRow(row: SizeRow, filesDir: java.io.File, onPlay: () -> Unit, onDelete: () -> Unit) {
     val colors = LocalAppColors.current
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -324,12 +315,18 @@ private fun LargestRow(
                 DropdownMenuItem(
                     text = { Text("Play") },
                     leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                    onClick = { menu = false; onPlay() },
+                    onClick = {
+                        menu = false
+                        onPlay()
+                    },
                 )
                 DropdownMenuItem(
                     text = { Text("Delete", color = colors.danger) },
                     leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.danger) },
-                    onClick = { menu = false; onDelete() },
+                    onClick = {
+                        menu = false
+                        onDelete()
+                    },
                 )
             }
         }

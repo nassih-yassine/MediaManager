@@ -18,11 +18,7 @@ sealed interface SpaceVerdict {
 const val SPACE_HEADROOM_BYTES: Long = 200L * 1024 * 1024
 
 /** An unknown size never blocks the download; the ENOSPC path covers it. */
-fun checkSpace(
-    needed: Long?,
-    free: Long,
-    headroom: Long = SPACE_HEADROOM_BYTES,
-): SpaceVerdict {
+fun checkSpace(needed: Long?, free: Long, headroom: Long = SPACE_HEADROOM_BYTES): SpaceVerdict {
     if (needed == null || needed <= 0) return SpaceVerdict.Fits
     return if (needed + headroom > free) SpaceVerdict.TooLarge(needed, free) else SpaceVerdict.Fits
 }

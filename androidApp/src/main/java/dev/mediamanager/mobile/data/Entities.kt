@@ -85,12 +85,7 @@ data class PlaylistEntity(
     ],
     indices = [Index("playlistId", "position"), Index("itemId")],
 )
-data class PlaylistItemEntity(
-    val playlistId: String,
-    val itemId: String,
-    val position: Int,
-    val addedAt: Long,
-)
+data class PlaylistItemEntity(val playlistId: String, val itemId: String, val position: Int, val addedAt: Long)
 
 @Entity(
     tableName = "queue_items",
@@ -104,13 +99,6 @@ data class PlaylistItemEntity(
     ],
     indices = [Index("itemId")],
 )
-data class QueueItemEntity(
-    @PrimaryKey val position: Int,
-    val itemId: String,
-)
+data class QueueItemEntity(@PrimaryKey val position: Int, val itemId: String)
 
-data class KindTotal(
-    val kind: String,
-    val bytes: Long,
-    val count: Int,
-)
+data class KindTotal(val kind: String, val bytes: Long, val count: Int)

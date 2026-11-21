@@ -29,10 +29,14 @@ object QueueNotifications {
 
     fun summary(state: DownloadState, activeTitle: String?): String = when {
         state.waitingForWifi -> "Waiting for Wi-Fi"
+
         state.waitingForNetwork -> "Waiting for the network"
+
         state.activeJobId == null -> "Idle"
+
         state.activeCount > 1 ->
             "Downloading ${state.activeCount} items · ${(state.progress.coerceIn(0f, 1f) * 100).toInt()}%"
+
         else -> "Downloading · ${activeTitle ?: "Media"} · ${(state.progress.coerceIn(0f, 1f) * 100).toInt()}%"
     }
 

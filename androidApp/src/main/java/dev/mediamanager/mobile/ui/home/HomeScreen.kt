@@ -31,17 +31,12 @@ import dev.mediamanager.mobile.ui.components.Thumb
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 
-
 /**
  * The landing screen: shelves of the things a person actually returns for, in the
  * order they usually want them.
  */
 @Composable
-fun HomeScreen(
-    container: AppContainer,
-    player: PlayerRepository,
-    onAdd: () -> Unit,
-) {
+fun HomeScreen(container: AppContainer, player: PlayerRepository, onAdd: () -> Unit) {
     val colors = LocalAppColors.current
     val filesDir = container.appContext.filesDir
 
@@ -99,11 +94,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun RecentRow(
-    item: Item,
-    filesDir: java.io.File,
-    onClick: () -> Unit,
-) {
+private fun RecentRow(item: Item, filesDir: java.io.File, onClick: () -> Unit) {
     val colors = LocalAppColors.current
     // Flat row: same rhythm as the library, no card border to add noise.
     Row(

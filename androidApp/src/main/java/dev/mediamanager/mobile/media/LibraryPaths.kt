@@ -24,8 +24,7 @@ class LibraryPaths(private val root: File) {
         return "library/$kind/${id.take(2)}/$id.$cleanExt"
     }
 
-    fun itemFile(kind: String, id: String, ext: String): File =
-        File(root, itemRelativePath(kind, id, ext))
+    fun itemFile(kind: String, id: String, ext: String): File = File(root, itemRelativePath(kind, id, ext))
 
     fun thumbRelativePath(id: String): String {
         require(id.length >= 2) { "id must have at least two characters" }

@@ -23,12 +23,16 @@ fun normalizeUrl(raw: String): String {
     val list = uri.getQueryParameter("list")
     val id = when {
         host == "youtu.be" -> uri.pathSegments.firstOrNull()
+
         uri.getQueryParameter("v") != null -> uri.getQueryParameter("v")
+
         uri.pathSegments.firstOrNull() in setOf("shorts", "embed", "live", "v") ->
             uri.pathSegments.getOrNull(1)
+
         // A radio playlist is seeded by a video: list=RD<videoId>.
         list != null && list.startsWith("RD") ->
             list.removePrefix("RD").takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+
         else -> null
     }
     return if (id.isNullOrBlank()) trimmed else "https://www.youtube.com/watch?v=$id"

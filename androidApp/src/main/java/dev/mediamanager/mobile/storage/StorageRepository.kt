@@ -5,14 +5,14 @@ import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.data.toItem
 import dev.mediamanager.mobile.media.LibraryPaths
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import java.io.File
 
 data class FileStats(val totalBytes: Long, val freeBytes: Long)
 
@@ -34,8 +34,7 @@ data class StorageSnapshot(
 
 data class SizeRow(val item: Item, val share: Float)
 
-fun share(part: Long, whole: Long): Float =
-    if (whole <= 0L) 0f else (part.toDouble() / whole.toDouble()).toFloat().coerceIn(0f, 1f)
+fun share(part: Long, whole: Long): Float = if (whole <= 0L) 0f else (part.toDouble() / whole.toDouble()).toFloat().coerceIn(0f, 1f)
 
 fun usedFraction(totalBytes: Long, freeBytes: Long): Float =
     if (totalBytes <= 0L) 0f else ((totalBytes - freeBytes).toDouble() / totalBytes).toFloat().coerceIn(0f, 1f)
@@ -46,10 +45,7 @@ class StorageRepository(
     private val stats: () -> FileStats = { deviceStats(paths) },
 ) {
 
-    fun observe(
-        tempBytes: StateFlow<Long>,
-        coversBytes: StateFlow<Long> = MutableStateFlow(0L),
-    ): Flow<StorageSnapshot> = combine(
+    fun observe(tempBytes: StateFlow<Long>, coversBytes: StateFlow<Long> = MutableStateFlow(0L)): Flow<StorageSnapshot> = combine(
         db.itemDao().observeTotalsByKind(),
         db.itemDao().observeThumbBytes(),
         combine(tempBytes, coversBytes) { temp, covers -> temp to covers },
@@ -85,11 +81,10 @@ class StorageRepository(
         dirs.sumOf { jobDir -> jobDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
     }
 
-    fun largestItems(limit: Int = 50): Flow<List<SizeRow>> =
-        db.itemDao().observeLargest(limit).map { entities ->
-            val total = entities.sumOf { it.bytes }
-            entities.map { SizeRow(it.toItem(), share(it.bytes, total)) }
-        }
+    fun largestItems(limit: Int = 50): Flow<List<SizeRow>> = db.itemDao().observeLargest(limit).map { entities ->
+        val total = entities.sumOf { it.bytes }
+        entities.map { SizeRow(it.toItem(), share(it.bytes, total)) }
+    }
 
     fun currentStats(): FileStats = stats()
 }

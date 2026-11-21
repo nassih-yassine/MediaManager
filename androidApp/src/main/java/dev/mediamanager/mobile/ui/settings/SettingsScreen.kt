@@ -2,17 +2,12 @@ package dev.mediamanager.mobile.ui.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,15 +16,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -61,11 +56,7 @@ import kotlinx.coroutines.launch
 private val heights = listOf(720, 1080, 1440, 2160)
 
 @Composable
-fun SettingsScreen(
-    container: AppContainer,
-    onBack: () -> Unit = {},
-    onOpenStorage: () -> Unit = {},
-) {
+fun SettingsScreen(container: AppContainer, onBack: () -> Unit = {}, onOpenStorage: () -> Unit = {}) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
@@ -239,16 +230,9 @@ private fun SettingsCard(
     }
 }
 
-
 /** A theme you can see before you pick it: its own panel, ink and accent. */
 @Composable
-private fun ThemeOption(
-    family: ThemeFamily,
-    dark: Boolean,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onSelect: () -> Unit,
-) {
+private fun ThemeOption(family: ThemeFamily, dark: Boolean, selected: Boolean, modifier: Modifier = Modifier, onSelect: () -> Unit) {
     val palette = colorsFor(family, dark)
     val active = LocalAppColors.current.accent
     Box(

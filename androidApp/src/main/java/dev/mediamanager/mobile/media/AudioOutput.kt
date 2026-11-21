@@ -65,6 +65,7 @@ class AudioOutputMonitor(context: Context) {
             } -> AudioRoute.USB
 
             connected.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } -> AudioRoute.SPEAKER
+
             else -> AudioRoute.UNKNOWN
         }
     }

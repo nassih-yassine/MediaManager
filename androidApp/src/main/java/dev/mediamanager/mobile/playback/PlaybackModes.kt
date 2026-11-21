@@ -17,5 +17,4 @@ fun repeatLabel(mode: Int): String = when (mode) {
 
 val playbackSpeeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
 
-fun speedLabel(speed: Float): String =
-    if (speed == speed.toInt().toFloat()) "${speed.toInt()}×" else "${speed}×"
+fun speedLabel(speed: Float): String = if (speed == speed.toInt().toFloat()) "${speed.toInt()}×" else "$speed×"

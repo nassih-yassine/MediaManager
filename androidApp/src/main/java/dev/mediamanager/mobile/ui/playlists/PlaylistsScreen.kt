@@ -7,15 +7,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,8 +37,10 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,23 +61,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.Modifier
-import kotlin.math.roundToInt
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.ui.zIndex
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Item
@@ -85,9 +84,10 @@ import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.Thumb
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
-import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlaylistsTab(container: AppContainer, player: PlayerRepository) {
@@ -102,11 +102,7 @@ fun PlaylistsTab(container: AppContainer, player: PlayerRepository) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlaylistListContent(
-    container: AppContainer,
-    player: PlayerRepository,
-    onOpen: (String) -> Unit,
-) {
+fun PlaylistListContent(container: AppContainer, player: PlayerRepository, onOpen: (String) -> Unit) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val playlists by container.db.playlistDao().observePlaylists()
@@ -269,12 +265,7 @@ fun PlaylistListContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlaylistDetailScreen(
-    container: AppContainer,
-    player: PlayerRepository,
-    playlistId: String,
-    onBack: () -> Unit,
-) {
+fun PlaylistDetailScreen(container: AppContainer, player: PlayerRepository, playlistId: String, onBack: () -> Unit) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     BackHandler(onBack = onBack)
@@ -296,9 +287,11 @@ fun PlaylistDetailScreen(
     var renameValue by remember { mutableStateOf("") }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch {
-            container.playlistCovers.fromUri(playlistId, uri)
-            playlist = dao.get(playlistId)
+        if (uri != null) {
+            scope.launch {
+                container.playlistCovers.fromUri(playlistId, uri)
+                playlist = dao.get(playlistId)
+            }
         }
     }
 
@@ -329,7 +322,10 @@ fun PlaylistDetailScreen(
                                 DropdownMenuItem(
                                     text = { Text("Change cover") },
                                     leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, contentDescription = null) },
-                                    onClick = { coverSheet = true; menu = false },
+                                    onClick = {
+                                        coverSheet = true
+                                        menu = false
+                                    },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Delete", color = colors.danger) },
@@ -692,12 +688,7 @@ private fun SheetAction(
  * items; otherwise a glyph. The mosaic is rendered from item thumbs, never stored.
  */
 @Composable
-private fun PlaylistCover(
-    coverPath: String?,
-    items: List<Item>,
-    filesDir: File,
-    size: Dp,
-) {
+private fun PlaylistCover(coverPath: String?, items: List<Item>, filesDir: File, size: Dp) {
     val colors = LocalAppColors.current
     Box(
         Modifier

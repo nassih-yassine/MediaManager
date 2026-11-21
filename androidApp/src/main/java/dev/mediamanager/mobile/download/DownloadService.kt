@@ -14,6 +14,8 @@ import androidx.core.content.ContextCompat
 import dev.mediamanager.mobile.App
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.JobEntity
+import java.util.Collections
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,8 +30,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Collections
-import java.util.UUID
 
 class DownloadService : Service() {
 
@@ -76,11 +76,7 @@ class DownloadService : Service() {
      */
     private var loop: Job? = null
 
-    private class ActiveDownload(
-        var title: String,
-        var progress: Float,
-        var stage: String? = null,
-    ) {
+    private class ActiveDownload(var title: String, var progress: Float, var stage: String? = null) {
         var lastBeatAt: Long = 0
         var lastNotifyAt: Long = 0
     }
@@ -283,6 +279,7 @@ class DownloadService : Service() {
                     )
                 }
             }
+
             DownloadPipeline.Result.Cancelled -> {
                 app.jobQueue.cancel(job.id)
                 pathsCleanup(app, job.id)
@@ -345,8 +342,12 @@ class DownloadService : Service() {
     }
 
     private fun stopForegroundCompatAndSelf() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
-        else @Suppress("DEPRECATION") stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
     }
 

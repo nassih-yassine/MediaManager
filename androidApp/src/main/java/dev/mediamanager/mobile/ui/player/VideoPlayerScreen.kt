@@ -10,6 +10,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,7 +72,6 @@ import dev.mediamanager.mobile.ui.components.SelectMenu
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.delay
-import androidx.compose.foundation.gestures.detectTapGestures
 
 /**
  * Picks the right surface for the current item: a video owns the screen edge to edge,
@@ -111,10 +111,7 @@ fun PlayerOverlay(
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-fun VideoPlayerScreen(
-    player: PlayerRepository,
-    onClose: () -> Unit,
-) {
+fun VideoPlayerScreen(player: PlayerRepository, onClose: () -> Unit) {
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
     val current = now ?: return
     val colors = LocalAppColors.current
@@ -171,8 +168,11 @@ fun VideoPlayerScreen(
                 },
                 update = { view ->
                     view.resizeMode =
-                        if (zoomed) AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        if (zoomed) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        } else {
+                            AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
                     view.keepScreenOn = true
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -196,10 +196,12 @@ fun VideoPlayerScreen(
                                     player.skipBy(-10_000)
                                     seekFlash = "−10s"
                                 }
+
                                 offset.x > width * 2f / 3f -> {
                                     player.skipBy(10_000)
                                     seekFlash = "+10s"
                                 }
+
                                 else -> controlsVisible = !controlsVisible
                             }
                         },
@@ -395,12 +397,7 @@ private fun VideoChrome(
 }
 
 @Composable
-private fun ChromeButton(
-    icon: ImageVector,
-    description: String,
-    size: androidx.compose.ui.unit.Dp,
-    onClick: () -> Unit,
-) {
+private fun ChromeButton(icon: ImageVector, description: String, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.size(size + 8.dp)) {
         Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size - 12.dp))
     }

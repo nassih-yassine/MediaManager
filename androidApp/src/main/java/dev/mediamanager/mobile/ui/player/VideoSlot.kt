@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -14,17 +16,13 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
-import androidx.compose.runtime.key
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import dev.mediamanager.mobile.playback.PlaybackService
@@ -43,11 +43,7 @@ import dev.mediamanager.mobile.playback.PlayerRepository
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-fun VideoSlot(
-    player: PlayerRepository,
-    onExpand: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun VideoSlot(player: PlayerRepository, onExpand: () -> Unit, modifier: Modifier = Modifier) {
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
     val current = now ?: return
     val exo = PlaybackService.currentPlayer
@@ -82,55 +78,55 @@ fun VideoSlot(
                 .background(Color.Black),
             contentAlignment = Alignment.Center,
         ) {
-        if (exo != null) {
-            // The service can recreate its ExoPlayer; key() rebuilds the view so the
-            // pane follows the new instance instead of holding a released one.
-            key(exo) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        keepScreenOn = true
-                        this.player = exo
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (exo != null) {
+                // The service can recreate its ExoPlayer; key() rebuilds the view so the
+                // pane follows the new instance instead of holding a released one.
+                key(exo) {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                useController = false
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                keepScreenOn = true
+                                this.player = exo
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
-        }
-        Box(
-            Modifier.fillMaxSize().clickable { player.toggle() },
-            contentAlignment = Alignment.Center,
-        ) {
-            if (!current.isPlaying) {
+            Box(
+                Modifier.fillMaxSize().clickable { player.toggle() },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!current.isPlaying) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .padding(12.dp),
+                    )
+                }
+            }
+            IconButton(
+                onClick = onExpand,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+            ) {
                 Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Play",
+                    Icons.Default.Fullscreen,
+                    contentDescription = "Fullscreen",
                     tint = Color.White,
                     modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(12.dp),
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .padding(3.dp),
                 )
             }
-        }
-        IconButton(
-            onClick = onExpand,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
-        ) {
-            Icon(
-                Icons.Default.Fullscreen,
-                contentDescription = "Fullscreen",
-                tint = Color.White,
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .padding(3.dp),
-            )
-        }
         }
     }
 }

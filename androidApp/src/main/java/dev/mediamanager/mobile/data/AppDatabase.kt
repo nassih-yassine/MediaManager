@@ -30,7 +30,6 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     version = 3,
     exportSchema = true,
 )
-
 abstract class AppDatabase : RoomDatabase() {
     abstract fun itemDao(): ItemDao
     abstract fun jobDao(): JobDao

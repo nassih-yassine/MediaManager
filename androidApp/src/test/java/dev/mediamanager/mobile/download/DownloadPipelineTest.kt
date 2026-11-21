@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.JobEntity
 import dev.mediamanager.mobile.media.LibraryPaths
+import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -20,7 +21,6 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)

@@ -62,17 +62,13 @@ import dev.mediamanager.mobile.ui.format.formatBytes
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.jobLabel
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 @Composable
-fun DownloadsScreen(
-    container: AppContainer,
-    player: PlayerRepository,
-    onClose: () -> Unit,
-) {
+fun DownloadsScreen(container: AppContainer, player: PlayerRepository, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
@@ -260,12 +256,7 @@ private fun ActiveCard(container: AppContainer, job: JobEntity) {
 }
 
 @Composable
-private fun FinishedCard(
-    container: AppContainer,
-    job: JobEntity,
-    item: Item?,
-    player: PlayerRepository,
-) {
+private fun FinishedCard(container: AppContainer, job: JobEntity, item: Item?, player: PlayerRepository) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -297,12 +288,14 @@ private fun FinishedCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
+
                 item?.isAudio == false -> Icon(
                     Icons.Default.Videocam,
                     contentDescription = null,
                     tint = colors.muted,
                     modifier = Modifier.size(20.dp),
                 )
+
                 else -> Icon(
                     Icons.Default.MusicNote,
                     contentDescription = null,

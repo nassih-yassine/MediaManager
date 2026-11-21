@@ -13,10 +13,7 @@ enum class WidthClass { COMPACT, MEDIUM, EXPANDED }
 
 enum class HeightClass { SHORT, NORMAL }
 
-data class WindowInfo(
-    val widthDp: Int,
-    val heightDp: Int,
-) {
+data class WindowInfo(val widthDp: Int, val heightDp: Int) {
     val widthClass: WidthClass
         get() = when {
             widthDp < 600 -> WidthClass.COMPACT
@@ -39,8 +36,7 @@ data class WindowInfo(
     val isTwoPane: Boolean get() = isWide && heightClass == HeightClass.NORMAL
 
     /** Columns that fit at [minCellDp], never fewer than two. */
-    fun gridColumns(minCellDp: Int): Int =
-        (widthDp / minCellDp.coerceAtLeast(1)).coerceAtLeast(2)
+    fun gridColumns(minCellDp: Int): Int = (widthDp / minCellDp.coerceAtLeast(1)).coerceAtLeast(2)
 
     companion object {
         const val SHORT_HEIGHT_DP = 480

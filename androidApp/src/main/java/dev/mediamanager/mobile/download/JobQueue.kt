@@ -15,11 +15,7 @@ class JobQueue(
     private val existsInLibrary: suspend (String) -> Boolean = { false },
 ) {
 
-    data class EnqueueResult(
-        val job: JobEntity?,
-        val duplicate: Boolean,
-        val inLibrary: Boolean = false,
-    )
+    data class EnqueueResult(val job: JobEntity?, val duplicate: Boolean, val inLibrary: Boolean = false)
 
     suspend fun enqueue(url: String, mode: DownloadMode): EnqueueResult {
         lateinit var result: EnqueueResult
@@ -51,8 +47,7 @@ class JobQueue(
 
     suspend fun claim(workerId: String): JobEntity? = dao.claim(workerId, clock())
 
-    suspend fun heartbeat(id: String, progress: Float, stage: String?) =
-        dao.heartbeat(id, clock(), progress, stage)
+    suspend fun heartbeat(id: String, progress: Float, stage: String?) = dao.heartbeat(id, clock(), progress, stage)
 
     suspend fun finish(id: String, itemId: String) = dao.markDone(id, itemId, clock())
 
@@ -79,8 +74,11 @@ class JobQueue(
     suspend fun requeue(id: String, stage: String? = null) {
         val job = dao.get(id) ?: return
         val now = clock()
-        if (stage != null) dao.park(id, stage, now)
-        else dao.requeue(id, now, job.attempts, job.error, now)
+        if (stage != null) {
+            dao.park(id, stage, now)
+        } else {
+            dao.requeue(id, now, job.attempts, job.error, now)
+        }
     }
 
     suspend fun cancel(id: String) = dao.cancel(id, clock())

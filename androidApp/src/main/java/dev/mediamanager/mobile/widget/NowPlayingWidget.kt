@@ -27,11 +27,7 @@ import java.io.File
  */
 class NowPlayingWidget : AppWidgetProvider() {
 
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray,
-    ) {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         WidgetPublisher.render(context, appWidgetManager, NowPlayingWidget.widgetState)
     }
 
@@ -67,21 +63,16 @@ class NowPlayingWidget : AppWidgetProvider() {
         @Volatile
         var widgetState: NowPlaying? = null
 
-        fun openPlayerIntent(context: Context): Intent =
-            Intent(context, MainActivity::class.java)
-                .putExtra(EXTRA_OPEN_PLAYER, true)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        fun openPlayerIntent(context: Context): Intent = Intent(context, MainActivity::class.java)
+            .putExtra(EXTRA_OPEN_PLAYER, true)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
 }
 
 /** Renders the widget from a playback snapshot; called by the app and the provider. */
 object WidgetPublisher {
 
-    fun render(
-        context: Context,
-        manager: AppWidgetManager = AppWidgetManager.getInstance(context),
-        state: NowPlaying?,
-    ) {
+    fun render(context: Context, manager: AppWidgetManager = AppWidgetManager.getInstance(context), state: NowPlaying?) {
         val ids = manager.getAppWidgetIds(ComponentName(context, NowPlayingWidget::class.java))
         if (ids.isEmpty()) return
         ids.forEach { id -> manager.updateAppWidget(id, build(context, state)) }
@@ -145,16 +136,16 @@ object WidgetPublisher {
         return views
     }
 
-    private fun command(context: Context, action: String, code: Int): PendingIntent =
-        PendingIntent.getBroadcast(
-            context,
-            code,
-            Intent(context, NowPlayingWidget::class.java).setAction(action),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+    private fun command(context: Context, action: String, code: Int): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        code,
+        Intent(context, NowPlayingWidget::class.java).setAction(action),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     /** Last decoded cover; the same track repaints every five seconds. */
     @Volatile private var cachedPath: String? = null
+
     @Volatile private var cachedBitmap: Bitmap? = null
 
     /** Covers are small; decode downsampled so the widget stays under the binder limit. */

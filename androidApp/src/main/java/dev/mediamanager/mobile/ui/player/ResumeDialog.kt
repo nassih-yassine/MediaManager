@@ -26,11 +26,7 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
  * becomes a tax on listening to a three-minute track.
  */
 @Composable
-fun ResumeDialog(
-    positionMs: Long,
-    onResume: () -> Unit,
-    onStartOver: () -> Unit,
-) {
+fun ResumeDialog(positionMs: Long, onResume: () -> Unit, onStartOver: () -> Unit) {
     val colors = LocalAppColors.current
     val at = formatDuration(positionMs).ifEmpty { "0:00" }
 

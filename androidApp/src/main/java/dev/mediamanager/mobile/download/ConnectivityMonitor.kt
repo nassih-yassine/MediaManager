@@ -31,8 +31,12 @@ class ConnectivityMonitor(private val context: Context) {
     fun observeOnline(): Flow<Boolean> = callbackFlow {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) { trySend(online()) }
-            override fun onLost(network: Network) { trySend(online()) }
+            override fun onAvailable(network: Network) {
+                trySend(online())
+            }
+            override fun onLost(network: Network) {
+                trySend(online())
+            }
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                 trySend(online())
             }
@@ -45,8 +49,12 @@ class ConnectivityMonitor(private val context: Context) {
     fun observeUnmetered(): Flow<Boolean> = callbackFlow {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) { trySend(unmetered()) }
-            override fun onLost(network: Network) { trySend(unmetered()) }
+            override fun onAvailable(network: Network) {
+                trySend(unmetered())
+            }
+            override fun onLost(network: Network) {
+                trySend(unmetered())
+            }
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                 trySend(unmetered())
             }

@@ -68,23 +68,23 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
-import dev.mediamanager.mobile.media.AudioRoute
-import dev.mediamanager.mobile.media.AudioOutputMonitor
-import dev.mediamanager.mobile.media.VolumeControl
 import dev.mediamanager.mobile.data.Item
-import dev.mediamanager.mobile.ui.adaptive.HeightClass
-import dev.mediamanager.mobile.ui.adaptive.LocalWindowInfo
+import dev.mediamanager.mobile.media.AudioOutputMonitor
+import dev.mediamanager.mobile.media.AudioRoute
+import dev.mediamanager.mobile.media.VolumeControl
 import dev.mediamanager.mobile.playback.NowPlaying
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.playback.playbackSpeeds
 import dev.mediamanager.mobile.playback.speedLabel
+import dev.mediamanager.mobile.ui.adaptive.HeightClass
+import dev.mediamanager.mobile.ui.adaptive.LocalWindowInfo
 import dev.mediamanager.mobile.ui.components.Scrubber
 import dev.mediamanager.mobile.ui.components.SelectMenu
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 import java.io.File
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * Full-screen player. Artwork on top, a frosted panel underneath with the transport,

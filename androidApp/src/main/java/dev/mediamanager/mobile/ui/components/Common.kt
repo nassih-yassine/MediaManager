@@ -17,17 +17,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,19 +36,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import java.io.File
 
 @Composable
-fun MmSurface(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScopeAlias.() -> Unit,
-) {
+fun MmSurface(modifier: Modifier = Modifier, content: @Composable ColumnScopeAlias.() -> Unit) {
     val colors = LocalAppColors.current
     Column(
         modifier
@@ -94,12 +91,7 @@ fun Thumb(item: Item, filesDir: File, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun EmptyState(
-    title: String,
-    body: String,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
+fun EmptyState(title: String, body: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     val colors = LocalAppColors.current
     Column(
         Modifier.fillMaxSize().padding(32.dp),
@@ -142,13 +134,7 @@ fun EmptyState(
 }
 
 @Composable
-fun <T> SelectMenu(
-    label: String,
-    options: List<Pair<T, String>>,
-    selected: T,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun <T> SelectMenu(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     var open by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.first == selected }?.second ?: label
@@ -185,12 +171,7 @@ fun <T> SelectMenu(
 }
 
 @Composable
-fun Segmented(
-    options: List<Pair<String, String>>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     Row(
         modifier
@@ -280,7 +261,10 @@ fun ConfirmDialog(
                     Text("Cancel", color = colors.muted)
                 }
                 androidx.compose.material3.Button(
-                    onClick = { onConfirm(); onDismiss() },
+                    onClick = {
+                        onConfirm()
+                        onDismiss()
+                    },
                     modifier = Modifier.weight(2f).height(48.dp),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = tint,
@@ -318,11 +302,7 @@ fun MmTextButton(
 }
 
 @Composable
-fun SectionTitle(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    modifier: Modifier = Modifier,
-) {
+fun SectionTitle(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, modifier: Modifier = Modifier) {
     Row(modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) {
             Icon(icon, contentDescription = null, tint = LocalAppColors.current.muted, modifier = Modifier.size(14.dp))

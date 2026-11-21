@@ -46,9 +46,11 @@ interface PlaylistDao {
     @Transaction
     suspend fun addItems(playlistId: String, itemIds: List<String>, now: Long) {
         val start = maxPosition(playlistId) + 1
-        insertRows(itemIds.mapIndexed { index, id ->
-            PlaylistItemEntity(playlistId, id, start + index, now)
-        })
+        insertRows(
+            itemIds.mapIndexed { index, id ->
+                PlaylistItemEntity(playlistId, id, start + index, now)
+            },
+        )
     }
 
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND itemId = :itemId")

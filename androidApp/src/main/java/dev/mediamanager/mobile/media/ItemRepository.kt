@@ -1,9 +1,9 @@
 package dev.mediamanager.mobile.media
 
 import dev.mediamanager.mobile.data.AppDatabase
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 data class DeletedItem(val id: String, val freedBytes: Long)
 data class RecheckResult(val missing: List<String>, val resized: List<Pair<String, Long>>)

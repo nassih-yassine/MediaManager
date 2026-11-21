@@ -4,15 +4,11 @@ import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.ItemEntity
 import dev.mediamanager.mobile.data.JobEntity
 import dev.mediamanager.mobile.media.LibraryPaths
-import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 
-data class FetchResult(
-    val info: MediaInfo,
-    val mediaFile: File,
-    val thumbFile: File?,
-)
+data class FetchResult(val info: MediaInfo, val mediaFile: File, val thumbFile: File?)
 
 /** Downloads into `.incoming/<jobId>/` and returns what landed there. */
 interface Extractor {
@@ -91,6 +87,7 @@ class DownloadPipeline(
                     retryable = false,
                 )
             }
+
             SpaceVerdict.Fits -> Unit
         }
 

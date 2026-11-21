@@ -35,17 +35,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.PlaylistEntity
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
-import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 /** Adds [itemIds] to an existing playlist, or to a new one typed inline. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddToPlaylistDialog(
-    container: AppContainer,
-    itemIds: List<String>,
-    onClose: () -> Unit,
-) {
+fun AddToPlaylistDialog(container: AppContainer, itemIds: List<String>, onClose: () -> Unit) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val playlists by container.db.playlistDao().observePlaylists()

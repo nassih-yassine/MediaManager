@@ -28,8 +28,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.ViewList
@@ -55,24 +55,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Item
 import dev.mediamanager.mobile.data.toItem
+import dev.mediamanager.mobile.download.watchedFraction
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.ui.components.ConfirmDialog
 import dev.mediamanager.mobile.ui.components.EmptyState
 import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.Thumb
 import dev.mediamanager.mobile.ui.format.formatBytes
-import dev.mediamanager.mobile.download.watchedFraction
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.playlists.AddToPlaylistDialog
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
 @Composable
-fun LibraryScreen(
-    container: AppContainer,
-    player: PlayerRepository,
-    onAdd: () -> Unit = {},
-) {
+fun LibraryScreen(container: AppContainer, player: PlayerRepository, onAdd: () -> Unit = {}) {
     val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val filesDir = container.appContext.filesDir
@@ -166,7 +162,10 @@ fun LibraryScreen(
                         LibrarySort.entries.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option.label) },
-                                onClick = { sort = option.name; menuSort = false },
+                                onClick = {
+                                    sort = option.name
+                                    menuSort = false
+                                },
                             )
                         }
                     }
@@ -286,8 +285,7 @@ fun LibraryScreen(
     }
 }
 
-private fun Set<String>.toggle(id: String): Set<String> =
-    if (id in this) this - id else this + id
+private fun Set<String>.toggle(id: String): Set<String> = if (id in this) this - id else this + id
 
 @Composable
 private fun ListRow(
@@ -333,12 +331,24 @@ private fun ListRow(
                 Icon(Icons.Default.MoreVert, contentDescription = "Actions", tint = colors.muted)
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { menu = false; onPlayNext() })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { menu = false; onAddToQueue() })
-                DropdownMenuItem(text = { Text("Add to playlist") }, onClick = { menu = false; onAddToPlaylist() })
+                DropdownMenuItem(text = { Text("Play next") }, onClick = {
+                    menu = false
+                    onPlayNext()
+                })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = {
+                    menu = false
+                    onAddToQueue()
+                })
+                DropdownMenuItem(text = { Text("Add to playlist") }, onClick = {
+                    menu = false
+                    onAddToPlaylist()
+                })
                 DropdownMenuItem(
                     text = { Text("Delete", color = colors.danger) },
-                    onClick = { menu = false; onDelete() },
+                    onClick = {
+                        menu = false
+                        onDelete()
+                    },
                 )
             }
         }
@@ -418,12 +428,24 @@ private fun LibraryCard(
                 Icon(Icons.Default.MoreVert, contentDescription = "Actions", tint = colors.ink)
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play next") }, onClick = { menu = false; onPlayNext() })
-                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { menu = false; onAddToQueue() })
-                DropdownMenuItem(text = { Text("Add to playlist") }, onClick = { menu = false; onAddToPlaylist() })
+                DropdownMenuItem(text = { Text("Play next") }, onClick = {
+                    menu = false
+                    onPlayNext()
+                })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = {
+                    menu = false
+                    onAddToQueue()
+                })
+                DropdownMenuItem(text = { Text("Add to playlist") }, onClick = {
+                    menu = false
+                    onAddToPlaylist()
+                })
                 DropdownMenuItem(
                     text = { Text("Delete", color = colors.danger) },
-                    onClick = { menu = false; onDelete() },
+                    onClick = {
+                        menu = false
+                        onDelete()
+                    },
                 )
             }
         }

@@ -26,12 +26,7 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
  * bar is the whole indicator, which keeps the row quiet at any length.
  */
 @Composable
-fun Scrubber(
-    value: Float,
-    onScrub: (Float) -> Unit,
-    onCommit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun Scrubber(value: Float, onScrub: (Float) -> Unit, onCommit: () -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     var width by remember { mutableFloatStateOf(1f) }
     val clamped = value.coerceIn(0f, 1f)

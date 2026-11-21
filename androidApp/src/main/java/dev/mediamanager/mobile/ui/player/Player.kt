@@ -17,16 +17,16 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,11 +47,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import dev.mediamanager.mobile.playback.NowPlaying
 import dev.mediamanager.mobile.playback.PlaybackService
 import dev.mediamanager.mobile.playback.PlayerRepository
-import androidx.media3.common.Player
 import dev.mediamanager.mobile.playback.playbackSpeeds
 import dev.mediamanager.mobile.playback.speedLabel
 import dev.mediamanager.mobile.ui.components.SelectMenu
@@ -243,7 +243,13 @@ fun MiniPlayer(
                 onClick = { player.next() },
             )
             MiniControl(
-                icon = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                icon = if (current.repeatMode ==
+                    androidx.media3.common.Player.REPEAT_MODE_ONE
+                ) {
+                    Icons.Default.RepeatOne
+                } else {
+                    Icons.Default.Repeat
+                },
                 description = "Repeat",
                 tint = if (current.repeatMode == androidx.media3.common.Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
                 onClick = { player.cycleRepeat() },

@@ -1,7 +1,5 @@
 package dev.mediamanager.mobile.ui.add
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,18 +14,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -170,7 +170,10 @@ fun AddScreen(
         MmSurface(Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = form.url,
-                onValueChange = { form = form.copy(url = it, error = null); message = null },
+                onValueChange = {
+                    form = form.copy(url = it, error = null)
+                    message = null
+                },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("https://youtube.com/watch?v=…") },
                 isError = form.error != null,
@@ -180,7 +183,10 @@ fun AddScreen(
                 keyboardOptions = KeyboardOptions.Default,
                 trailingIcon = {
                     IconButton(onClick = {
-                        clipboard.getText()?.text?.let { form = form.copy(url = it, error = null); message = null }
+                        clipboard.getText()?.text?.let {
+                            form = form.copy(url = it, error = null)
+                            message = null
+                        }
                     }) {
                         Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = colors.accent)
                     }
@@ -463,7 +469,6 @@ private fun ModeCard(
         )
     }
 }
-
 
 @Composable
 private fun SharedChoice(title: String, subtitle: String, onClick: () -> Unit) {

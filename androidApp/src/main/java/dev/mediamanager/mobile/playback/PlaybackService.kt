@@ -67,12 +67,18 @@ class PlaybackService : MediaSessionService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_TOGGLE -> player?.let { if (it.isPlaying) it.pause() else it.play() }
+
             ACTION_NEXT -> player?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
+
             // Mirrors the app: restart the track unless it just started, then step back.
             ACTION_PREV -> player?.let {
-                if (it.currentPosition > 3_000) it.seekTo(0)
-                else if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem()
+                if (it.currentPosition > 3_000) {
+                    it.seekTo(0)
+                } else if (it.hasPreviousMediaItem()) {
+                    it.seekToPreviousMediaItem()
+                }
             }
+
             ACTION_REPEAT -> player?.let {
                 it.repeatMode = when (it.repeatMode) {
                     androidx.media3.common.Player.REPEAT_MODE_OFF -> androidx.media3.common.Player.REPEAT_MODE_ALL
