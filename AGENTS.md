@@ -9,6 +9,7 @@ server, no account, no sync. Everything below is a rule that has cost time.
 make build      # assembleDebug
 make test       # testDebugUnitTest (unit + Robolectric)
 make check      # test + lint
+make coverage   # unit-test coverage (JaCoCo), HTML under androidApp/build/reports/coverage
 make install    # installs the debug APK if the phone has room
 make release    # signed release APK
 ```

@@ -41,6 +41,12 @@ MP4 with `MediaMuxer` — WebM, then ffmpeg, if the platform muxer balks.
 prune, resume points saved to disk, a prompt before restarting long media, and an
 immersive video surface sized to the real video.
 
+**It fits the screen you have.** Portrait phones get the bottom bar and the square
+player; a landscape phone gets a navigation rail, a one-row mini player and a
+side-by-side player, because 891×411 dp has width to spare but almost no height. A
+tablet gets the rail *and* the two-pane player. Breakpoints are in
+`ui/adaptive/WindowInfo.kt` and unit-tested.
+
 **You can see where the space went.** Library total, phone usage from `StatFs`,
 breakdown by kind, and every item ranked by size with the bytes a delete frees.
 
@@ -55,9 +61,13 @@ Requirements: JDK 21, Android SDK (platform 36), and `adb` for a device.
 make build      # debug APK  → androidApp/build/outputs/apk/debug/
 make test       # unit + Robolectric tests
 make check      # tests + lint
+make coverage   # unit-test coverage → androidApp/build/reports/coverage/
 make install    # installs on the connected phone, refusing if space is short
 make release    # signed APK, needs the keystore properties sourced
 ```
+
+132 tests live under `androidApp/src/test`, with Robolectric where a database or
+context is needed. Android Lint is the linter (`make lint`).
 
 The release build reads `MM_STORE_FILE`, `MM_STORE_PASSWORD`, `MM_KEY_ALIAS` and
 `MM_KEY_PASSWORD` (or the same keys in `local.properties`). Without them it falls
@@ -66,8 +76,8 @@ back to the debug key.
 ## How it works
 
 ```
-androidApp/        Compose UI, Media3 playback, Room, the download service
-androidApp/app     module sources, Room schemas, resources
+androidApp/        the Gradle module: Compose UI, Media3 playback, Room, downloads
+androidApp/src/    sources, Room schemas under androidApp/schemas, resources
 iosApp/            placeholder — a separate native app, see its README
 docs/              brand assets, screenshots, architecture notes
 ```

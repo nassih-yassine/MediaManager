@@ -14,13 +14,16 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,9 +37,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,10 +57,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.drop
+import kotlin.math.roundToInt
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Appearance
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.ui.add.AddScreen
+import dev.mediamanager.mobile.ui.adaptive.HeightClass
+import dev.mediamanager.mobile.ui.adaptive.LocalWindowInfo
+import dev.mediamanager.mobile.ui.adaptive.WidthClass
+import dev.mediamanager.mobile.ui.adaptive.WindowInfo
 import dev.mediamanager.mobile.ui.downloads.DownloadsScreen
 import dev.mediamanager.mobile.ui.home.HomeScreen
 import dev.mediamanager.mobile.ui.library.LibraryScreen
@@ -127,8 +139,18 @@ fun AppShell(
         }
         val filesDir = container.appContext.filesDir
 
-        Box(Modifier.fillMaxSize().background(colors.canvas)) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(colors.canvas)) {
+            val window = WindowInfo(
+                widthDp = maxWidth.value.roundToInt(),
+                heightDp = maxHeight.value.roundToInt(),
+            )
+            CompositionLocalProvider(LocalWindowInfo provides window) {
+            Row(Modifier.fillMaxSize()) {
+                if (window.useRail) {
+                    SideRail(current = current, onSelect = { tab = it.name })
+                }
             Scaffold(
+                modifier = Modifier.weight(1f),
                 containerColor = colors.canvas,
                 topBar = {
                     Row(
@@ -142,7 +164,11 @@ fun AppShell(
                         Text(
                             if (current == Tab.HOME) "MediaManager" else current.label,
                             color = colors.ink,
-                            style = androidx.compose.material3.MaterialTheme.typography.displaySmall,
+                            style = if (window.widthClass == WidthClass.COMPACT) {
+                                androidx.compose.material3.MaterialTheme.typography.displaySmall
+                            } else {
+                                androidx.compose.material3.MaterialTheme.typography.headlineMedium
+                            },
                             modifier = Modifier.padding(bottom = 6.dp),
                         )
                         Spacer(Modifier.weight(1f))
@@ -155,8 +181,14 @@ fun AppShell(
                             enter = fadeIn(tween(180)) + expandVertically(tween(180)),
                             exit = fadeOut(tween(180)) + shrinkVertically(tween(180)),
                         ) {
-                            MiniPlayer(player = player, filesDir = filesDir, onOpen = { nowPlayingOpen = true })
+                            MiniPlayer(
+                                player = player,
+                                filesDir = filesDir,
+                                onOpen = { nowPlayingOpen = true },
+                                compact = window.heightClass == HeightClass.SHORT,
+                            )
                         }
+                        if (!window.useRail) {
                         HorizontalDivider(color = colors.line)
                         NavigationBar(containerColor = colors.panel, contentColor = colors.ink) {
                             Tab.entries.forEach { entry ->
@@ -200,6 +232,7 @@ fun AppShell(
                                 )
                             }
                         }
+                        }
                     }
                 },
             ) { padding ->
@@ -240,6 +273,7 @@ fun AppShell(
                 }
             }
 
+            }
             AnimatedVisibility(
                 visible = storageOpen,
                 enter = slideInVertically(initialOffsetY = { it }),
@@ -303,6 +337,66 @@ fun AppShell(
             ) {
                 LoadingScreen()
             }
+            }
         }
+    }
+}
+
+@Composable
+private fun SideRail(current: Tab, onSelect: (Tab) -> Unit) {
+    val colors = LocalAppColors.current
+    Box(Modifier.fillMaxHeight()) {
+        NavigationRail(
+            containerColor = colors.panel,
+            modifier = Modifier.statusBarsPadding().padding(vertical = 8.dp),
+        ) {
+            Tab.entries.forEach { entry ->
+                NavigationRailItem(
+                    selected = current == entry,
+                    onClick = { onSelect(entry) },
+                    icon = {
+                        if (entry == Tab.ADD) {
+                            Box(
+                                Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.accent),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    entry.icon,
+                                    contentDescription = entry.label,
+                                    tint = colors.accentInk,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        } else {
+                            Icon(entry.icon, contentDescription = entry.label)
+                        }
+                    },
+                    label = {
+                        Text(
+                            entry.label,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                    },
+                    colors = NavigationRailItemDefaults.colors(
+                        selectedIconColor = colors.accentInk,
+                        selectedTextColor = colors.accent,
+                        indicatorColor = colors.accent,
+                        unselectedIconColor = colors.muted,
+                        unselectedTextColor = colors.muted,
+                    ),
+                )
+            }
+        }
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(0.5.dp)
+                .background(colors.line),
+        )
     }
 }

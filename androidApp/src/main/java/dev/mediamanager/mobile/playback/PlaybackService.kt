@@ -10,7 +10,6 @@ import androidx.media3.session.MediaSessionService
 import dev.mediamanager.mobile.R
 
 /** Owns the single ExoPlayer instance for the whole app. */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
     companion object {
@@ -29,6 +28,8 @@ class PlaybackService : MediaSessionService() {
     private var player: ExoPlayer? = null
     private var session: MediaSession? = null
 
+    // Only the notification provider below is @UnstableApi; keep the rest lint-checked.
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
         val exo = ExoPlayer.Builder(this)

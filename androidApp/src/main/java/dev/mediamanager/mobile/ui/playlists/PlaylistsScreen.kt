@@ -348,14 +348,23 @@ fun PlaylistDetailScreen(
                         }
                     }
 
+                    val window = dev.mediamanager.mobile.ui.adaptive.LocalWindowInfo.current
                     androidx.compose.foundation.layout.BoxWithConstraints(
-                        Modifier.fillMaxWidth().aspectRatio(1.45f),
+                        Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (window.isWide) {
+                                    Modifier.height(240.dp)
+                                } else {
+                                    Modifier.aspectRatio(1.45f)
+                                },
+                            ),
                     ) {
                         PlaylistCover(
                             coverPath = playlist?.coverPath,
                             items = items.take(4),
                             filesDir = container.appContext.filesDir,
-                            size = maxWidth,
+                            size = minOf(maxWidth, maxHeight),
                         )
                     }
                     Spacer(Modifier.height(12.dp))
@@ -617,7 +626,7 @@ fun PlaylistDetailScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Adaptive(minSize = 96.dp),
                     modifier = Modifier.height(320.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),

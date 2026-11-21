@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,6 +71,9 @@ import androidx.media3.common.Player
 import dev.mediamanager.mobile.media.AudioRoute
 import dev.mediamanager.mobile.media.AudioOutputMonitor
 import dev.mediamanager.mobile.media.VolumeControl
+import dev.mediamanager.mobile.data.Item
+import dev.mediamanager.mobile.ui.adaptive.HeightClass
+import dev.mediamanager.mobile.ui.adaptive.LocalWindowInfo
 import dev.mediamanager.mobile.playback.NowPlaying
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.playback.playbackSpeeds
@@ -79,6 +83,7 @@ import dev.mediamanager.mobile.ui.components.SelectMenu
 import dev.mediamanager.mobile.ui.format.formatDuration
 import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.io.File
 
 /**
@@ -149,6 +154,7 @@ fun NowPlayingScreen(
             )
         }
 
+        val window = LocalWindowInfo.current
         Column(
             Modifier
                 .fillMaxSize()
@@ -167,7 +173,7 @@ fun NowPlayingScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .pointerInput(Unit) {
+                    .pointerInput(window) {
                         detectVerticalDragGestures(
                             onVerticalDrag = { _, delta ->
                                 scope.launch {
@@ -198,215 +204,322 @@ fun NowPlayingScreen(
                     Spacer(Modifier.weight(1f))
                     Spacer(Modifier.size(48.dp))
                 }
-                Spacer(Modifier.height(4.dp))
-                if (mediaSlot != null) {
-                    mediaSlot()
-                } else {
-                    Artwork(current, filesDir, colors.panel2, colors.muted)
-                }
             }
 
-            Spacer(Modifier.height(12.dp))
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(colors.panel.copy(alpha = 0.38f))
-                    .border(
-                        width = 0.5.dp,
-                        color = colors.line.copy(alpha = 0.85f),
-                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            if (window.isWide) {
+                // Any landscape: media left, controls right. Stacking them leaves the
+                // transport panel under 150 dp, where the buttons fall below the fold.
+                Row(Modifier.fillMaxWidth().weight(1f)) {
+                    MediaPane(
+                        current = current,
+                        filesDir = filesDir,
+                        mediaSlot = mediaSlot,
+                        modifier = Modifier.weight(1f).fillMaxHeight().padding(vertical = 8.dp),
+                        boundedByHeight = true,
                     )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Text(
-                    current.title,
-                    color = colors.ink,
-                    maxLines = 2,
-                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                    PlayerPanel(
+                        player = player,
+                        current = current,
+                        queue = queue,
+                        volume = volume,
+                        audio = audio,
+                        modifier = Modifier.weight(1f).fillMaxHeight().padding(start = 12.dp),
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(4.dp))
+                if (window.heightClass == HeightClass.SHORT) {
+                    // A landscape phone has ~411 dp: the square artwork used to eat
+                    // all of it, leaving the transport panel at zero height.
+                    MediaPane(
+                        current = current,
+                        filesDir = filesDir,
+                        mediaSlot = mediaSlot,
+                        modifier = Modifier.fillMaxWidth().height(168.dp),
+                        boundedByHeight = true,
+                    )
+                } else {
+                    MediaPane(
+                        current = current,
+                        filesDir = filesDir,
+                        mediaSlot = mediaSlot,
+                        modifier = Modifier.fillMaxWidth(),
+                        boundedByHeight = false,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                PlayerPanel(
+                    player = player,
+                    current = current,
+                    queue = queue,
+                    volume = volume,
+                    audio = audio,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                 )
+            }
+        }
+    }
+}
+
+/** Square artwork, or the video slot, sized by whichever axis is scarce. */
+@Composable
+private fun MediaPane(
+    current: NowPlaying,
+    filesDir: File,
+    mediaSlot: (@Composable () -> Unit)?,
+    modifier: Modifier,
+    boundedByHeight: Boolean,
+) {
+    val colors = LocalAppColors.current
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (mediaSlot != null) {
+            mediaSlot()
+        } else {
+            Artwork(
+                current = current,
+                filesDir = filesDir,
+                placeholder = colors.panel2,
+                glyphTint = colors.muted,
+                modifier = if (boundedByHeight) {
+                    Modifier.fillMaxHeight().aspectRatio(1f)
+                } else {
+                    Modifier.fillMaxWidth().aspectRatio(1f)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Transport, volume, route and queue. A LazyColumn so a short landscape pane scrolls
+ * instead of clipping, and a long queue only composes the rows on screen.
+ */
+@Composable
+private fun PlayerPanel(
+    player: PlayerRepository,
+    current: NowPlaying,
+    queue: List<Item>,
+    volume: VolumeControl,
+    audio: AudioOutputMonitor,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalAppColors.current
+    var scrubbing by remember { mutableStateOf<Float?>(null) }
+    val route by audio.route.collectAsStateWithLifecycle()
+    var volumeLevel by remember { mutableIntStateOf(volume.current) }
+    var rememberedLevel by remember { mutableIntStateOf(volume.current.coerceAtLeast(volume.max / 2)) }
+    var volumeTouching by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(2_000)
+            if (!volumeTouching) volumeLevel = volume.current
+        }
+    }
+
+    LazyColumn(
+        modifier
+            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .background(colors.panel.copy(alpha = 0.38f))
+            .border(
+                width = 0.5.dp,
+                color = colors.line.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        item {
+            Text(
+                current.title,
+                color = colors.ink,
+                maxLines = 2,
+                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                if (current.isVideo) "Video" else "Audio",
+                color = colors.muted,
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        item {
+            val duration = current.durationMs.coerceAtLeast(1)
+            Scrubber(
+                value = scrubbing ?: (current.positionMs.toFloat() / duration).coerceIn(0f, 1f),
+                onScrub = { scrubbing = it },
+                onCommit = {
+                    scrubbing?.let { player.seekTo((it * duration).toLong()) }
+                    scrubbing = null
+                },
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    if (current.isVideo) "Video" else "Audio",
+                    formatDuration(scrubbing?.times(duration)?.toLong() ?: current.positionMs).ifEmpty { "0:00" },
                     color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 )
+                Text(formatDuration(current.durationMs).ifEmpty { "--:--" }, color = colors.muted)
+            }
+        }
 
-                val duration = current.durationMs.coerceAtLeast(1)
-                Scrubber(
-                    value = scrubbing ?: (current.positionMs.toFloat() / duration).coerceIn(0f, 1f),
-                    onScrub = { scrubbing = it },
-                    onCommit = {
-                        scrubbing?.let { player.seekTo((it * duration).toLong()) }
-                        scrubbing = null
-                    },
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        formatDuration(scrubbing?.times(duration)?.toLong() ?: current.positionMs).ifEmpty { "0:00" },
-                        color = colors.muted,
-                    )
-                    Text(formatDuration(current.durationMs).ifEmpty { "--:--" }, color = colors.muted)
-                }
-
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = { player.toggleShuffle() }) {
-                        Icon(
-                            Icons.Default.Shuffle,
-                            contentDescription = "Shuffle",
-                            tint = if (current.shuffle) colors.accent else colors.muted,
-                        )
-                    }
-                    IconButton(onClick = { player.previous() }) {
-                        Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = colors.ink)
-                    }
-                    IconButton(onClick = { player.skipBy(-10_000) }) {
-                        Icon(Icons.Default.Replay10, contentDescription = "Back 10 seconds", tint = colors.ink)
-                    }
-                    IconButton(onClick = { player.toggle() }) {
-                        Icon(
-                            if (current.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (current.isPlaying) "Pause" else "Play",
-                            tint = colors.accentInk,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(28.dp))
-                                .background(colors.accent)
-                                .padding(14.dp),
-                        )
-                    }
-                    IconButton(onClick = { player.skipBy(10_000) }) {
-                        Icon(Icons.Default.Forward10, contentDescription = "Forward 10 seconds", tint = colors.ink)
-                    }
-                    IconButton(onClick = { player.next() }) {
-                        Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
-                    }
-                    IconButton(onClick = { player.cycleRepeat() }) {
-                        Icon(
-                            if (current.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                            contentDescription = "Repeat",
-                            tint = if (current.repeatMode == Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
-                        )
-                    }
-                }
-
-                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Tap the glyph to mute; it switches to a struck-through speaker.
-                    val muted = volumeLevel == 0
-                    IconButton(
-                        onClick = {
-                            if (muted) {
-                                volumeLevel = rememberedLevel.coerceAtLeast(1)
-                            } else {
-                                rememberedLevel = volumeLevel
-                                volumeLevel = 0
-                            }
-                            volume.set(volumeLevel)
-                        },
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            when {
-                                muted -> Icons.Default.VolumeOff
-                                volumeLevel < volume.max / 2 -> Icons.Default.VolumeDown
-                                else -> Icons.Default.VolumeUp
-                            },
-                            contentDescription = if (muted) "Unmute" else "Mute",
-                            tint = if (muted) colors.accent else colors.muted,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Scrubber(
-                        value = volumeLevel.toFloat() / volume.max,
-                        onScrub = { fraction ->
-                            volumeTouching = true
-                            volumeLevel = (fraction * volume.max).toInt().coerceIn(0, volume.max)
-                            if (volumeLevel > 0) rememberedLevel = volumeLevel
-                            volume.set(volumeLevel)
-                        },
-                        onCommit = {
-                            volume.set(volumeLevel)
-                            volumeTouching = false
-                        },
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                    )
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 2.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { player.toggleShuffle() }) {
                     Icon(
-                        when (route) {
-                            AudioRoute.BLUETOOTH -> Icons.Default.Bluetooth
-                            AudioRoute.HEADPHONES -> Icons.Default.Headphones
-                            AudioRoute.USB -> Icons.Default.Usb
-                            else -> Icons.Default.PhoneAndroid
+                        Icons.Default.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (current.shuffle) colors.accent else colors.muted,
+                    )
+                }
+                IconButton(onClick = { player.previous() }) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = colors.ink)
+                }
+                IconButton(onClick = { player.skipBy(-10_000) }) {
+                    Icon(Icons.Default.Replay10, contentDescription = "Back 10 seconds", tint = colors.ink)
+                }
+                IconButton(onClick = { player.toggle() }) {
+                    Icon(
+                        if (current.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (current.isPlaying) "Pause" else "Play",
+                        tint = colors.accentInk,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(colors.accent)
+                            .padding(14.dp),
+                    )
+                }
+                IconButton(onClick = { player.skipBy(10_000) }) {
+                    Icon(Icons.Default.Forward10, contentDescription = "Forward 10 seconds", tint = colors.ink)
+                }
+                IconButton(onClick = { player.next() }) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
+                }
+                IconButton(onClick = { player.cycleRepeat() }) {
+                    Icon(
+                        if (current.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        contentDescription = "Repeat",
+                        tint = if (current.repeatMode == Player.REPEAT_MODE_OFF) colors.muted else colors.accent,
+                    )
+                }
+            }
+        }
+
+        item {
+            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                val muted = volumeLevel == 0
+                IconButton(
+                    onClick = {
+                        if (muted) {
+                            volumeLevel = rememberedLevel.coerceAtLeast(1)
+                        } else {
+                            rememberedLevel = volumeLevel
+                            volumeLevel = 0
+                        }
+                        volume.set(volumeLevel)
+                    },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        when {
+                            muted -> Icons.Default.VolumeOff
+                            volumeLevel < volume.max / 2 -> Icons.Default.VolumeDown
+                            else -> Icons.Default.VolumeUp
                         },
-                        contentDescription = route.label,
-                        tint = if (route == AudioRoute.SPEAKER) colors.muted else colors.accent,
+                        contentDescription = if (muted) "Unmute" else "Mute",
+                        tint = if (muted) colors.accent else colors.muted,
                         modifier = Modifier.size(20.dp),
                     )
                 }
+                Scrubber(
+                    value = volumeLevel.toFloat() / volume.max,
+                    onScrub = { fraction ->
+                        volumeTouching = true
+                        volumeLevel = (fraction * volume.max).toInt().coerceIn(0, volume.max)
+                        if (volumeLevel > 0) rememberedLevel = volumeLevel
+                        volume.set(volumeLevel)
+                    },
+                    onCommit = {
+                        volume.set(volumeLevel)
+                        volumeTouching = false
+                    },
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                )
+                Icon(
+                    when (route) {
+                        AudioRoute.BLUETOOTH -> Icons.Default.Bluetooth
+                        AudioRoute.HEADPHONES -> Icons.Default.Headphones
+                        AudioRoute.USB -> Icons.Default.Usb
+                        else -> Icons.Default.PhoneAndroid
+                    },
+                    contentDescription = route.label,
+                    tint = if (route == AudioRoute.SPEAKER) colors.muted else colors.accent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
 
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Up next · ${queue.size}",
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
+                Spacer(Modifier.weight(1f))
+                SelectMenu(
+                    label = "Speed",
+                    options = playbackSpeeds.map { it to speedLabel(it) },
+                    selected = current.speed,
+                    onSelect = { player.setSpeed(it) },
+                )
+            }
+        }
+
+        itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
+            val active = item.id == current.itemId
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { player.playItems(queue, index) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (active) colors.accent else colors.panel2),
+                )
+                Text(
+                    item.title,
+                    color = if (active) colors.accent else colors.ink,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    formatDuration(item.durationMs),
+                    color = colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
+                IconButton(
+                    onClick = { player.removeFromQueue(item.id) },
+                    modifier = Modifier.size(32.dp),
                 ) {
-                    Text(
-                        "Up next · ${queue.size}",
-                        color = colors.muted,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Remove from queue",
+                        tint = colors.muted,
+                        modifier = Modifier.size(16.dp),
                     )
-                    Spacer(Modifier.weight(1f))
-                    SelectMenu(
-                        label = "Speed",
-                        options = playbackSpeeds.map { it to speedLabel(it) },
-                        selected = current.speed,
-                        onSelect = { player.setSpeed(it) },
-                    )
-                }
-
-                LazyColumn(Modifier.weight(1f).padding(top = 4.dp)) {
-                    itemsIndexed(queue, key = { _, item -> item.id }) { index, item ->
-                        val active = item.id == current.itemId
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { player.playItems(queue, index) }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (active) colors.accent else colors.panel2),
-                            )
-                            Text(
-                                item.title,
-                                color = if (active) colors.accent else colors.ink,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                formatDuration(item.durationMs),
-                                color = colors.muted,
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                            )
-                            IconButton(
-                                onClick = { player.removeFromQueue(item.id) },
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Remove from queue",
-                                    tint = colors.muted,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -419,15 +532,14 @@ private fun Artwork(
     filesDir: File,
     placeholder: androidx.compose.ui.graphics.Color,
     glyphTint: androidx.compose.ui.graphics.Color,
+    modifier: Modifier,
 ) {
-    val modifier = Modifier
-        .fillMaxWidth()
-        .aspectRatio(1f)
+    val frame = modifier
         .clip(RoundedCornerShape(20.dp))
         .background(placeholder)
 
     val cover = current.thumbPath?.let { File(filesDir, it) }
-    Box(modifier, contentAlignment = Alignment.Center) {
+    Box(frame, contentAlignment = Alignment.Center) {
         if (cover != null && cover.exists()) {
             coil.compose.AsyncImage(
                 model = cover,

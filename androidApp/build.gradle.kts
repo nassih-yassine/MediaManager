@@ -96,7 +96,12 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a")
+            // Phones are arm64; -PmmEmulatorAbi adds x86_64 for emulator runs.
+            if (providers.gradleProperty("mmEmulatorAbi").isPresent) {
+                include("arm64-v8a", "x86_64")
+            } else {
+                include("arm64-v8a")
+            }
             isUniversalApk = false
         }
     }
@@ -165,37 +170,47 @@ tasks.withType<Test>().configureEach {
     }
 }
 
+val unitTestTask = "testDebugUnitTest"
+val buildDirectory = layout.buildDirectory
+
 tasks.register<JacocoReport>("coverageReport") {
-    dependsOn("testDebugUnitTest")
+    // AGP 9 creates test tasks lazily, so this must stay a name, not tasks.named().
+    dependsOn(unitTestTask)
     group = "verification"
     description = "Unit-test coverage for the debug variant."
 
-    val excludes = listOf(
+    val classExcludes = listOf(
         "**/R.class",
         "**/R\$*.class",
         "**/BuildConfig.*",
         "**/Manifest*.*",
         "**/*_Factory.*",
         "**/*_Impl.*",
-        "**/*_Hilt*.*",
         "**/ComposableSingletons*.*",
     )
 
     classDirectories.setFrom(
         files(
-            // AGP 9 compiles Kotlin through the built-in task; older AGP used tmp/kotlin-classes.
-            layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
-            layout.buildDirectory.dir("tmp/kotlin-classes/debug"),
-            layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"),
-        ).asFileTree.matching { exclude(excludes) }
+            // AGP 9 compiles Kotlin through its built-in kotlinc task.
+            buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
+            buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"),
+        ).asFileTree.matching { exclude(classExcludes) }
     )
     sourceDirectories.setFrom(files("src/main/java", "src/main/kotlin"))
-    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
+    // Read the path the test task actually wrote instead of guessing it.
+    executionData.setFrom(
+        provider {
+            tasks.named<Test>(unitTestTask).get()
+                .extensions.getByType<JacocoTaskExtension>().destinationFile
+                ?: buildDirectory.file("jacoco/$unitTestTask.exec").get().asFile
+        },
+    )
 
     reports {
         html.required.set(true)
         xml.required.set(true)
         csv.required.set(false)
-        html.outputLocation.set(layout.buildDirectory.dir("reports/coverage"))
+        html.outputLocation.set(buildDirectory.dir("reports/coverage"))
+        xml.outputLocation.set(buildDirectory.file("reports/coverage/coverageReport.xml"))
     }
 }

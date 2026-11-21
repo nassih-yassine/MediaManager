@@ -208,7 +208,7 @@ fun LibraryScreen(
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Adaptive(minSize = 168.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
