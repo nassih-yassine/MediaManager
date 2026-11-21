@@ -2,8 +2,8 @@
 # Requires JDK 21 and the Android SDK (ANDROID_HOME or local.properties).
 
 SHELL := /bin/bash
-APK := androidApp/build/outputs/apk/debug/app-arm64-v8a-debug.apk
-RELEASE_APK := androidApp/build/outputs/apk/release/app-arm64-v8a-release.apk
+APK := androidApp/build/outputs/apk/debug/androidApp-arm64-v8a-debug.apk
+RELEASE_APK := androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk
 
 .PHONY: help build test lint coverage check install clean release
 
