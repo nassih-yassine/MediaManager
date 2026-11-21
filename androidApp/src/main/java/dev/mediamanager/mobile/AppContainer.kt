@@ -14,11 +14,11 @@ import dev.mediamanager.mobile.download.ConnectivityMonitor
 import dev.mediamanager.mobile.download.DownloadPipeline
 import dev.mediamanager.mobile.download.DownloadSettings
 import dev.mediamanager.mobile.download.JobQueue
-import dev.mediamanager.mobile.download.NewPipePlaylistInspector
 import dev.mediamanager.mobile.download.PlaylistInspector
 import dev.mediamanager.mobile.download.Thumbnailer
 import dev.mediamanager.mobile.download.YoutubeNewPipeExtractor
 import dev.mediamanager.mobile.download.YtDlpExtractor
+import dev.mediamanager.mobile.download.YtDlpPlaylistInspector
 import dev.mediamanager.mobile.media.AudioOutputMonitor
 import dev.mediamanager.mobile.media.ItemRepository
 import dev.mediamanager.mobile.media.LibraryPaths
@@ -51,7 +51,7 @@ class AppContainer(context: Context) {
         libraryItemId = { url -> db.itemDao().idBySourceUrl(url) },
     )
 
-    val playlistInspector: PlaylistInspector = NewPipePlaylistInspector()
+    val playlistInspector: PlaylistInspector = YtDlpPlaylistInspector(appContext)
 
     val itemRepository: ItemRepository = ItemRepository(db, paths)
 

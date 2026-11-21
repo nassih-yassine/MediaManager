@@ -30,7 +30,8 @@ upload the same way.
 
 **Whole playlists.** Paste a YouTube playlist link and the app reads it without
 downloading: **Download all** or pick the videos, choose Audio or Video, and each
-missing video becomes its own job. Videos already in your library are linked into the
+missing video becomes its own job. Very long lists are read up to the first page the
+extractor returns (usually 100); the sheet says so. Videos already in your library are linked into the
 new playlist instead of fetched twice.
 
 **Downloads built for a phone line.** Each file is split across several ranged HTTP

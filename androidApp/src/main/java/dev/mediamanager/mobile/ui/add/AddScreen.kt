@@ -79,6 +79,7 @@ fun AddScreen(
     var inspected by remember { mutableStateOf<PlaylistSummary?>(null) }
     var choosingPlaylist by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
+    var inspecting by remember { mutableStateOf(false) }
     val importRunner = remember(container) {
         PlaylistImportRunner(container.db, container.jobQueue) {
             DownloadService.start(container.appContext)
@@ -271,9 +272,13 @@ fun AddScreen(
                     return@Button
                 }
                 if (validated.sourcePlaylistId != null) {
+                    inspecting = true
+                    form = form.copy(submitting = false)
                     scope.launch {
-                        val summary = runCatching { container.playlistInspector.inspect(validated.url) }.getOrNull()
-                        form = form.copy(submitting = false)
+                        val summary = kotlinx.coroutines.withTimeoutOrNull(60_000) {
+                            runCatching { container.playlistInspector.inspect(validated.url) }.getOrNull()
+                        }
+                        inspecting = false
                         if (summary == null) {
                             message = "Could not read that playlist. Check the link and try again."
                         } else {
@@ -294,16 +299,30 @@ fun AddScreen(
                     form = AddFormState(mode = validated.mode)
                 }
             },
-            enabled = !form.submitting && !importing,
+            enabled = !form.submitting && !importing && !inspecting,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.accent,
                 contentColor = colors.accentInk,
             ),
         ) {
-            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+            if (inspecting) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = colors.accentInk,
+                )
+            } else {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.size(8.dp))
-            Text(if (form.mode == DownloadMode.AUDIO) "Download audio" else "Download video")
+            Text(
+                when {
+                    inspecting -> "Reading playlist…"
+                    form.mode == DownloadMode.AUDIO -> "Download audio"
+                    else -> "Download video"
+                },
+            )
         }
 
         message?.let {
@@ -405,6 +424,25 @@ fun AddScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+    }
+
+    inspected?.let { summary ->
+        if (choosingPlaylist) {
+            PlaylistSelectSheet(
+                summary = summary,
+                onConfirm = { chosen -> startImport(summary, chosen) },
+                onDismiss = { choosingPlaylist = false },
+            )
+        } else {
+            PlaylistImportSheet(
+                summary = summary,
+                mode = form.mode,
+                onMode = { form = form.copy(mode = it) },
+                onAll = { startImport(summary, summary.entries) },
+                onChoose = { choosingPlaylist = true },
+                onDismiss = { inspected = null },
+            )
         }
     }
 

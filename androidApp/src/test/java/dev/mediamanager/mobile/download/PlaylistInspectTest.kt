@@ -2,9 +2,13 @@ package dev.mediamanager.mobile.download
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class PlaylistInspectTest {
 
     private fun entry(id: Int) = PlaylistEntry(
@@ -70,5 +74,50 @@ class PlaylistInspectTest {
 
         assertEquals("Playlist", summary.name)
         assertEquals(1, summary.total)
+    }
+
+    @Test
+    fun `flat yt-dlp json maps webpage urls, ids and durations`() {
+        val json = """
+            {
+              "title": "Popular Music Videos",
+              "uploader": "YouTube Music",
+              "playlist_count": 120,
+              "thumbnails": [{"url": "https://i.ytimg.com/vi/a/hq.jpg"}],
+              "entries": [
+                {"id": "a", "title": "One", "duration": 210.5, "webpage_url": "https://www.youtube.com/watch?v=a"},
+                {"id": "b", "title": "Two", "duration": 60}
+              ]
+            }
+        """.trimIndent()
+
+        val summary = parseFlatPlaylist(json, listId = "PL1")!!
+
+        assertEquals("Popular Music Videos", summary.name)
+        assertEquals("YouTube Music", summary.uploader)
+        assertEquals(2, summary.count)
+        assertEquals("https://www.youtube.com/watch?v=a", summary.entries[0].url)
+        assertEquals("https://www.youtube.com/watch?v=b", summary.entries[1].url)
+        assertEquals(210_500L, summary.entries[0].durationMs)
+        assertEquals(120, summary.total)
+        assertEquals("https://i.ytimg.com/vi/a/hq.jpg", summary.coverUrl)
+    }
+
+    @Test
+    fun `flat json caps a huge playlist`() {
+        val entries = (1..10).joinToString(",") { """{"id":"v$it","title":"V$it"}""" }
+        val json = """{"title":"Big","entries":[$entries]}"""
+
+        val summary = parseFlatPlaylist(json, listId = "PL1", cap = 3)!!
+
+        assertEquals(3, summary.count)
+        assertTrue(summary.truncated)
+    }
+
+    @Test
+    fun `flat json without entries or with garbage is null`() {
+        assertNull(parseFlatPlaylist("{}", "PL1"))
+        assertNull(parseFlatPlaylist("not json", "PL1"))
+        assertNull(parseFlatPlaylist("""{"title":"Empty","entries":[]}""", "PL1"))
     }
 }

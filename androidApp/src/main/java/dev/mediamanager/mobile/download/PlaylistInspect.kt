@@ -21,6 +21,47 @@ data class PlaylistSummary(
     val count: Int get() = entries.size
 }
 
+/**
+ * Parses `yt-dlp --flat-playlist --dump-single-json`. Entries normally carry
+ * `webpage_url`; YouTube sometimes only carries `id`, which maps to a watch URL.
+ */
+fun parseFlatPlaylist(
+    json: String,
+    listId: String,
+    cap: Int = PLAYLIST_ENTRY_CAP,
+): PlaylistSummary? = runCatching {
+    val root = org.json.JSONObject(json)
+    val entriesJson = root.optJSONArray("entries") ?: return null
+    val entries = (0 until entriesJson.length()).mapNotNull { index ->
+        val entry = entriesJson.optJSONObject(index) ?: return@mapNotNull null
+        val link = entry.optString("webpage_url").takeIf { it.startsWith("http") }
+            ?: entry.optString("url").takeIf { it.startsWith("http") }
+            ?: entry.optString("id").takeIf { it.isNotBlank() }?.let { "https://www.youtube.com/watch?v=$it" }
+            ?: return@mapNotNull null
+        PlaylistEntry(
+            url = link,
+            title = entry.optString("title").ifBlank { "Untitled" },
+            durationMs = entry.optDouble("duration", 0.0).takeIf { it > 0 }?.times(1000)?.toLong(),
+        )
+    }
+    if (entries.isEmpty()) return null
+
+    val thumbs = root.optJSONArray("thumbnails")
+    val cover = thumbs?.let { list ->
+        (0 until list.length()).mapNotNull { list.optJSONObject(it)?.optString("url") }.lastOrNull()
+    } ?: root.optString("thumbnail").takeIf { it.startsWith("http") }
+
+    summarizePlaylist(
+        listId = listId,
+        name = root.optString("title"),
+        uploader = root.optString("uploader").takeIf { it.isNotBlank() },
+        coverUrl = cover,
+        entries = entries,
+        total = root.optInt("playlist_count", entries.size).takeIf { it > 0 },
+        cap = cap,
+    )
+}.getOrNull()
+
 interface PlaylistInspector {
     suspend fun inspect(url: String): PlaylistSummary
 }

@@ -34,6 +34,12 @@ other machines cannot resolve it.
   changed (docs-only pushes skip lint). The opinionated `function-signature`/`class-signature`/chain rules are disabled because
   they fight Compose. Do not re-enable them without reformatting the whole app.
 
+- **Playlists are listed with yt-dlp, not NewPipe.** `--flat-playlist --dump-single-json
+  --no-js-runtimes` never resolves a stream and works for every yt-dlp site. NewPipe's
+  playlist call hung on the emulator with no error, so it is not used for listing. On a
+  device YouTube returns the first 100 entries without paginating (the host binary gets
+  all of them); the summary says "first 100 of N" instead of pretending otherwise.
+
 - **Updates come from published GitHub Releases.** `UpdateChecker` reads
   `/repos/nassih-yassine/MediaManager/releases`, skips drafts and prereleases, and
   compares only the tag segments (`VERSION_NAME` appends the commit count, so comparing
