@@ -29,6 +29,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -148,7 +149,12 @@ fun PlaylistImportSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = LocalAppColors.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.panel) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = colors.panel,
+    ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text(
                 summary.name,
@@ -226,7 +232,12 @@ fun PlaylistSelectSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.panel) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = colors.panel,
+    ) {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
             // One control: All is on when every entry is selected. Unticking it clears
             // the selection so the user can pick only what they need.
