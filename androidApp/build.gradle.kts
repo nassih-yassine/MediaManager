@@ -96,7 +96,12 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a")
+            // Phones are arm64; -PmmEmulatorAbi adds x86_64 for emulator runs.
+            if (providers.gradleProperty("mmEmulatorAbi").isPresent) {
+                include("arm64-v8a", "x86_64")
+            } else {
+                include("arm64-v8a")
+            }
             isUniversalApk = false
         }
     }
