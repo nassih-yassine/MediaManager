@@ -36,9 +36,11 @@ other machines cannot resolve it.
 
 - **Playlists are listed with yt-dlp, not NewPipe.** `--flat-playlist --dump-single-json
   --no-js-runtimes` never resolves a stream and works for every yt-dlp site. NewPipe's
-  playlist call hung on the emulator with no error, so it is not used for listing. On a
-  device YouTube returns the first 100 entries without paginating (the host binary gets
-  all of them); the summary says "first 100 of N" instead of pretending otherwise.
+  playlist call hung on the emulator with no error, so it is not used for listing. The
+  binary shipped in the APK reports no version and stops at YouTube's first 100 entries;
+  `YtDlpPlaylistInspector` refreshes it to the latest stable once per process, after
+  which long playlists paginate. Without network it stays on the old binary and the
+  summary says "first 100 of N".
 
 - **Updates come from published GitHub Releases.** `UpdateChecker` reads
   `/repos/nassih-yassine/MediaManager/releases`, skips drafts and prereleases, and

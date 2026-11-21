@@ -46,9 +46,19 @@ class YtDlpExtractor(private val context: Context, private val paths: LibraryPat
             YoutubeDL.getInstance().init(context)
             FFmpeg.getInstance().init(context)
             initialized = true
+            android.util.Log.d("YtDlp", "yt-dlp version=${runCatching { YoutubeDL.getInstance().versionName(context) }.getOrNull()}")
         }
 
         fun version(): String? = runCatching { YoutubeDL.getInstance().version(null) }.getOrNull()
+
+        fun versionName(context: android.content.Context): String? =
+            runCatching { YoutubeDL.getInstance().versionName(context) }.getOrNull()
+
+        /** Replaces the bundled yt-dlp with the latest stable release. Needs network. */
+        fun update(context: android.content.Context): Boolean = runCatching {
+            YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel._STABLE)
+            true
+        }.getOrDefault(false)
     }
 
     override suspend fun fetch(
