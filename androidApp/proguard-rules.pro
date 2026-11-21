@@ -16,3 +16,9 @@
 
 # Annotations are read at runtime by Room and Media3.
 -keepattributes *Annotation*, InnerClasses, Signature
+
+# commons-compress 1.28 references optional compressors (zstd, xz, brotli) that the
+# APK does not ship. R8 must not fail on the missing classes.
+-dontwarn com.github.luben.zstd.**
+-dontwarn org.tukaani.xz.**
+-dontwarn org.brotli.dec.**
