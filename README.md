@@ -68,8 +68,9 @@ make install    # installs on the connected phone, refusing if space is short
 make release    # signed APK, needs the keystore properties sourced
 ```
 
-`make hooks` points git at `.githooks/`, where a pre-push hook runs `ktlintCheck` and
-`lintDebug`; bypass it once with `git push --no-verify`. Formatting is ktlint 1.8
+The pre-push hook in `.githooks/` runs `ktlintCheck` and `lintDebug`, and installs
+itself on the first Gradle run (`make hooks` forces it). Bypass once with
+`git push --no-verify`; opt out of installation with `MM_NO_HOOKS=1`. Formatting is ktlint 1.8
 (`make fmt`), configured in `.editorconfig`.
 
 132 tests live under `androidApp/src/test`, with Robolectric where a database or

@@ -29,7 +29,8 @@ other machines cannot resolve it.
 ## Architecture rules that are not obvious
 
 - **Kotlin style is enforced.** ktlint 1.8 via `.editorconfig` (`make fmt`); the
-  pre-push hook (`.githooks/pre-push`) runs `ktlintCheck` and `lintDebug`. The
+  pre-push hook (`.githooks/pre-push`, installed automatically by `settings.gradle.kts`)
+runs `ktlintCheck` and `lintDebug`. The
   opinionated `function-signature`/`class-signature`/chain rules are disabled because
   they fight Compose. Do not re-enable them without reformatting the whole app.
 
