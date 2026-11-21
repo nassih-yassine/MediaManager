@@ -174,11 +174,6 @@ A fix with neither a test nor recorded manual evidence is incomplete.
   `ResumeRulesTest` (short media always restarts), `WindowInfoTest` (breakpoints),
   `UpdateCenterTest` (24 h throttle, dismissed tag), `ReleaseParserTest` (drafts are
   invisible).
-- Tests that matter: `DownloadRulesTest` (error classification, resume threshold,
-  space check), `JobQueueTest` (backoff, lease reaping, dedupe, cancel), 
-  `DownloadPipelineTest` (finalize order, no orphan file on insert failure),
-  `StorageRepositoryTest` (aggregates, share math), `DaoTest` (cascades), 
-  `ResumeRulesTest` (short media always restarts).
 
 ## Release
 
