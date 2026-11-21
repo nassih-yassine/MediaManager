@@ -3,6 +3,7 @@ package dev.mediamanager.mobile.ui.add
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -215,7 +216,11 @@ fun PlaylistImportSheet(
     }
 }
 
-/** Full-screen picker: search, one All toggle, list, and a fixed Download footer. */
+/**
+ * Picker sheet. It is deliberately not full screen, but its height is computed from
+ * the space the sheet actually has, so the Download footer is always visible.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistSelectSheet(
     summary: PlaylistSummary,
@@ -232,16 +237,19 @@ fun PlaylistSelectSheet(
             summary.entries.filter { it.title.contains(query.trim(), ignoreCase = true) }
         }
     }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    androidx.compose.ui.window.Dialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        sheetState = sheetState,
+        containerColor = colors.panel,
     ) {
-        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = colors.canvas) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val sheetHeight = minOf(maxHeight * 0.85f, 560.dp)
             Column(
                 Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
+                    .fillMaxWidth()
+                    .height(sheetHeight)
                     .padding(horizontal = 16.dp),
             ) {
                 Row(
