@@ -206,8 +206,9 @@ fun NowPlayingScreen(
                 }
             }
 
-            if (window.isTwoPane) {
-                // Wide and tall enough for both: media left, controls right.
+            if (window.isWide) {
+                // Any landscape: media left, controls right. Stacking them leaves the
+                // transport panel under 150 dp, where the buttons fall below the fold.
                 Row(Modifier.fillMaxWidth().weight(1f)) {
                     MediaPane(
                         current = current,

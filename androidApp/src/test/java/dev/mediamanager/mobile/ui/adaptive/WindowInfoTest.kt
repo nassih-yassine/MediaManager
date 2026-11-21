@@ -18,6 +18,15 @@ class WindowInfoTest {
     }
 
     @Test
+    fun `a medium-width landscape phone also gets the rail`() {
+        val window = WindowInfo(widthDp = 731, heightDp = 411)
+
+        assertEquals(WidthClass.MEDIUM, window.widthClass)
+        assertTrue("a bottom bar would eat a fifth of the height", window.useRail)
+        assertFalse(window.isTwoPane)
+    }
+
+    @Test
     fun `a portrait phone keeps the bottom bar`() {
         val window = WindowInfo(widthDp = 411, heightDp = 891)
 

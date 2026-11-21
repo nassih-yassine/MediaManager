@@ -30,7 +30,11 @@ data class WindowInfo(
     /** Anything with room for a rail instead of the bottom bar. */
     val isWide: Boolean get() = widthClass != WidthClass.COMPACT
 
-    val useRail: Boolean get() = widthClass == WidthClass.EXPANDED
+    /**
+     * A rail costs ~80 dp of width, which even a 731 dp landscape phone can spare;
+     * a bottom bar costs ~80 dp of height, which at 411 dp nobody can.
+     */
+    val useRail: Boolean get() = isWide
 
     val isTwoPane: Boolean get() = isWide && heightClass == HeightClass.NORMAL
 
