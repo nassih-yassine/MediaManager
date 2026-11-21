@@ -62,6 +62,41 @@ fun parseFlatPlaylist(
     )
 }.getOrNull()
 
+/**
+ * Listings are expensive (a fresh yt-dlp process is ~4-5 s on a phone) and a user
+ * usually reopens the same playlist while picking. Keep the last few in memory.
+ */
+class PlaylistCache(
+    private val ttlMs: Long = 10 * 60 * 1000L,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val maxEntries: Int = 4,
+) {
+    private data class Entry(val summary: PlaylistSummary, val at: Long)
+
+    private val cache = object : LinkedHashMap<String, Entry>(maxEntries, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entry>): Boolean =
+            size > maxEntries
+    }
+
+    @Synchronized
+    fun get(url: String): PlaylistSummary? {
+        val entry = cache[url] ?: return null
+        if (clock() - entry.at > ttlMs) {
+            cache.remove(url)
+            return null
+        }
+        return entry.summary
+    }
+
+    @Synchronized
+    fun put(url: String, summary: PlaylistSummary) {
+        cache[url] = Entry(summary, clock())
+    }
+
+    @Synchronized
+    fun clear() = cache.clear()
+}
+
 interface PlaylistInspector {
     suspend fun inspect(url: String): PlaylistSummary
 }

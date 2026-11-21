@@ -120,4 +120,26 @@ class PlaylistInspectTest {
         assertNull(parseFlatPlaylist("not json", "PL1"))
         assertNull(parseFlatPlaylist("""{"title":"Empty","entries":[]}""", "PL1"))
     }
+
+    @Test
+    fun `the listing cache expires and evicts the oldest`() {
+        var now = 1_000L
+        val cache = PlaylistCache(ttlMs = 500, clock = { now }, maxEntries = 2)
+        val a = summarizePlaylist("A", "A", null, null, listOf(entry(1)))
+        val b = summarizePlaylist("B", "B", null, null, listOf(entry(2)))
+        val c = summarizePlaylist("C", "C", null, null, listOf(entry(3)))
+
+        cache.put("a", a)
+        assertTrue(cache.get("a") === a)
+        now += 501
+        assertNull(cache.get("a"))
+
+        now = 2_000L
+        cache.put("a", a)
+        cache.put("b", b)
+        cache.get("a")
+        cache.put("c", c)
+        assertNull("least recently used entry is evicted", cache.get("b"))
+        assertTrue(cache.get("a") === a)
+    }
 }

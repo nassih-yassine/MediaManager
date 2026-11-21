@@ -11,7 +11,10 @@ import kotlinx.coroutines.withContext
  * never resolves a stream, so it needs no JS runtime, and it works for every site
  * yt-dlp knows, not just YouTube.
  */
-class YtDlpPlaylistInspector(private val context: Context) : PlaylistInspector {
+class YtDlpPlaylistInspector(
+    private val context: Context,
+    private val cache: PlaylistCache = PlaylistCache(),
+) : PlaylistInspector {
 
     /**
      * The bundled yt-dlp stops a YouTube playlist at the first 100 entries. A current
@@ -40,6 +43,10 @@ class YtDlpPlaylistInspector(private val context: Context) : PlaylistInspector {
     }
 
     override suspend fun inspect(url: String): PlaylistSummary = withContext(Dispatchers.IO) {
+        cache.get(url)?.let {
+            android.util.Log.d("PlaylistInspector", "cache hit for $url")
+            return@withContext it
+        }
         YtDlpExtractor.init(context)
         refreshExtractorIfOld()
         val request = YoutubeDLRequest(url).apply {
@@ -50,13 +57,22 @@ class YtDlpPlaylistInspector(private val context: Context) : PlaylistInspector {
             addOption("--socket-timeout", "20")
             addOption("--retries", "1")
         }
+        val started = System.currentTimeMillis()
         val json = try {
             YoutubeDL.getInstance().execute(request).out
         } catch (e: Exception) {
             android.util.Log.w("PlaylistInspector", "flat listing failed", e)
             throw IllegalStateException(e.message ?: "Could not read that playlist", e)
         }
-        parseFlatPlaylist(json, playlistListId(url) ?: url)
+        val listedAt = System.currentTimeMillis()
+        val summary = parseFlatPlaylist(json, playlistListId(url) ?: url)
+        android.util.Log.d(
+            "PlaylistInspector",
+            "listed ${json.length} bytes in ${listedAt - started} ms, " +
+                "parsed ${summary?.count ?: -1} entries in ${System.currentTimeMillis() - listedAt} ms",
+        )
+        summary?.let { cache.put(url, it) }
+        summary
             ?: run {
                 android.util.Log.w("PlaylistInspector", "unparsable: ${json.take(300)}")
                 throw IllegalStateException("That link is not a readable playlist")

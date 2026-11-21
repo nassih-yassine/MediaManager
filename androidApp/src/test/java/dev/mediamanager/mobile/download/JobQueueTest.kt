@@ -37,6 +37,18 @@ class JobQueueTest {
     fun tearDown() = db.close()
 
     @Test
+    fun `a playlist url is never queued as one job`() = runTest {
+        val result = queue.enqueue(
+            "https://www.youtube.com/playlist?list=PLabc123456",
+            DownloadMode.AUDIO,
+        )
+
+        assertTrue(result.needsPlaylistImport)
+        assertNull(result.job)
+        assertTrue(db.jobDao().activeJobs().isEmpty())
+    }
+
+    @Test
     fun `a playlist import stores the playlist and position on the job`() = runTest {
         val result = queue.enqueue(
             "https://youtu.be/a",

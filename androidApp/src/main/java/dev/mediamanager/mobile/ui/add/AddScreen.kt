@@ -54,6 +54,7 @@ import dev.mediamanager.mobile.download.DownloadMode
 import dev.mediamanager.mobile.download.DownloadService
 import dev.mediamanager.mobile.download.PlaylistEntry
 import dev.mediamanager.mobile.download.PlaylistSummary
+import dev.mediamanager.mobile.download.playlistListId
 import dev.mediamanager.mobile.ui.components.MmSurface
 import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.SectionTitle
@@ -83,6 +84,22 @@ fun AddScreen(
     val importRunner = remember(container) {
         PlaylistImportRunner(container.db, container.jobQueue) {
             DownloadService.start(container.appContext)
+        }
+    }
+    val inspectPlaylist: (String, DownloadMode) -> Unit = { url, mode ->
+        val validated = AddFormState(url = url, mode = mode).validate()
+        form = validated
+        inspecting = true
+        scope.launch {
+            val summary = kotlinx.coroutines.withTimeoutOrNull(60_000) {
+                runCatching { container.playlistInspector.inspect(validated.url) }.getOrNull()
+            }
+            inspecting = false
+            if (summary == null) {
+                message = "Could not read that playlist. Check the link and try again."
+            } else {
+                inspected = summary
+            }
         }
     }
     val startImport: (PlaylistSummary, List<PlaylistEntry>) -> Unit = { summary, chosen ->
@@ -272,19 +289,8 @@ fun AddScreen(
                     return@Button
                 }
                 if (validated.sourcePlaylistId != null) {
-                    inspecting = true
-                    form = form.copy(submitting = false)
-                    scope.launch {
-                        val summary = kotlinx.coroutines.withTimeoutOrNull(60_000) {
-                            runCatching { container.playlistInspector.inspect(validated.url) }.getOrNull()
-                        }
-                        inspecting = false
-                        if (summary == null) {
-                            message = "Could not read that playlist. Check the link and try again."
-                        } else {
-                            inspected = summary
-                        }
-                    }
+                    form = validated.copy(submitting = false)
+                    inspectPlaylist(validated.url, validated.mode)
                     return@Button
                 }
                 scope.launch {
@@ -471,6 +477,12 @@ fun AddScreen(
                     title = "Audio",
                     subtitle = "mp3 with cover art",
                     onClick = {
+                        if (playlistListId(sharedUrl) != null) {
+                            sharedSheet = false
+                            onSharedHandled()
+                            inspectPlaylist(sharedUrl, DownloadMode.AUDIO)
+                            return@SharedChoice
+                        }
                         scope.launch {
                             val result = container.jobQueue.enqueue(sharedUrl, DownloadMode.AUDIO)
                             container.settings.addRecentUrl(sharedUrl)
@@ -490,6 +502,12 @@ fun AddScreen(
                     title = "Video",
                     subtitle = "mp4",
                     onClick = {
+                        if (playlistListId(sharedUrl) != null) {
+                            sharedSheet = false
+                            onSharedHandled()
+                            inspectPlaylist(sharedUrl, DownloadMode.VIDEO)
+                            return@SharedChoice
+                        }
                         scope.launch {
                             val result = container.jobQueue.enqueue(sharedUrl, DownloadMode.VIDEO)
                             container.settings.addRecentUrl(sharedUrl)
