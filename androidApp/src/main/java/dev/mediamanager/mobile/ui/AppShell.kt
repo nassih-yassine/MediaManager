@@ -117,19 +117,25 @@ fun AppShell(
         var loading by remember { mutableStateOf(true) }
         LaunchedEffect(container) {
             val started = System.currentTimeMillis()
-            val pending = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                container.db.itemDao().count()
-                // A download can outlive the process that started it (MIUI kills the
-                // foreground service). Opening the app is the resume gesture.
-                container.db.jobDao().activeJobs().size + container.db.jobDao().queuedCount()
+            try {
+                val pending = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    // An import killed mid-flight leaves an empty playlist behind.
+                    container.db.playlistDao().deleteEmptyImported()
+                    container.db.itemDao().count()
+                    // A download can outlive the process that started it (MIUI kills the
+                    // foreground service). Opening the app is the resume gesture.
+                    container.db.jobDao().activeJobs().size + container.db.jobDao().queuedCount()
+                }
+                if (pending > 0) {
+                    dev.mediamanager.mobile.download.DownloadService.start(container.appContext)
+                }
+            } finally {
+                // A failed read must not leave the branded loading screen up forever.
+                val spent = System.currentTimeMillis() - started
+                if (spent < 350) kotlinx.coroutines.delay(350 - spent)
+                loading = false
+                onReady()
             }
-            if (pending > 0) {
-                dev.mediamanager.mobile.download.DownloadService.start(container.appContext)
-            }
-            val spent = System.currentTimeMillis() - started
-            if (spent < 350) kotlinx.coroutines.delay(350 - spent)
-            loading = false
-            onReady()
         }
         var storageOpen by remember { mutableStateOf(false) }
         var updatePrompt by remember { mutableStateOf<dev.mediamanager.mobile.data.update.UpdateInfo?>(null) }
@@ -140,7 +146,8 @@ fun AppShell(
             val info = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 container.updateCenter.autoCheck()
             }
-            if (info != null && !nowPlayingOpen && !downloadsOpen && !storageOpen) updatePrompt = info
+            // Keep it even when an overlay is open; the sheet renders once it closes.
+            if (info != null) updatePrompt = info
         }
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)

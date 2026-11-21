@@ -23,8 +23,6 @@ class JobQueue(
         val inLibrary: Boolean = false,
         /** The existing library row when [inLibrary] is true, so a playlist import can link it. */
         val libraryItemId: String? = null,
-        /** A playlist URL must go through the import flow, never one job. */
-        val needsPlaylistImport: Boolean = false,
     )
 
     suspend fun enqueue(
@@ -47,7 +45,8 @@ class JobQueue(
         val now = clock()
         val cleanUrl = normalizeUrl(url)
         if (playlistListId(cleanUrl) != null) {
-            return EnqueueResult(job = null, duplicate = false, needsPlaylistImport = true)
+            // A playlist URL must go through the import flow, never one job.
+            return EnqueueResult(job = null, duplicate = false)
         }
         val key = dedupeKey(cleanUrl, mode)
         dao.activeByDedupeKey(key)?.let { return EnqueueResult(it, duplicate = true) }

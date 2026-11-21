@@ -93,6 +93,9 @@ interface JobDao {
     @Query("SELECT * FROM jobs WHERE status IN ('queued','running') ORDER BY createdAt ASC")
     suspend fun activeJobs(): List<JobEntity>
 
+    @Query("SELECT MIN(scheduledAt) FROM jobs WHERE status = 'queued' AND attempts < maxAttempts")
+    suspend fun nextScheduledAt(): Long?
+
     @Query("SELECT COUNT(*) FROM jobs WHERE status = 'queued'")
     suspend fun queuedCount(): Int
 

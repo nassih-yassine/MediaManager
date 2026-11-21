@@ -56,6 +56,19 @@ class DaoTest {
     )
 
     @Test
+    fun `an imported playlist that never got items is cleaned up`() = runTest {
+        val now = 1_000L
+        db.playlistDao().upsert(
+            PlaylistEntity(id = "imported", name = "Imported", sourceUrl = "https://x", createdAt = now, updatedAt = now),
+        )
+        db.playlistDao().upsert(PlaylistEntity(id = "user", name = "Mine", createdAt = now, updatedAt = now))
+
+        db.playlistDao().deleteEmptyImported()
+
+        assertEquals(listOf("user"), db.playlistDao().playlists().map { it.id })
+    }
+
+    @Test
     fun `playlist import keeps source order when workers finish out of order`() = runTest {
         val now = 1_000L
         db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = now, updatedAt = now))

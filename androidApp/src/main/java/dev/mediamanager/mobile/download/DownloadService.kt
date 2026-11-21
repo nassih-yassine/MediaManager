@@ -180,7 +180,10 @@ class DownloadService : Service() {
             val claimed = app.jobQueue.claim(worker)
             if (claimed == null) {
                 if (app.db.jobDao().queuedCount() == 0) return
-                // Rows exist but are waiting out a backoff. Park briefly and look again.
+                // Short backoffs (a network drop is 15 s) are worth waiting for; a long
+                // retry is not. Stop the service instead of burning the dataSync budget.
+                val nextAt = app.db.jobDao().nextScheduledAt() ?: return
+                if (nextAt > System.currentTimeMillis() + 120_000) return
                 delay(5_000)
                 continue
             }

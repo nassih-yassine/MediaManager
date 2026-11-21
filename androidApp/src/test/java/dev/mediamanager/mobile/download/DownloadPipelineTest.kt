@@ -117,6 +117,19 @@ class DownloadPipelineTest {
     }
 
     @Test
+    fun `a retried job reuses the item instead of downloading it twice`() = runTest {
+        val first = pipeline.run(job("j8"))
+        assertTrue(first is DownloadPipeline.Result.Done)
+        val itemId = (first as DownloadPipeline.Result.Done).itemId
+
+        val second = pipeline.run(job("j9").copy(url = "https://youtu.be/x"))
+
+        assertTrue(second is DownloadPipeline.Result.Done)
+        assertEquals(itemId, (second as DownloadPipeline.Result.Done).itemId)
+        assertEquals(1, db.itemDao().observeAll(null).first().count { it.sourceUrl == "https://youtu.be/x" })
+    }
+
+    @Test
     fun `a playlist job links the finished item at its source position`() = runTest {
         db.playlistDao().upsert(
             dev.mediamanager.mobile.data.PlaylistEntity(

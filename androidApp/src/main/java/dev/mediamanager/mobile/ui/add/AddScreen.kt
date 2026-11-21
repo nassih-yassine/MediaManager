@@ -53,6 +53,7 @@ import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.download.DownloadMode
 import dev.mediamanager.mobile.download.DownloadService
 import dev.mediamanager.mobile.download.PlaylistEntry
+import dev.mediamanager.mobile.download.PlaylistImportRunner
 import dev.mediamanager.mobile.download.PlaylistSummary
 import dev.mediamanager.mobile.download.playlistListId
 import dev.mediamanager.mobile.ui.components.MmSurface
@@ -114,9 +115,12 @@ fun AddScreen(
                     "Added ${outcome.existing} existing $plural to “${summary.name}”."
                 }
 
-                outcome.existing > 0 -> "Queued ${outcome.queued} · ${outcome.existing} already in your library."
-
-                else -> "Queued ${outcome.queued} from “${summary.name}”."
+                else -> buildString {
+                    append("Queued ${outcome.queued} from “${summary.name}”")
+                    if (outcome.existing > 0) append(" · ${outcome.existing} already in your library")
+                    if (outcome.skipped > 0) append(" · ${outcome.skipped} already downloading")
+                    append('.')
+                }
             }
             if (outcome.queued + outcome.existing > 0) container.settings.addRecentUrl(summary.listId)
             inspected = null

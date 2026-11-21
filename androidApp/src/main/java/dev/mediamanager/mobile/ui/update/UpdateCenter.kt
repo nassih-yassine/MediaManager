@@ -18,17 +18,19 @@ class UpdateCenter(
     suspend fun autoCheck(): UpdateInfo? {
         val now = clock()
         if (now - settings.lastUpdateCheckAt.first() < THROTTLE_MS) return null
-        settings.setLastUpdateCheckAt(now)
 
         val result = checker.check()
+        // Only a completed check spends the day; an offline launch must retry later.
+        if (result !is UpdateChecker.Result.Failed) settings.setLastUpdateCheckAt(now)
         if (result !is UpdateChecker.Result.Available) return null
         if (settings.dismissedUpdateTag.first() == result.info.versionTag) return null
         return result.info
     }
 
     suspend fun manualCheck(): UpdateChecker.Result {
-        settings.setLastUpdateCheckAt(clock())
-        return checker.check()
+        val result = checker.check()
+        if (result !is UpdateChecker.Result.Failed) settings.setLastUpdateCheckAt(clock())
+        return result
     }
 
     suspend fun dismiss(tag: String) {

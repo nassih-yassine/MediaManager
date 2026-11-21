@@ -51,7 +51,8 @@ class AppContainer(context: Context) {
         libraryItemId = { url -> db.itemDao().idBySourceUrl(url) },
     )
 
-    val playlistInspector: PlaylistInspector = YtDlpPlaylistInspector(appContext)
+    val playlistInspector: PlaylistInspector =
+        YtDlpPlaylistInspector(appContext, unmetered = { connectivity.unmetered() })
 
     val itemRepository: ItemRepository = ItemRepository(db, paths)
 

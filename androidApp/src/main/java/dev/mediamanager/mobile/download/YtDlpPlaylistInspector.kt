@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 class YtDlpPlaylistInspector(
     private val context: Context,
     private val cache: PlaylistCache = PlaylistCache(),
+    private val unmetered: () -> Boolean = { true },
 ) : PlaylistInspector {
 
     /**
@@ -23,6 +24,12 @@ class YtDlpPlaylistInspector(
     private fun refreshExtractorIfOld() {
         if (refreshed) return
         refreshed = true
+        if (!unmetered()) {
+            // A 3 MB binary is not worth someone's mobile data; the old one still lists,
+            // though YouTube caps it at the first 100 entries.
+            android.util.Log.d("PlaylistInspector", "skipping yt-dlp refresh on a metered network")
+            return
+        }
         val current = YtDlpExtractor.versionName(context)
         android.util.Log.d("PlaylistInspector", "yt-dlp $current")
         // A null version means the bundled zip never registered one; update once.
@@ -43,7 +50,8 @@ class YtDlpPlaylistInspector(
     }
 
     override suspend fun inspect(url: String): PlaylistSummary = withContext(Dispatchers.IO) {
-        cache.get(url)?.let {
+        val cacheKey = playlistListId(url) ?: url
+        cache.get(cacheKey)?.let {
             android.util.Log.d("PlaylistInspector", "cache hit for $url")
             return@withContext it
         }
@@ -71,7 +79,7 @@ class YtDlpPlaylistInspector(
             "listed ${json.length} bytes in ${listedAt - started} ms, " +
                 "parsed ${summary?.count ?: -1} entries in ${System.currentTimeMillis() - listedAt} ms",
         )
-        summary?.let { cache.put(url, it) }
+        summary?.let { cache.put(cacheKey, it) }
         summary
             ?: run {
                 android.util.Log.w("PlaylistInspector", "unparsable: ${json.take(300)}")

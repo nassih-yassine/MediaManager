@@ -43,8 +43,8 @@ class JobQueueTest {
             DownloadMode.AUDIO,
         )
 
-        assertTrue(result.needsPlaylistImport)
         assertNull(result.job)
+        assertFalse(result.duplicate)
         assertTrue(db.jobDao().activeJobs().isEmpty())
     }
 

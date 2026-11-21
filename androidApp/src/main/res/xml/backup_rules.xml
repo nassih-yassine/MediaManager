@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The library rows, playlists and settings are small and worth restoring; the media
+  files are not included (Android caps cloud backups, and the files stay on the phone).
+  Missing files are marked unavailable by ItemRepository on the next library visit.
+-->
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="file" path="datastore/" />
+</full-backup-content>

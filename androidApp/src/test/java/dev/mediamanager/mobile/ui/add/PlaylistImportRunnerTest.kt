@@ -8,6 +8,7 @@ import dev.mediamanager.mobile.data.ItemEntity
 import dev.mediamanager.mobile.download.DownloadMode
 import dev.mediamanager.mobile.download.JobQueue
 import dev.mediamanager.mobile.download.PlaylistEntry
+import dev.mediamanager.mobile.download.PlaylistImportRunner
 import dev.mediamanager.mobile.download.summarizePlaylist
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -118,6 +119,19 @@ class PlaylistImportRunnerTest {
     }
 
     @Test
+    fun `importing the same source twice reuses the playlist`() = runTest {
+        val first = summary("a")
+        runner().import(first, DownloadMode.AUDIO, first.entries)
+        val second = summary("b")
+
+        runner().import(second, DownloadMode.AUDIO, second.entries)
+
+        val playlists = db.playlistDao().playlists()
+        assertEquals(1, playlists.size)
+        assertEquals(2, db.jobDao().activeJobs().count { it.playlistId == playlists.single().id })
+    }
+
+    @Test
     fun `an empty selection creates nothing`() = runTest {
         val outcome = runner().import(summary("a"), DownloadMode.AUDIO, emptyList())
 
@@ -134,7 +148,7 @@ class PlaylistImportRunnerTest {
 
         val outcome = runner().import(summary, DownloadMode.AUDIO, summary.entries)
 
-        assertEquals(1, outcome.duplicates)
+        assertEquals(1, outcome.skipped)
         assertTrue(outcome.nothing)
         assertNull(db.playlistDao().bySourceUrl("https://www.youtube.com/playlist?list=PL1"))
     }

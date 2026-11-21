@@ -49,8 +49,6 @@ class YtDlpExtractor(private val context: Context, private val paths: LibraryPat
             android.util.Log.d("YtDlp", "yt-dlp version=${runCatching { YoutubeDL.getInstance().versionName(context) }.getOrNull()}")
         }
 
-        fun version(): String? = runCatching { YoutubeDL.getInstance().version(null) }.getOrNull()
-
         fun versionName(context: android.content.Context): String? =
             runCatching { YoutubeDL.getInstance().versionName(context) }.getOrNull()
 

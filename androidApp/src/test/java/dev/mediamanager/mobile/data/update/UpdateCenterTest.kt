@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.mediamanager.mobile.data.SettingsStore
 import dev.mediamanager.mobile.ui.update.UpdateCenter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -64,6 +65,20 @@ class UpdateCenterTest {
         first.dismiss("android-v0.9.0")
 
         assertNull(center(now + UpdateCenter.THROTTLE_MS + 1).autoCheck())
+    }
+
+    @Test
+    fun `a failed check does not spend the day`() = runTest {
+        settings.setLastUpdateCheckAt(0)
+        val offline = UpdateCenter(
+            settings = settings,
+            checker = UpdateChecker(currentVersion = "0.1.1", fetch = { throw java.io.IOException("offline") }),
+            clock = { 1_700_000_000_000 },
+        )
+
+        assertNull(offline.autoCheck())
+
+        assertEquals(0L, settings.lastUpdateCheckAt.first())
     }
 
     @Test

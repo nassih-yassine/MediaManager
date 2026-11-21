@@ -80,6 +80,13 @@ interface PlaylistDao {
     @Query("SELECT p.* FROM playlists p INNER JOIN playlist_items i ON i.playlistId = p.id WHERE i.itemId = :itemId ORDER BY p.name")
     suspend fun playlistsContaining(itemId: String): List<PlaylistEntity>
 
+    /** An import that was cancelled or killed before it queued anything. */
+    @Query(
+        "DELETE FROM playlists WHERE sourceUrl IS NOT NULL AND id NOT IN " +
+            "(SELECT DISTINCT playlistId FROM playlist_items)",
+    )
+    suspend fun deleteEmptyImported()
+
     @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistId = :playlistId")
     suspend fun count(playlistId: String): Int
 }

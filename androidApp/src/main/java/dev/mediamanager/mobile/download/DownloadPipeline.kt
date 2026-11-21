@@ -129,6 +129,16 @@ class DownloadPipeline(
 
         // Item and playlist link land together: a crash must never leave a playlist
         // that silently misses an item that did download.
+        // A crash between this commit and markDone requeues the job; reuse the row
+        // instead of downloading and inserting the same video twice.
+        val already = runCatching { db.itemDao().getBySourceUrl(job.url) }.getOrNull()
+        if (already != null) {
+            target.delete()
+            if (thumbBytes > 0) paths.thumbFile(itemId).delete()
+            paths.deleteRecursively(incoming)
+            return Result.Done(already.id)
+        }
+
         val inserted = runCatching {
             db.withTransaction {
                 db.itemDao().insert(item)
