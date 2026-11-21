@@ -30,8 +30,7 @@ other machines cannot resolve it.
 
 - **Kotlin style is enforced.** ktlint 1.8 via `.editorconfig` (`make fmt`); the
   pre-push hook (`.githooks/pre-push`, installed automatically by `settings.gradle.kts`)
-runs `ktlintCheck` and `lintDebug`. The
-  opinionated `function-signature`/`class-signature`/chain rules are disabled because
+  runs `ktlintCheck` and `lintDebug`. The opinionated `function-signature`/`class-signature`/chain rules are disabled because
   they fight Compose. Do not re-enable them without reformatting the whole app.
 
 - **Room is the only source of truth.** The UI reads flows; nothing caches state as
