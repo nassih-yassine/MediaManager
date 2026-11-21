@@ -1,7 +1,7 @@
 package dev.mediamanager.mobile.ui.add
 
 import dev.mediamanager.mobile.download.DownloadMode
-import dev.mediamanager.mobile.download.playlistRejection
+import dev.mediamanager.mobile.download.playlistListId
 
 data class AddFormState(
     val url: String = "",
@@ -10,12 +10,14 @@ data class AddFormState(
     val error: String? = null,
     val submitting: Boolean = false,
 ) {
+    /** Set when the link points at a playlist instead of one video. */
+    val sourcePlaylistId: String? get() = playlistListId(url)
+
     fun validate(): AddFormState {
         val trimmed = url.trim()
         val problem = when {
             trimmed.isEmpty() -> "Paste a link first"
             !(trimmed.startsWith("http://") || trimmed.startsWith("https://")) -> "That is not a link"
-            playlistRejection(trimmed) != null -> playlistRejection(trimmed)
             else -> null
         }
         return copy(error = problem, url = trimmed)

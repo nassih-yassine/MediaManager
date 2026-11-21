@@ -13,24 +13,51 @@ class JobQueue(
 
     /** True when the library already holds this URL; a second copy is never queued. */
     private val existsInLibrary: suspend (String) -> Boolean = { false },
+    /** The id of that existing row, for playlist links. */
+    private val libraryItemId: suspend (String) -> String? = { null },
 ) {
 
-    data class EnqueueResult(val job: JobEntity?, val duplicate: Boolean, val inLibrary: Boolean = false)
+    data class EnqueueResult(
+        val job: JobEntity?,
+        val duplicate: Boolean,
+        val inLibrary: Boolean = false,
+        /** The existing library row when [inLibrary] is true, so a playlist import can link it. */
+        val libraryItemId: String? = null,
+    )
 
-    suspend fun enqueue(url: String, mode: DownloadMode): EnqueueResult {
+    suspend fun enqueue(
+        url: String,
+        mode: DownloadMode,
+        playlistId: String? = null,
+        playlistPosition: Int? = null,
+    ): EnqueueResult {
         lateinit var result: EnqueueResult
-        transaction { result = enqueueLocked(url, mode) }
+        transaction { result = enqueueLocked(url, mode, playlistId, playlistPosition) }
         return result
     }
 
-    private suspend fun enqueueLocked(url: String, mode: DownloadMode): EnqueueResult {
+    private suspend fun enqueueLocked(
+        url: String,
+        mode: DownloadMode,
+        playlistId: String?,
+        playlistPosition: Int?,
+    ): EnqueueResult {
         val now = clock()
         val cleanUrl = normalizeUrl(url)
         val key = dedupeKey(cleanUrl, mode)
         dao.activeByDedupeKey(key)?.let { return EnqueueResult(it, duplicate = true) }
-        if (existsInLibrary(cleanUrl)) return EnqueueResult(null, duplicate = false, inLibrary = true)
+        if (existsInLibrary(cleanUrl)) {
+            return EnqueueResult(
+                job = null,
+                duplicate = false,
+                inLibrary = true,
+                libraryItemId = libraryItemId(cleanUrl),
+            )
+        }
         val job = JobEntity(
             id = newId(),
+            playlistId = playlistId,
+            playlistPosition = playlistPosition,
             dedupeKey = key,
             url = cleanUrl,
             mode = mode.dbValue,

@@ -46,6 +46,9 @@ data class JobEntity(
     val metaDurationMs: Long? = null,
     val metaThumbPath: String? = null,
     val itemId: String? = null,
+    /** Set when this job belongs to a playlist import; the item lands here on success. */
+    val playlistId: String? = null,
+    val playlistPosition: Int? = null,
     val attempts: Int = 0,
     val maxAttempts: Int = 5,
     val priority: Int = 0,
@@ -61,6 +64,8 @@ data class JobEntity(
 data class PlaylistEntity(
     @PrimaryKey val id: String,
     val name: String,
+    /** The playlist it was imported from, for a future refresh. */
+    val sourceUrl: String? = null,
     val coverPath: String? = null,
     val createdAt: Long,
     val updatedAt: Long,

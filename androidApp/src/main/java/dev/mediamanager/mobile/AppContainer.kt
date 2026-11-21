@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.MIGRATION_1_2
 import dev.mediamanager.mobile.data.MIGRATION_2_3
+import dev.mediamanager.mobile.data.MIGRATION_3_4
 import dev.mediamanager.mobile.data.SettingsStore
 import dev.mediamanager.mobile.data.update.UpdateChecker
 import dev.mediamanager.mobile.download.CompositeExtractor
@@ -13,6 +14,8 @@ import dev.mediamanager.mobile.download.ConnectivityMonitor
 import dev.mediamanager.mobile.download.DownloadPipeline
 import dev.mediamanager.mobile.download.DownloadSettings
 import dev.mediamanager.mobile.download.JobQueue
+import dev.mediamanager.mobile.download.NewPipePlaylistInspector
+import dev.mediamanager.mobile.download.PlaylistInspector
 import dev.mediamanager.mobile.download.Thumbnailer
 import dev.mediamanager.mobile.download.YoutubeNewPipeExtractor
 import dev.mediamanager.mobile.download.YtDlpExtractor
@@ -31,7 +34,7 @@ class AppContainer(context: Context) {
     val paths: LibraryPaths = LibraryPaths(appContext.filesDir)
 
     val db: AppDatabase = Room.databaseBuilder(appContext, AppDatabase::class.java, "mm.db")
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
 
     val settings: SettingsStore = SettingsStore(appContext)
@@ -45,7 +48,10 @@ class AppContainer(context: Context) {
         transaction = { block -> db.withTransaction { block() } },
         dao = db.jobDao(),
         existsInLibrary = { url -> db.itemDao().existsBySourceUrl(url) },
+        libraryItemId = { url -> db.itemDao().idBySourceUrl(url) },
     )
+
+    val playlistInspector: PlaylistInspector = NewPipePlaylistInspector()
 
     val itemRepository: ItemRepository = ItemRepository(db, paths)
 

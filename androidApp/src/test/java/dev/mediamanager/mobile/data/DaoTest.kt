@@ -56,6 +56,24 @@ class DaoTest {
     )
 
     @Test
+    fun `playlist import keeps source order when workers finish out of order`() = runTest {
+        val now = 1_000L
+        db.playlistDao().upsert(PlaylistEntity(id = "p1", name = "Mix", createdAt = now, updatedAt = now))
+        db.itemDao().insert(item("i1"))
+        db.itemDao().insert(item("i2"))
+        db.itemDao().insert(item("i3"))
+
+        // Three workers finish in the wrong order; positions come from the playlist.
+        db.playlistDao().insertAt("p1", "i3", position = 2, now = now)
+        db.playlistDao().insertAt("p1", "i1", position = 0, now = now)
+        db.playlistDao().insertAt("p1", "i2", position = 1, now = now)
+        // A repeated callback must not duplicate the link.
+        db.playlistDao().insertAt("p1", "i2", position = 1, now = now)
+
+        assertEquals(listOf("i1", "i2", "i3"), db.playlistDao().items("p1").map { it.itemId })
+    }
+
+    @Test
     fun `newest first and kind filter`() = runTest {
         db.itemDao().insert(item("a1", createdAt = 1))
         db.itemDao().insert(item("a2", createdAt = 2))

@@ -22,6 +22,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC")
     suspend fun playlists(): List<PlaylistEntity>
 
+    @Query("SELECT * FROM playlists WHERE sourceUrl = :sourceUrl LIMIT 1")
+    suspend fun bySourceUrl(sourceUrl: String): PlaylistEntity?
+
     @Query("DELETE FROM playlists WHERE id = :id")
     suspend fun delete(id: String)
 
@@ -52,6 +55,16 @@ interface PlaylistDao {
             },
         )
     }
+
+    /** Links an item at the position it held in the source playlist. */
+    @Transaction
+    suspend fun insertAt(playlistId: String, itemId: String, position: Int, now: Long) {
+        insertRows(listOf(PlaylistItemEntity(playlistId, itemId, position, now)))
+        touch(playlistId, now)
+    }
+
+    @Query("UPDATE playlists SET updatedAt = :now WHERE id = :id")
+    suspend fun touch(id: String, now: Long)
 
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND itemId = :itemId")
     suspend fun removeItem(playlistId: String, itemId: String)

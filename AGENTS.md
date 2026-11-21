@@ -48,6 +48,12 @@ other machines cannot resolve it.
   `reapExpired` re-queues rows whose `heartbeat_at` is stale. Startup recovery must
   only requeue **expired leases**; a blanket `running -> queued` steals jobs from live
   workers, and there is a regression test.
+- **Playlist imports are per-video jobs.** `jobs.playlistId/playlistPosition` point at
+  the playlist row; the pipeline inserts the item **and** the `playlist_items` link in
+  one transaction, before `markDone`. The playlist row exists before any job is queued,
+  because a job can finish first. Items already in the library are linked at their
+  source position instead of re-downloaded (user decision). `PlaylistImportRunnerTest`
+  covers both.
 - **Finalize order:** `.incoming/<jobId>/` → rename into the library → INSERT items →
   mark the job done. Deleting the cancel path here leaves orphan files.
 - **Storage is sharded:** `<kind>/<id[0:2]>/<id>.<ext>`, thumbs in `thumbs/<prefix>/`.

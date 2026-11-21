@@ -28,6 +28,11 @@
 the file lands in an app-private library with cover art. Pictures, PDFs and EPUBs
 upload the same way.
 
+**Whole playlists.** Paste a YouTube playlist link and the app reads it without
+downloading: **Download all** or pick the videos, choose Audio or Video, and each
+missing video becomes its own job. Videos already in your library are linked into the
+new playlist instead of fetched twice.
+
 **Downloads built for a phone line.** Each file is split across several ranged HTTP
 connections, two jobs run at once by default, and the queue survives the process
 being killed. Progress never overshoots, cancelling stops only the job you picked,

@@ -28,6 +28,9 @@ interface ItemDao {
     @Query("SELECT EXISTS(SELECT 1 FROM items WHERE sourceUrl = :url)")
     suspend fun existsBySourceUrl(url: String): Boolean
 
+    @Query("SELECT id FROM items WHERE sourceUrl = :url LIMIT 1")
+    suspend fun idBySourceUrl(url: String): String?
+
     @Query("SELECT * FROM items ORDER BY createdAt DESC LIMIT :limit")
     fun observeRecentlyAdded(limit: Int): Flow<List<ItemEntity>>
 

@@ -19,6 +19,14 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE jobs ADD COLUMN playlistId TEXT")
+        db.execSQL("ALTER TABLE jobs ADD COLUMN playlistPosition INTEGER")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN sourceUrl TEXT")
+    }
+}
+
 @Database(
     entities = [
         ItemEntity::class,
@@ -27,7 +35,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         PlaylistItemEntity::class,
         QueueItemEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

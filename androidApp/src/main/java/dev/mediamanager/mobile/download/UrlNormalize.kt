@@ -39,19 +39,22 @@ fun normalizeUrl(raw: String): String {
 }
 
 /**
- * A real playlist (PL…, UU…, or a /playlist URL with no seed video) cannot be
- * turned into one download. Reject it at the form instead of letting yt-dlp walk it.
+ * The list id of a real YouTube playlist, or null when the link is a single video.
+ *
+ * `watch?v=…&list=…` deliberately returns null in v1: the seed video wins, and the
+ * whole-playlist affordance can come later. Radio (`RD…`), liked (`LL…`) and Watch
+ * Later (`WL…`) are not importable without an account, so they are not playlists here.
  */
-fun playlistRejection(raw: String): String? {
+fun playlistListId(raw: String): String? {
     val uri = runCatching { Uri.parse(raw.trim()) }.getOrNull() ?: return null
     val host = uri.host?.lowercase() ?: return null
     if (host != "youtube.com" && !host.endsWith(".youtube.com")) return null
-    val hasVideo = !uri.getQueryParameter("v").isNullOrBlank() ||
-        uri.pathSegments.firstOrNull() in setOf("shorts", "embed", "live")
-    val isPlaylistPath = uri.pathSegments.firstOrNull() == "playlist"
-    val list = uri.getQueryParameter("list")
-    if (isPlaylistPath && !hasVideo && list != null && !list.startsWith("RD")) {
-        return "That is a playlist. Paste a video link instead."
-    }
-    return null
+    if (!uri.getQueryParameter("v").isNullOrBlank()) return null
+    if (uri.pathSegments.firstOrNull() in setOf("shorts", "embed", "live", "watch")) return null
+    val list = uri.getQueryParameter("list") ?: return null
+    val importable = list.startsWith("PL") ||
+        list.startsWith("UU") ||
+        list.startsWith("OLAK5uy_") ||
+        list.startsWith("FL")
+    return list.takeIf { importable && it.matches(Regex("[A-Za-z0-9_-]{10,}")) }
 }

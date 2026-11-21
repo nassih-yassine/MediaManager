@@ -117,6 +117,36 @@ class DownloadPipelineTest {
     }
 
     @Test
+    fun `a playlist job links the finished item at its source position`() = runTest {
+        db.playlistDao().upsert(
+            dev.mediamanager.mobile.data.PlaylistEntity(
+                id = "p1",
+                name = "Imported",
+                createdAt = 1,
+                updatedAt = 1,
+            ),
+        )
+        val result = pipeline.run(
+            job("j2").copy(playlistId = "p1", playlistPosition = 3),
+        )
+
+        assertTrue(result is DownloadPipeline.Result.Done)
+        val itemId = (result as DownloadPipeline.Result.Done).itemId
+        val rows = db.playlistDao().items("p1")
+        assertEquals(1, rows.size)
+        assertEquals(itemId, rows.single().itemId)
+        assertEquals(3, rows.single().position)
+    }
+
+    @Test
+    fun `a job for a playlist deleted mid-run still saves the item`() = runTest {
+        val result = pipeline.run(job("j3").copy(playlistId = "gone", playlistPosition = 0))
+
+        assertTrue(result is DownloadPipeline.Result.Done)
+        assertTrue(db.itemDao().get((result as DownloadPipeline.Result.Done).itemId) != null)
+    }
+
+    @Test
     fun `permanent extractor error leaves no item`() = runTest {
         fake.failWith = "ERROR: Video unavailable"
         val result = pipeline.run(job(id = "j2"))
@@ -166,11 +196,12 @@ class DownloadPipelineTest {
 
     @Test
     fun `insert failure removes the moved file`() = runTest {
-        // Pre-insert a row with the same path is impossible to force with a random id,
-        // so fail the insert by closing the database.
-        db.close()
+        // Force a deterministic insert failure: the item insert must not be reached.
+        // Closing the DB is not reliable here — Room reopens an in-memory helper, and
+        // the transaction would then succeed against a fresh empty database.
+        db.openHelper.writableDatabase.execSQL("DROP TABLE items")
         val result = pipeline.run(job(id = "j7"))
-        assertTrue(result is DownloadPipeline.Result.Failed)
+        assertTrue("expected a failure, got $result", result is DownloadPipeline.Result.Failed)
         val leftovers = paths.libraryDir.walkTopDown().filter { it.isFile }.toList()
         assertTrue("library must not keep orphan files: $leftovers", leftovers.isEmpty())
     }

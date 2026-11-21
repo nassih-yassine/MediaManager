@@ -37,6 +37,53 @@ class JobQueueTest {
     fun tearDown() = db.close()
 
     @Test
+    fun `a playlist import stores the playlist and position on the job`() = runTest {
+        val result = queue.enqueue(
+            "https://youtu.be/a",
+            DownloadMode.VIDEO,
+            playlistId = "p1",
+            playlistPosition = 7,
+        )
+
+        val job = db.jobDao().get(result.job!!.id)!!
+        assertEquals("p1", job.playlistId)
+        assertEquals(7, job.playlistPosition)
+        assertFalse(result.duplicate)
+    }
+
+    @Test
+    fun `an item already in the library is reported with its id instead of queued`() = runTest {
+        db.itemDao().insert(
+            dev.mediamanager.mobile.data.ItemEntity(
+                id = "existing1",
+                kind = "audio",
+                title = "Already here",
+                sourceUrl = "https://www.youtube.com/watch?v=abc",
+                path = "library/audio/ex/existing1.mp3",
+                mime = "audio/mpeg",
+                bytes = 1,
+                thumbBytes = 0,
+                available = true,
+                positionMs = 0,
+                createdAt = 1,
+                updatedAt = 1,
+            ),
+        )
+        val withLibrary = JobQueue(
+            dao = db.jobDao(),
+            clock = { now },
+            existsInLibrary = { url -> db.itemDao().existsBySourceUrl(url) },
+            libraryItemId = { url -> db.itemDao().idBySourceUrl(url) },
+        )
+
+        val result = withLibrary.enqueue("https://www.youtube.com/watch?v=abc", DownloadMode.AUDIO)
+
+        assertTrue(result.inLibrary)
+        assertEquals("existing1", result.libraryItemId)
+        assertNull(result.job)
+    }
+
+    @Test
     fun `claim takes the oldest queued job and increments attempts`() = runTest {
         val first = queue.enqueue("https://youtu.be/a", DownloadMode.AUDIO).job!!
         now += 1

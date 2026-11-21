@@ -1,5 +1,6 @@
 package dev.mediamanager.mobile.download
 
+import androidx.room.withTransaction
 import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.ItemEntity
 import dev.mediamanager.mobile.data.JobEntity
@@ -126,7 +127,25 @@ class DownloadPipeline(
             updatedAt = stamp,
         )
 
-        val inserted = runCatching { db.itemDao().insert(item) }.isSuccess
+        // Item and playlist link land together: a crash must never leave a playlist
+        // that silently misses an item that did download.
+        val inserted = runCatching {
+            db.withTransaction {
+                db.itemDao().insert(item)
+                job.playlistId?.let { playlistId ->
+                    // The playlist may have been deleted while the batch was running;
+                    // the download still belongs in the library.
+                    if (db.playlistDao().get(playlistId) != null) {
+                        db.playlistDao().insertAt(
+                            playlistId = playlistId,
+                            itemId = itemId,
+                            position = job.playlistPosition ?: Int.MAX_VALUE,
+                            now = stamp,
+                        )
+                    }
+                }
+            }
+        }.isSuccess
         if (!inserted) {
             target.delete()
             if (thumbBytes > 0) paths.thumbFile(itemId).delete()

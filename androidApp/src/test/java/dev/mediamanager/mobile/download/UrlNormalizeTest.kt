@@ -38,13 +38,33 @@ class UrlNormalizeTest {
     }
 
     @Test
-    fun `a plain playlist is rejected with a readable message`() {
+    fun `a real playlist link exposes its list id`() {
         assertEquals(
-            "That is a playlist. Paste a video link instead.",
-            playlistRejection("https://www.youtube.com/playlist?list=PLabc123"),
+            "PLabc123456",
+            playlistListId("https://www.youtube.com/playlist?list=PLabc123456"),
         )
-        assertNull(playlistRejection("https://www.youtube.com/watch?v=4TrZAaFMpts&list=PLabc123"))
-        assertNull(playlistRejection("https://youtu.be/4TrZAaFMpts"))
+        assertEquals(
+            "OLAK5uy_abc123",
+            playlistListId("https://music.youtube.com/playlist?list=OLAK5uy_abc123"),
+        )
+        assertEquals(
+            "UUabc123456",
+            playlistListId("https://www.youtube.com/playlist?list=UUabc123456"),
+        )
+    }
+
+    @Test
+    fun `a seeded video stays a single video`() {
+        assertNull(playlistListId("https://www.youtube.com/watch?v=4TrZAaFMpts&list=PLabc123456"))
+        assertNull(playlistListId("https://youtu.be/4TrZAaFMpts"))
+    }
+
+    @Test
+    fun `radio, liked and watch later lists are not importable`() {
+        assertNull(playlistListId("https://www.youtube.com/playlist?list=RD4TrZAaFMpts"))
+        assertNull(playlistListId("https://www.youtube.com/playlist?list=LLabc123456"))
+        assertNull(playlistListId("https://www.youtube.com/playlist?list=WL"))
+        assertNull(playlistListId("https://vimeo.com/playlist?list=PLabc123456"))
     }
 
     @Test

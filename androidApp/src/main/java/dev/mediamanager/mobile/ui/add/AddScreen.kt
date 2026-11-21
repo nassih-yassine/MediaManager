@@ -52,6 +52,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.download.DownloadMode
 import dev.mediamanager.mobile.download.DownloadService
+import dev.mediamanager.mobile.download.PlaylistEntry
+import dev.mediamanager.mobile.download.PlaylistSummary
 import dev.mediamanager.mobile.ui.components.MmSurface
 import dev.mediamanager.mobile.ui.components.MmTextButton
 import dev.mediamanager.mobile.ui.components.SectionTitle
@@ -74,6 +76,37 @@ fun AddScreen(
     var form by remember { mutableStateOf(AddFormState()) }
     var message by remember { mutableStateOf<String?>(null) }
     var sharedSheet by remember { mutableStateOf(false) }
+    var inspected by remember { mutableStateOf<PlaylistSummary?>(null) }
+    var choosingPlaylist by remember { mutableStateOf(false) }
+    var importing by remember { mutableStateOf(false) }
+    val importRunner = remember(container) {
+        PlaylistImportRunner(container.db, container.jobQueue) {
+            DownloadService.start(container.appContext)
+        }
+    }
+    val startImport: (PlaylistSummary, List<PlaylistEntry>) -> Unit = { summary, chosen ->
+        scope.launch {
+            importing = true
+            val outcome = importRunner.import(summary, form.mode, chosen)
+            message = when {
+                outcome.nothing -> "Nothing new: those videos are already queued."
+
+                outcome.queued == 0 -> {
+                    val plural = if (outcome.existing == 1) "video" else "videos"
+                    "Added ${outcome.existing} existing $plural to “${summary.name}”."
+                }
+
+                outcome.existing > 0 -> "Queued ${outcome.queued} · ${outcome.existing} already in your library."
+
+                else -> "Queued ${outcome.queued} from “${summary.name}”."
+            }
+            if (outcome.queued + outcome.existing > 0) container.settings.addRecentUrl(summary.listId)
+            inspected = null
+            choosingPlaylist = false
+            importing = false
+            form = AddFormState(mode = form.mode)
+        }
+    }
 
     androidx.compose.runtime.LaunchedEffect(sharedUrl) {
         if (sharedUrl != null) {
@@ -237,6 +270,18 @@ fun AddScreen(
                     form = validated.copy(submitting = false)
                     return@Button
                 }
+                if (validated.sourcePlaylistId != null) {
+                    scope.launch {
+                        val summary = runCatching { container.playlistInspector.inspect(validated.url) }.getOrNull()
+                        form = form.copy(submitting = false)
+                        if (summary == null) {
+                            message = "Could not read that playlist. Check the link and try again."
+                        } else {
+                            inspected = summary
+                        }
+                    }
+                    return@Button
+                }
                 scope.launch {
                     val result = container.jobQueue.enqueue(validated.url, validated.mode)
                     container.settings.addRecentUrl(validated.url)
@@ -249,7 +294,7 @@ fun AddScreen(
                     form = AddFormState(mode = validated.mode)
                 }
             },
-            enabled = !form.submitting,
+            enabled = !form.submitting && !importing,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = colors.accent,

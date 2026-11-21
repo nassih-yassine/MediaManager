@@ -12,7 +12,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -35,15 +34,6 @@ class YoutubeNewPipeExtractor(private val paths: LibraryPaths, private val maxVi
 
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
-
-        @Volatile
-        private var initialized = false
-
-        private fun ensureInit() {
-            if (initialized) return
-            NewPipe.init(NewPipeDownloader)
-            initialized = true
-        }
     }
 
     override suspend fun fetch(
@@ -52,7 +42,7 @@ class YoutubeNewPipeExtractor(private val paths: LibraryPaths, private val maxVi
         onStage: (String) -> Unit,
         onMeta: (String, Long?, File?) -> Unit,
     ): FetchResult = withContext(Dispatchers.IO) {
-        ensureInit()
+        NewPipeInit.ensure()
         onStage("extracting")
         val url = normalizeUrl(job.url)
         val info = try {
