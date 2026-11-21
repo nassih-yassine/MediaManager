@@ -34,10 +34,13 @@ if [ -z "$upstream" ]; then
 elif git diff --name-only "$upstream"...HEAD | grep -qE '\.(kt|kts|xml|png|webp|jpg|jpeg)$'; then
     run_lint=1
 fi
-# A tag push (detached HEAD) can become a release upload: always lint it.
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "HEAD" ]; then
-    run_lint=1
-fi
+# A tag push can become a release upload: always lint it. Git passes the refs on
+# stdin, so inspect them instead of guessing from HEAD.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    case "$remote_ref" in
+        refs/tags/*) run_lint=1 ;;
+    esac
+done
 
 if [ "$run_lint" = "1" ]; then
     echo "pre-push: Android lint"
