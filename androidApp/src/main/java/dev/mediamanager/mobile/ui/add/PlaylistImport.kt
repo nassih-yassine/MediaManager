@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -226,7 +227,7 @@ fun PlaylistSelectSheet(
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.panel) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
             // One control: All is on when every entry is selected. Unticking it clears
             // the selection so the user can pick only what they need.
             val allState = when {
@@ -272,15 +273,6 @@ fun PlaylistSelectSheet(
                 shape = RoundedCornerShape(12.dp),
             )
 
-            Button(
-                onClick = { onConfirm(summary.entries.filter { it.url in selected }) },
-                enabled = selected.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.accentInk),
-            ) {
-                Text("Download ${selected.size}")
-            }
-
             if (visible.isEmpty()) {
                 Text(
                     "No titles match “${query.trim()}”.",
@@ -289,7 +281,7 @@ fun PlaylistSelectSheet(
                     style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                 )
             } else {
-                LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 420.dp).padding(top = 4.dp)) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
                     items(visible, key = { it.url }) { entry ->
                         val checked = entry.url in selected
                         Row(
