@@ -123,6 +123,17 @@ ktlint {
     }
 }
 
+/**
+ * ktlint 1.8's own CLI resolves logback 1.3.16. It is a developer tool, never in the
+ * APK, but Dependabot rightly flags it; force the patched 1.5 line.
+ */
+configurations.matching { it.name == "ktlint" }.configureEach {
+    resolutionStrategy.force(
+        "ch.qos.logback:logback-core:1.5.34",
+        "ch.qos.logback:logback-classic:1.5.34",
+    )
+}
+
 configurations.configureEach {
     resolutionStrategy {
         force(
