@@ -1,0 +1,26 @@
+#!/bin/sh
+# Refuse a push whose Kotlin is unformatted, or that fails Android Lint.
+# Bypass once with: git push --no-verify   (or SKIP_HOOKS=1 git push)
+set -e
+
+if [ "${SKIP_HOOKS:-0}" = "1" ]; then
+    echo "pre-push: skipped (SKIP_HOOKS=1)"
+    exit 0
+fi
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+echo "pre-push: ktlint"
+if ! ./gradlew --quiet ktlintCheck; then
+    echo ""
+    echo "pre-push: Kotlin is not formatted. Run 'make fmt', review, and commit."
+    exit 1
+fi
+
+echo "pre-push: Android lint"
+if ! ./gradlew --quiet lintDebug; then
+    echo ""
+    echo "pre-push: Android Lint failed. Report: androidApp/build/reports/lint-results-debug.html"
+    exit 1
+fi

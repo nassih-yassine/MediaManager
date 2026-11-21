@@ -9,6 +9,8 @@ server, no account, no sync. Everything below is a rule that has cost time.
 make build      # assembleDebug
 make test       # testDebugUnitTest (unit + Robolectric)
 make check      # test + lint
+make fmt        # ktlint format
+make hooks      # install the pre-push hook (ktlint + Android lint)
 make coverage   # unit-test coverage (JaCoCo), HTML under androidApp/build/reports/coverage
 make install    # installs the debug APK if the phone has room
 make release    # signed release APK
@@ -25,6 +27,11 @@ Build env: JDK 21 (`JAVA_HOME`), Android SDK (`ANDROID_HOME` or `local.propertie
 other machines cannot resolve it.
 
 ## Architecture rules that are not obvious
+
+- **Kotlin style is enforced.** ktlint 1.8 via `.editorconfig` (`make fmt`); the
+  pre-push hook (`.githooks/pre-push`) runs `ktlintCheck` and `lintDebug`. The
+  opinionated `function-signature`/`class-signature`/chain rules are disabled because
+  they fight Compose. Do not re-enable them without reformatting the whole app.
 
 - **Room is the only source of truth.** The UI reads flows; nothing caches state as
   the authority. `RETURNING` is banned — `minSdk 26` ships SQLite 3.18, so claim and

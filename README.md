@@ -61,10 +61,16 @@ Requirements: JDK 21, Android SDK (platform 36), and `adb` for a device.
 make build      # debug APK  → androidApp/build/outputs/apk/debug/
 make test       # unit + Robolectric tests
 make check      # tests + lint
+make fmt        # ktlint: format the Kotlin sources
+make hooks      # install the pre-push hook (ktlint + Android lint)
 make coverage   # unit-test coverage → androidApp/build/reports/coverage/
 make install    # installs on the connected phone, refusing if space is short
 make release    # signed APK, needs the keystore properties sourced
 ```
+
+`make hooks` points git at `.githooks/`, where a pre-push hook runs `ktlintCheck` and
+`lintDebug`; bypass it once with `git push --no-verify`. Formatting is ktlint 1.8
+(`make fmt`), configured in `.editorconfig`.
 
 132 tests live under `androidApp/src/test`, with Robolectric where a database or
 context is needed. Android Lint is the linter (`make lint`).

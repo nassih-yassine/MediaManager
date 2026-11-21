@@ -5,12 +5,14 @@ SHELL := /bin/bash
 APK := androidApp/build/outputs/apk/debug/androidApp-arm64-v8a-debug.apk
 RELEASE_APK := androidApp/build/outputs/apk/release/androidApp-arm64-v8a-release.apk
 
-.PHONY: help build test lint coverage check install clean release
+.PHONY: help build test lint fmt hooks coverage check install clean release
 
 help:
 	@echo "make build    assemble the debug APK"
 	@echo "make test     unit + Robolectric tests"
 	@echo "make lint     Android lint"
+	@echo "make fmt      ktlint format (run after editing Kotlin)"
+	@echo "make hooks    install the pre-push hook (ktlint + Android lint)"
 	@echo "make coverage unit-test coverage report (HTML under androidApp/build/reports/coverage)"
 	@echo "make check    test + lint"
 	@echo "make install  install on the connected phone if it fits"
@@ -24,6 +26,13 @@ test:
 
 lint:
 	./gradlew lint
+
+fmt:
+	./gradlew ktlintFormat
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "pre-push hook installed"
 
 coverage:
 	./gradlew coverageReport

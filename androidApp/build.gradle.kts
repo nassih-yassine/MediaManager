@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     jacoco
+    alias(libs.plugins.ktlint)
 }
 
 val localProps = Properties().apply {
@@ -112,6 +113,16 @@ android {
  * inside the APK, so its Dependabot alerts are real, unlike the build-toolchain ones.
  * Jackson 2.x and Commons 2.x are binary compatible across minors.
  */
+ktlint {
+    // Pinned: the plugin's default ktlint version changes between patch releases.
+    version = "1.8.0"
+    android.set(true)
+    // Gradle scripts keep their own DSL formatting; ktlint owns the Kotlin sources.
+    filter {
+        exclude("**/*.kts")
+    }
+}
+
 configurations.configureEach {
     resolutionStrategy {
         force(
