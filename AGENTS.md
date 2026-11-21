@@ -145,8 +145,35 @@ other machines cannot resolve it.
 
 ## Tests
 
-- Unit tests are `app/src/test/**` with Robolectric where DB/context is needed. Bug
-  fixes go test-first; a fix without a reproducing test is incomplete.
+- Unit tests are `androidApp/src/test/**` with Robolectric where DB/context is needed.
+
+### Bug workflow — non-negotiable
+
+Every bug gets a test before it gets a fix. No exceptions, no "obvious" one-liners.
+
+1. **Reproduce as a test.** Write the smallest test that fails for the reported
+   behaviour, and run it. Watch it fail for the right reason (a compile error is not a
+   red test). Name it after the bug, e.g. `deletes_an_item_that_has_a_job`.
+2. **Fix the cause.** Change production code, not the test. If the test itself was
+   wrong, say so and fix the test first, then still watch it fail.
+3. **Green, then stay green.** Run the single test, then the whole suite
+   (`make test`) and the linter (`make lint`). Paste the real result.
+4. **Do not move on while red.** No committing, no pushing, no "I'll fix it after the
+   next change", no claiming success from a stale run. A failing or unrun test means
+   the task is not done.
+
+The only escape is a bug that cannot be expressed in a JVM test (Compose layout,
+system integration, a real device). Then: state why, capture the manual reproduction
+(command + screenshot), and still add the closest unit test for the logic underneath.
+A fix with neither a test nor recorded manual evidence is incomplete.
+
+- Tests that matter: `DownloadRulesTest` (error classification, resume threshold,
+  space check), `JobQueueTest` (backoff, lease reaping, dedupe, cancel),
+  `DownloadPipelineTest` (finalize order, no orphan file on insert failure),
+  `StorageRepositoryTest` (aggregates, share math), `DaoTest` (cascades),
+  `ResumeRulesTest` (short media always restarts), `WindowInfoTest` (breakpoints),
+  `UpdateCenterTest` (24 h throttle, dismissed tag), `ReleaseParserTest` (drafts are
+  invisible).
 - Tests that matter: `DownloadRulesTest` (error classification, resume threshold,
   space check), `JobQueueTest` (backoff, lease reaping, dedupe, cancel), 
   `DownloadPipelineTest` (finalize order, no orphan file on insert failure),
