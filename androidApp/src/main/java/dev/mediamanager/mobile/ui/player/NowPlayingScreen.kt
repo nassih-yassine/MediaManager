@@ -118,6 +118,7 @@ fun NowPlayingScreen(
     BackHandler(onBack = onClose)
 
     var volumeTouching by remember { mutableStateOf(false) }
+    val sleepMinutes by player.sleepMinutes.collectAsStateWithLifecycle(initialValue = 0)
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(2_000)
@@ -309,6 +310,7 @@ private fun PlayerPanel(
     var volumeLevel by remember { mutableIntStateOf(volume.current) }
     var rememberedLevel by remember { mutableIntStateOf(volume.current.coerceAtLeast(volume.max / 2)) }
     var volumeTouching by remember { mutableStateOf(false) }
+    val sleepMinutes by player.sleepMinutes.collectAsStateWithLifecycle(initialValue = 0)
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -474,6 +476,13 @@ private fun PlayerPanel(
                     style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 )
                 Spacer(Modifier.weight(1f))
+                SelectMenu(
+                    label = "Sleep",
+                    options = listOf(0, 15, 30, 45, 60).map { it to if (it == 0) "Sleep off" else "$it min" },
+                    selected = sleepMinutes,
+                    onSelect = { player.setSleepTimer(it) },
+                )
+                Spacer(Modifier.size(8.dp))
                 SelectMenu(
                     label = "Speed",
                     options = playbackSpeeds.map { it to speedLabel(it) },

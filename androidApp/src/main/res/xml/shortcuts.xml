@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add"
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_mm"
+        android:shortcutShortLabel="@string/shortcut_add">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="dev.mediamanager.mobile"
+            android:targetClass="dev.mediamanager.mobile.MainActivity">
+            <extra android:name="dev.mediamanager.mobile.EXTRA_TAB" android:value="ADD" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="library"
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_mm"
+        android:shortcutShortLabel="@string/shortcut_library">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="dev.mediamanager.mobile"
+            android:targetClass="dev.mediamanager.mobile.MainActivity">
+            <extra android:name="dev.mediamanager.mobile.EXTRA_TAB" android:value="LIBRARY" />
+        </intent>
+    </shortcut>
+</shortcuts>

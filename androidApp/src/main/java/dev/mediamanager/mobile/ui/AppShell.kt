@@ -97,12 +97,16 @@ fun AppShell(
     onReady: () -> Unit = {},
     /** Launched from the widget: land on the player once, without a replay. */
     openPlayerOnStart: Boolean = false,
+    /** Deep link from a shortcut or tile; null keeps the last tab. */
+    startTab: String? = null,
 ) {
     val appearance by container.settings.appearance.collectAsStateWithLifecycle(
         initialValue = Appearance(ThemeFamily.SLATE, ThemeMode.SYSTEM),
     )
     MmTheme(appearance.family, appearance.mode) {
-        var tab by rememberSaveable { mutableStateOf(Tab.HOME.name) }
+        var tab by rememberSaveable {
+            mutableStateOf(startTab?.takeIf { name -> Tab.entries.any { it.name == name } } ?: Tab.HOME.name)
+        }
         var nowPlayingOpen by rememberSaveable { mutableStateOf(false) }
         // StateFlow replays its current value, which opened the player on every
         // cold start and hid the mini player until it was closed by hand.

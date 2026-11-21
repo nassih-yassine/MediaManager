@@ -1,10 +1,12 @@
 package dev.mediamanager.mobile
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -15,6 +17,10 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.mediamanager.mobile.ui.AppShell
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        const val EXTRA_TAB = "dev.mediamanager.mobile.EXTRA_TAB"
+    }
 
     private val sharedLink = mutableStateOf<String?>(null)
 
@@ -37,8 +43,10 @@ class MainActivity : ComponentActivity() {
             dev.mediamanager.mobile.widget.NowPlayingWidget.EXTRA_OPEN_PLAYER,
             false,
         ) == true
+        val startTab = intent?.getStringExtra(EXTRA_TAB)
         setContent {
             AppShell(
+                startTab = startTab,
                 container = container,
                 player = container.player,
                 sharedUrl = sharedLink.value,
@@ -52,6 +60,21 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         (application as App).container.player.savePosition()
         super.onStop()
+    }
+
+    /** Home press while a video plays keeps it going in a PiP window. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val now = (application as App).container.player.nowPlaying.value ?: return
+        if (!now.isPlaying || !now.isVideo) return
+        runCatching {
+            enterPictureInPictureMode(
+                PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build(),
+            )
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -75,6 +75,24 @@ class PlayerRepository(
         _openRequests.value = _openRequests.value + 1
     }
 
+    private val _sleepMinutes = MutableStateFlow(0)
+
+    /** 0 means off; otherwise minutes until playback pauses. */
+    val sleepMinutes: StateFlow<Int> = _sleepMinutes.asStateFlow()
+    private var sleepJob: Job? = null
+
+    fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepMinutes.value = minutes.coerceAtLeast(0)
+        if (minutes <= 0) return
+        sleepJob = scope.launch {
+            delay(minutes * 60_000L)
+            controller?.pause()
+            _sleepMinutes.value = 0
+        }
+    }
+
     private val _queue = MutableStateFlow<List<Item>>(emptyList())
     val queue: StateFlow<List<Item>> = _queue.asStateFlow()
 

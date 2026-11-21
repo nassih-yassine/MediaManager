@@ -12,4 +12,7 @@
     <string name="widget_prev">Previous</string>
     <string name="widget_repeat">Repeat</string>
     <string name="widget_description">Controls for whatever is playing</string>
+    <string name="shortcut_add">Add a link</string>
+    <string name="shortcut_library">Open library</string>
+    <string name="tile_add">MediaManager add</string>
 </resources>

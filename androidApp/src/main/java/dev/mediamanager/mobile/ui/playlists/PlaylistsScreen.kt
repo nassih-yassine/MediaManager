@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -285,6 +286,12 @@ fun PlaylistDetailScreen(container: AppContainer, player: PlayerRepository, play
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
     var renameValue by remember { mutableStateOf("") }
+    var refreshNote by remember { mutableStateOf<String?>(null) }
+    val importRunner = remember(container) {
+        dev.mediamanager.mobile.download.PlaylistImportRunner(container.db, container.jobQueue) {
+            dev.mediamanager.mobile.download.DownloadService.start(container.appContext)
+        }
+    }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -310,6 +317,36 @@ fun PlaylistDetailScreen(container: AppContainer, player: PlayerRepository, play
                                 Icon(Icons.Default.MoreVert, contentDescription = "Playlist actions", tint = colors.muted)
                             }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                playlist?.sourceUrl?.let { source ->
+                                    DropdownMenuItem(
+                                        text = { Text("Check for new videos") },
+                                        leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                        onClick = {
+                                            menu = false
+                                            refreshNote = "Checking…"
+                                            scope.launch {
+                                                val summary = kotlinx.coroutines.withTimeoutOrNull(60_000) {
+                                                    runCatching { container.playlistInspector.inspect(source) }.getOrNull()
+                                                }
+                                                refreshNote = if (summary == null) {
+                                                    "Could not read the source playlist"
+                                                } else {
+                                                    val mode = if (items.any { it.kind == "video" }) {
+                                                        dev.mediamanager.mobile.download.DownloadMode.VIDEO
+                                                    } else {
+                                                        dev.mediamanager.mobile.download.DownloadMode.AUDIO
+                                                    }
+                                                    val out = importRunner.import(summary, mode, summary.entries)
+                                                    buildString {
+                                                        append("Added ${out.queued} new")
+                                                        if (out.existing > 0) append(" · ${out.existing} already here")
+                                                        if (out.skipped > 0) append(" · ${out.skipped} already downloading")
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("Rename") },
                                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
@@ -342,6 +379,15 @@ fun PlaylistDetailScreen(container: AppContainer, player: PlayerRepository, play
                                 )
                             }
                         }
+                    }
+
+                    refreshNote?.let {
+                        Text(
+                            it,
+                            color = colors.muted,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                        )
                     }
 
                     val window = dev.mediamanager.mobile.ui.adaptive.LocalWindowInfo.current
