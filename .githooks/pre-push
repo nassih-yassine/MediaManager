@@ -1,6 +1,6 @@
 #!/bin/sh
-# Refuse a push whose Kotlin is unformatted, or that fails Android Lint.
-# Bypass once with: git push --no-verify   (or SKIP_HOOKS=1 git push)
+# Pre-push gate: formatting, unit tests, and Android Lint when code or resources
+# changed. Bypass once with: git push --no-verify   (or SKIP_HOOKS=1 git push)
 set -e
 
 if [ "${SKIP_HOOKS:-0}" = "1" ]; then
@@ -18,9 +18,34 @@ if ! ./gradlew --quiet ktlintCheck; then
     exit 1
 fi
 
-echo "pre-push: Android lint"
-if ! ./gradlew --quiet lintDebug; then
+echo "pre-push: unit tests"
+if ! ./gradlew --quiet testDebugUnitTest; then
     echo ""
-    echo "pre-push: Android Lint failed. Report: androidApp/build/reports/lint-results-debug.html"
+    echo "pre-push: unit tests failed. Fix them before pushing (make test)."
     exit 1
+fi
+
+# Lint is the slow part (~30-50 s warm). Run it when Kotlin, Gradle, the manifest,
+# resources, or assets changed; docs-only pushes stay fast.
+run_lint=0
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
+if [ -z "$upstream" ]; then
+    run_lint=1
+elif git diff --name-only "$upstream"...HEAD | grep -qE '\.(kt|kts|xml|png|webp|jpg|jpeg)$'; then
+    run_lint=1
+fi
+# A tag push (detached HEAD) can become a release upload: always lint it.
+if [ "$(git rev-parse --abbrev-ref HEAD)" = "HEAD" ]; then
+    run_lint=1
+fi
+
+if [ "$run_lint" = "1" ]; then
+    echo "pre-push: Android lint"
+    if ! ./gradlew --quiet lintDebug; then
+        echo ""
+        echo "pre-push: Android Lint failed. Report: androidApp/build/reports/lint-results-debug.html"
+        exit 1
+    fi
+else
+    echo "pre-push: Android lint skipped (no code or resource changes)"
 fi

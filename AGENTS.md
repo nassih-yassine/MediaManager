@@ -30,7 +30,8 @@ other machines cannot resolve it.
 
 - **Kotlin style is enforced.** ktlint 1.8 via `.editorconfig` (`make fmt`); the
   pre-push hook (`.githooks/pre-push`, installed automatically by `settings.gradle.kts`)
-  runs `ktlintCheck` and `lintDebug`. The opinionated `function-signature`/`class-signature`/chain rules are disabled because
+  runs `ktlintCheck`, `testDebugUnitTest`, and `lintDebug` when code or resources
+  changed (docs-only pushes skip lint). The opinionated `function-signature`/`class-signature`/chain rules are disabled because
   they fight Compose. Do not re-enable them without reformatting the whole app.
 
 - **Updates come from published GitHub Releases.** `UpdateChecker` reads
