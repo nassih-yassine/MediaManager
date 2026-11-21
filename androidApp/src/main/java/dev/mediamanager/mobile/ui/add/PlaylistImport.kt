@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -213,8 +215,7 @@ fun PlaylistImportSheet(
     }
 }
 
-/** Picker sheet: search by title, select all or none, then queue the subset. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Full-screen picker: search, one All toggle, list, and a fixed Download footer. */
 @Composable
 fun PlaylistSelectSheet(
     summary: PlaylistSummary,
@@ -232,96 +233,111 @@ fun PlaylistSelectSheet(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.panel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-            // One control: All is on when every entry is selected. Unticking it clears
-            // the selection so the user can pick only what they need.
-            val allState = when {
-                selected.isEmpty() -> ToggleableState.Off
-                selected.size == summary.count -> ToggleableState.On
-                else -> ToggleableState.Indeterminate
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${selected.size} of ${summary.count} selected",
-                    color = colors.ink,
-                    modifier = Modifier.weight(1f),
-                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    "All",
-                    color = colors.muted,
-                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-                )
-                TriStateCheckbox(
-                    state = allState,
-                    onClick = {
-                        selected = if (allState == ToggleableState.On) {
-                            emptySet()
-                        } else {
-                            summary.entries.map { it.url }.toSet()
-                        }
-                    },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = colors.accent,
-                        checkmarkColor = colors.accentInk,
-                        uncheckedColor = colors.muted,
-                    ),
-                )
-            }
+        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = colors.canvas) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${selected.size} of ${summary.count} selected",
+                        color = colors.ink,
+                        modifier = Modifier.weight(1f),
+                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "All",
+                        color = colors.muted,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                    )
+                    val allState = when {
+                        selected.isEmpty() -> ToggleableState.Off
+                        selected.size == summary.count -> ToggleableState.On
+                        else -> ToggleableState.Indeterminate
+                    }
+                    TriStateCheckbox(
+                        state = allState,
+                        onClick = {
+                            selected = if (allState == ToggleableState.On) {
+                                emptySet()
+                            } else {
+                                summary.entries.map { it.url }.toSet()
+                            }
+                        },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = colors.accent,
+                            checkmarkColor = colors.accentInk,
+                            uncheckedColor = colors.muted,
+                        ),
+                    )
+                }
 
-            androidx.compose.material3.OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Search titles") },
-                shape = RoundedCornerShape(12.dp),
-            )
-
-            if (visible.isEmpty()) {
-                Text(
-                    "No titles match “${query.trim()}”.",
-                    color = colors.muted,
-                    modifier = Modifier.padding(vertical = 24.dp),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                androidx.compose.material3.OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Search titles") },
+                    shape = RoundedCornerShape(12.dp),
                 )
-            } else {
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
-                    items(visible, key = { it.url }) { entry ->
-                        val checked = entry.url in selected
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selected = if (checked) selected - entry.url else selected + entry.url
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = null,
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = colors.accent,
-                                    uncheckedColor = colors.muted,
-                                ),
-                            )
-                            Text(
-                                entry.title,
-                                color = colors.ink,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                            )
+
+                if (visible.isEmpty()) {
+                    Text(
+                        "No titles match “${query.trim()}”.",
+                        color = colors.muted,
+                        modifier = Modifier.padding(vertical = 24.dp),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
+                        items(visible, key = { it.url }) { entry ->
+                            val checked = entry.url in selected
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selected = if (checked) selected - entry.url else selected + entry.url
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = null,
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = colors.accent,
+                                        uncheckedColor = colors.muted,
+                                    ),
+                                )
+                                Text(
+                                    entry.title,
+                                    color = colors.ink,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                )
+                            }
                         }
                     }
+                }
+
+                Button(
+                    onClick = { onConfirm(summary.entries.filter { it.url in selected }) },
+                    enabled = selected.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.accentInk),
+                ) {
+                    Text("Download ${selected.size}")
                 }
             }
         }
