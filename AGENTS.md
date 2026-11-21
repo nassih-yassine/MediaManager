@@ -161,6 +161,9 @@ other machines cannot resolve it.
 ## Tests
 
 - Unit tests are `androidApp/src/test/**` with Robolectric where DB/context is needed.
+  Compose UI tests live there too (`createAndroidComposeRule` under Robolectric), so the
+  pre-push `testDebugUnitTest` step already runs them; moving them to `androidTest`
+  would take them out of the hook and CI.
 
 ### Bug workflow — non-negotiable
 
