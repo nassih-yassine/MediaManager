@@ -7,6 +7,7 @@ import dev.mediamanager.mobile.data.AppDatabase
 import dev.mediamanager.mobile.data.MIGRATION_1_2
 import dev.mediamanager.mobile.data.MIGRATION_2_3
 import dev.mediamanager.mobile.data.SettingsStore
+import dev.mediamanager.mobile.data.update.UpdateChecker
 import dev.mediamanager.mobile.download.CompositeExtractor
 import dev.mediamanager.mobile.download.ConnectivityMonitor
 import dev.mediamanager.mobile.download.DownloadPipeline
@@ -22,6 +23,7 @@ import dev.mediamanager.mobile.media.PlaylistCoverStore
 import dev.mediamanager.mobile.media.VolumeControl
 import dev.mediamanager.mobile.playback.PlayerRepository
 import dev.mediamanager.mobile.storage.StorageRepository
+import dev.mediamanager.mobile.ui.update.UpdateCenter
 
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
@@ -33,6 +35,9 @@ class AppContainer(context: Context) {
         .build()
 
     val settings: SettingsStore = SettingsStore(appContext)
+
+    val updateChecker: UpdateChecker = UpdateChecker(BuildConfig.VERSION_NAME)
+    val updateCenter: UpdateCenter = UpdateCenter(settings, updateChecker)
 
     val connectivity: ConnectivityMonitor = ConnectivityMonitor(appContext)
 

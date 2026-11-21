@@ -33,6 +33,13 @@ other machines cannot resolve it.
   runs `ktlintCheck` and `lintDebug`. The opinionated `function-signature`/`class-signature`/chain rules are disabled because
   they fight Compose. Do not re-enable them without reformatting the whole app.
 
+- **Updates come from published GitHub Releases.** `UpdateChecker` reads
+  `/repos/nassih-yassine/MediaManager/releases`, skips drafts and prereleases, and
+  compares only the tag segments (`VERSION_NAME` appends the commit count, so comparing
+  the whole string would make every local build look newest). Automatic checks are
+  throttled to 24 h and fail silently; a dismissed tag is not shown again. Draft
+  releases are invisible to the unauthenticated API, so `release.yml` publishes.
+
 - **Room is the only source of truth.** The UI reads flows; nothing caches state as
   the authority. `RETURNING` is banned — `minSdk 26` ships SQLite 3.18, so claim and
   reorder are `@Transaction` select-then-update.

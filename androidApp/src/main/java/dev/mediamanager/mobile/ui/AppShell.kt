@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -131,6 +132,16 @@ fun AppShell(
             onReady()
         }
         var storageOpen by remember { mutableStateOf(false) }
+        var updatePrompt by remember { mutableStateOf<dev.mediamanager.mobile.data.update.UpdateInfo?>(null) }
+        val shellScope = rememberCoroutineScope()
+        // Quiet, throttled: at most once a day, and never over an open player or sheet.
+        LaunchedEffect(loading) {
+            if (loading) return@LaunchedEffect
+            val info = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                container.updateCenter.autoCheck()
+            }
+            if (info != null && !nowPlayingOpen && !downloadsOpen && !storageOpen) updatePrompt = info
+        }
         val colors = LocalAppColors.current
         val current = Tab.valueOf(tab)
 

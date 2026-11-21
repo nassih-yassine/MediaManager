@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,6 +46,26 @@ class SettingsStoreTest {
         store.setMaxHeight(720)
         assertTrue(store.wifiOnly.first())
         assertEquals(720, store.maxHeight.first())
+    }
+
+    @Test
+    fun `update check bookkeeping defaults to never and nothing dismissed`() = runTest {
+        assertEquals(0L, store.lastUpdateCheckAt.first())
+        assertNull(store.dismissedUpdateTag.first())
+    }
+
+    @Test
+    fun `update check time and dismissed tag round-trip`() = runTest {
+        store.setLastUpdateCheckAt(1_700_000_000_000)
+        store.setDismissedUpdateTag("android-v0.9.0")
+
+        assertEquals(1_700_000_000_000, store.lastUpdateCheckAt.first())
+        assertEquals("android-v0.9.0", store.dismissedUpdateTag.first())
+
+        store.setDismissedUpdateTag(null)
+        assertNull(store.dismissedUpdateTag.first())
+        // DataStore is shared across tests in this class; leave it at the defaults.
+        store.setLastUpdateCheckAt(0)
     }
 
     @Test

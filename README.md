@@ -47,6 +47,11 @@ side-by-side player, because 891×411 dp has width to spare but almost no height
 tablet gets the rail *and* the two-pane player. Breakpoints are in
 `ui/adaptive/WindowInfo.kt` and unit-tested.
 
+**Updates without an app store.** Settings → About has *Check for updates*, and the app
+checks GitHub Releases quietly at most once a day. When a newer `android-v*` release
+exists it shows the version and notes and hands the APK to the browser; the check fails
+silently when offline and never blocks startup.
+
 **You can see where the space went.** Library total, phone usage from `StatFs`,
 breakdown by kind, and every item ranked by size with the bytes a delete frees.
 

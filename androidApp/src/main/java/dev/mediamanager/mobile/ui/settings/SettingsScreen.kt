@@ -32,7 +32,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mediamanager.mobile.AppContainer
 import dev.mediamanager.mobile.data.Appearance
+import dev.mediamanager.mobile.data.update.UpdateChecker
+import dev.mediamanager.mobile.data.update.UpdateInfo
 import dev.mediamanager.mobile.download.YtDlpExtractor
 import dev.mediamanager.mobile.ui.components.KeyValueRow
 import dev.mediamanager.mobile.ui.components.MmSurface
@@ -51,6 +56,7 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import dev.mediamanager.mobile.ui.theme.ThemeFamily
 import dev.mediamanager.mobile.ui.theme.ThemeMode
 import dev.mediamanager.mobile.ui.theme.colorsFor
+import dev.mediamanager.mobile.ui.update.UpdateSheet
 import kotlinx.coroutines.launch
 
 private val heights = listOf(720, 1080, 1440, 2160)
@@ -66,6 +72,9 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit = {}, onOpenStora
     val maxHeight by container.settings.maxHeight.collectAsStateWithLifecycle(initialValue = 1080)
     val simultaneous by container.settings.concurrentDownloads.collectAsStateWithLifecycle(initialValue = 2)
     val libraryBytes by container.db.itemDao().observeTotalBytes().collectAsStateWithLifecycle(initialValue = 0L)
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var updateNote by remember { mutableStateOf<String?>(null) }
+    var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
 
     BackHandler(onBack = onBack)
 
@@ -209,9 +218,73 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit = {}, onOpenStora
         Spacer(Modifier.height(12.dp))
         SettingsCard("About", Icons.Default.Info) {
             KeyValueRow("Version", dev.mediamanager.mobile.BuildConfig.VERSION_NAME, Modifier.padding(vertical = 12.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !checkingUpdate) {
+                        scope.launch {
+                            checkingUpdate = true
+                            updateNote = null
+                            when (val result = container.updateCenter.manualCheck()) {
+                                is UpdateChecker.Result.Available -> pendingUpdate = result.info
+                                is UpdateChecker.Result.UpToDate -> updateNote = "Up to date"
+                                is UpdateChecker.Result.Failed -> updateNote = "Couldn't check"
+                            }
+                            checkingUpdate = false
+                        }
+                    }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Check for updates",
+                    color = colors.ink,
+                    modifier = Modifier.weight(1f),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                )
+                val trailing = when {
+                    checkingUpdate -> "Checking…"
+                    pendingUpdate != null -> "v${pendingUpdate?.versionName} available"
+                    else -> updateNote ?: "Check"
+                }
+                Text(
+                    trailing,
+                    color = if (updateNote == "Couldn't check") colors.danger else colors.muted,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = colors.muted,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))
+    }
+
+    pendingUpdate?.let { info ->
+        UpdateSheet(
+            info = info,
+            onDownload = {
+                val url = info.apkUrl ?: info.releaseUrl
+                runCatching {
+                    container.appContext.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url),
+                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+                scope.launch { container.updateCenter.dismiss(info.versionTag) }
+                pendingUpdate = null
+            },
+            onLater = {
+                scope.launch { container.updateCenter.dismiss(info.versionTag) }
+                pendingUpdate = null
+            },
+        )
     }
 }
 

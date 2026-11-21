@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.mediamanager.mobile.ui.theme.ThemeFamily
@@ -27,6 +28,8 @@ class SettingsStore(private val context: Context) {
         val concurrentDownloads = intPreferencesKey("concurrent_downloads")
         val recentUrls = stringPreferencesKey("recent_urls")
         val lastItemId = stringPreferencesKey("last_item_id")
+        val lastUpdateCheckAt = longPreferencesKey("last_update_check_at")
+        val dismissedUpdateTag = stringPreferencesKey("dismissed_update_tag")
     }
 
     val appearance: Flow<Appearance> = context.dataStore.data.map { prefs ->
@@ -68,6 +71,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setConcurrentDownloads(value: Int) {
         context.dataStore.edit { it[Keys.concurrentDownloads] = value.coerceIn(1, 3) }
+    }
+
+    val lastUpdateCheckAt: Flow<Long> = context.dataStore.data.map { it[Keys.lastUpdateCheckAt] ?: 0L }
+
+    suspend fun setLastUpdateCheckAt(value: Long) {
+        context.dataStore.edit { it[Keys.lastUpdateCheckAt] = value }
+    }
+
+    val dismissedUpdateTag: Flow<String?> = context.dataStore.data.map { it[Keys.dismissedUpdateTag] }
+
+    suspend fun setDismissedUpdateTag(tag: String?) {
+        context.dataStore.edit { prefs ->
+            if (tag == null) prefs.remove(Keys.dismissedUpdateTag) else prefs[Keys.dismissedUpdateTag] = tag
+        }
     }
 
     val recentUrls: Flow<List<String>> = context.dataStore.data.map { prefs ->
