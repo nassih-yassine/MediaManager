@@ -61,7 +61,13 @@ import dev.mediamanager.mobile.ui.theme.LocalAppColors
 import java.io.File
 
 @Composable
-fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
+fun MiniPlayer(
+    player: PlayerRepository,
+    filesDir: File,
+    onOpen: () -> Unit,
+    /** One short row for landscape phones, where height is the scarce axis. */
+    compact: Boolean = false,
+) {
     val now by player.nowPlaying.collectAsStateWithLifecycle(initialValue = null)
     val current = now ?: return
     val colors = LocalAppColors.current
@@ -79,6 +85,60 @@ fun MiniPlayer(player: PlayerRepository, filesDir: File, onOpen: () -> Unit) {
         sourceUrl = null,
         createdAt = 0,
     )
+
+    if (compact) {
+        val fraction = if (current.durationMs > 0) current.positionMs.toFloat() / current.durationMs else 0f
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(colors.panel.copy(alpha = 0.85f))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpen),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Thumb(item = item, filesDir = filesDir, modifier = Modifier.size(36.dp))
+                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                    Text(
+                        current.title,
+                        color = colors.ink,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "${formatDuration(current.positionMs).ifEmpty { "0:00" }} / " +
+                            formatDuration(current.durationMs).ifEmpty { "--:--" },
+                        color = colors.muted,
+                        maxLines = 1,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    )
+                }
+                IconButton(onClick = { player.toggle() }, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (current.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (current.isPlaying) "Pause" else "Play",
+                        tint = colors.accent,
+                    )
+                }
+                IconButton(onClick = { player.next() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = colors.ink)
+                }
+                IconButton(onClick = { player.stop() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Stop and close player", tint = colors.muted)
+                }
+            }
+            dev.mediamanager.mobile.ui.components.MmProgressBar(
+                progress = fraction.coerceIn(0f, 1f),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                height = 2.dp,
+                trackColor = colors.panel2,
+                fillColor = colors.accent,
+            )
+        }
+        return
+    }
 
     Column(
         Modifier

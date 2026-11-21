@@ -3,9 +3,11 @@ package dev.mediamanager.mobile.ui.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
@@ -68,14 +70,18 @@ fun VideoSlot(
         onDispose { exo?.removeListener(listener) }
     }
 
-    Box(
-        modifier
-            .fillMaxWidth()
-            .aspectRatio(ratio)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.Black),
-        contentAlignment = Alignment.Center,
-    ) {
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // Fit the stream's own shape inside whatever box the caller gives us: a
+        // landscape pane is shorter than a 16:9 video is wide.
+        val frameWidth = if (maxWidth / maxHeight > ratio) maxHeight * ratio else maxWidth
+        Box(
+            Modifier
+                .width(frameWidth)
+                .aspectRatio(ratio)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
         if (exo != null) {
             // The service can recreate its ExoPlayer; key() rebuilds the view so the
             // pane follows the new instance instead of holding a released one.
@@ -124,6 +130,7 @@ fun VideoSlot(
                     .background(Color.Black.copy(alpha = 0.35f))
                     .padding(3.dp),
             )
+        }
         }
     }
 }
