@@ -107,6 +107,24 @@ android {
     }
 }
 
+/**
+ * youtubedl-android 0.18.1 pins 2020-era Jackson and Apache Commons. Those bytes ship
+ * inside the APK, so its Dependabot alerts are real, unlike the build-toolchain ones.
+ * Jackson 2.x and Commons 2.x are binary compatible across minors.
+ */
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "com.fasterxml.jackson.core:jackson-core:2.18.11",
+            "com.fasterxml.jackson.core:jackson-databind:2.18.11",
+            "com.fasterxml.jackson.core:jackson-annotations:2.18.11",
+            "commons-io:commons-io:2.22.0",
+            "org.apache.commons:commons-compress:1.28.0",
+            "com.google.guava:guava:33.8.0-android",
+        )
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
