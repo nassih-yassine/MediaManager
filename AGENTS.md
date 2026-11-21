@@ -104,6 +104,11 @@ other machines cannot resolve it.
   dot beside the fill.
 - Keyboard/gesture affordances stay: tap a row to play, drag the player down to the
   mini player, × removes a queue entry.
+- **Width chooses navigation, height chooses density.** A landscape phone is ~891×411 dp
+  (expanded by width, shorter than any portrait phone), so the rail applies to every
+  window wider than COMPACT, and the player goes side-by-side on any wide window.
+  Stacking artwork above the panel in landscape leaves the transport below the fold;
+  `WindowInfoTest` guards the breakpoints.
 
 ## Gotchas that already cost time
 
